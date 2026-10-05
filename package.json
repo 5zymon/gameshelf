@@ -18,8 +18,8 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "lint:fix": "npm run lint --workspaces --if-present -- --fix",
-    "format": "prettier --write .",
-    "format:check": "prettier --check .",
+    "format": "prettier --write . '!data'",
+    "format:check": "prettier --check . '!data'",
     "clean": "rm -rf node_modules apps/*/node_modules apps/*/.next apps/*/dist",
     "prepare": "husky"
   },

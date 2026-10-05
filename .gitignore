@@ -15,6 +15,9 @@ out/
 .env.*
 !.env.example
 
+# Local dev data (MySQL data dir — persistent, never commit)
+data/
+
 # Logs
 *.log
 npm-debug.log*

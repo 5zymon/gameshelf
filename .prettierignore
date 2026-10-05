@@ -13,3 +13,6 @@ out/
 # Vendored agent skills
 .opencode/skills/
 .skills/
+
+# Local dev data (MySQL data dir — persistent, never format)
+data/
