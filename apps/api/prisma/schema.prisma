@@ -39,8 +39,9 @@ model User {
   @@map("users")
 }
 
-// Server-side session (ADR-004). `id` is the session token held in the
-// cookie; as the primary key it is indexed (acceptance criterion).
+// Server-side session (ADR-004). The cookie holds a random token; `id` is
+// its HMAC-SHA256 digest (keyed by SESSION_SECRET), never the raw token. As
+// the primary key it is indexed (acceptance criterion).
 model Session {
   id        String   @id @db.VarChar(255)
   userId    Int      @map("user_id")

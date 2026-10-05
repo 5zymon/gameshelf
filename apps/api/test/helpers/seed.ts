@@ -40,3 +40,15 @@ export function seedGame(
     },
   });
 }
+
+export function seedUser(
+  prisma: PrismaService,
+  data: { email: string; passwordHash?: string },
+) {
+  return prisma.user.create({
+    data: {
+      email: data.email,
+      passwordHash: data.passwordHash ?? 'placeholder',
+    },
+  });
+}
