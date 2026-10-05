@@ -14,6 +14,7 @@ GameShelf is an npm-workspaces monorepo with two packages:
 - **Node.js 24 LTS** (`>=24 <25`) — pinned in `.nvmrc` and `package.json` (`engines.node`).
 - **npm 11+** (ships with Node 24).
 - [nvm](https://github.com/nvm-sh/nvm) (optional but recommended) to select the pinned Node version.
+- **Docker** (optional) — only for the convenience `docker-compose.yml` that starts the dev MySQL. The app itself needs just a MySQL 8.4 server reachable at `MYSQL_HOST:MYSQL_PORT`; a system-installed MySQL works identically.
 
 The root scripts call `concurrently` and the workspace CLIs, so everything runs from the repository root.
 
@@ -30,6 +31,9 @@ npm install
 # 3. Create your local environment file
 cp .env.example .env
 # then edit .env and fill in real values
+
+# 4. Start the local dev database (optional — see "Database (local dev)")
+docker compose up -d mysql
 ```
 
 `.env` is gitignored; `.env.example` lists every variable the app reads with placeholder values only.
@@ -80,24 +84,86 @@ A [`Taskfile.yml`](./Taskfile.yml) provides [Task](https://taskfile.dev/) shortc
 
 There is no unit-test runner in the repo yet; once one is added, its script should be wired into `task check`/`task ci`.
 
+## Database (local dev)
+
+GameShelf uses **MySQL 8.4** with `utf8mb4` / `utf8mb4_0900_ai_ci` (ADR-001 — game titles contain CJK and accented characters; `latin1`/`utf8mb3` would corrupt them).
+
+### Starting the database
+
+Docker Compose is a **convenience, not a dependency**: the app only needs a MySQL server reachable at `MYSQL_HOST:MYSQL_PORT`. A system-installed MySQL 8.4 configured with the same charset works identically.
+
+```bash
+docker compose up -d mysql     # starts the pinned mysql:8.4
+docker compose ps              # wait until the service is "healthy"
+```
+
+### Confirming the character set
+
+```bash
+docker compose exec mysql mysql --default-character-set=utf8mb4 \
+  -ugameshelf -pgameshelf \
+  -e "SHOW VARIABLES LIKE 'character_set%'; SHOW VARIABLES LIKE 'collation_server';"
+```
+
+Expected (abridged):
+
+```
+character_set_client      utf8mb4
+character_set_connection  utf8mb4
+character_set_database    utf8mb4
+character_set_results     utf8mb4
+character_set_server      utf8mb4
+collation_server          utf8mb4_0900_ai_ci
+```
+
+Round-trip check — accented Latin and CJK must come back byte-identical:
+
+```bash
+docker compose exec mysql mysql --default-character-set=utf8mb4 \
+  -ugameshelf -pgameshelf gameshelf -e "
+  CREATE TABLE _charset_check (id INT PRIMARY KEY, title VARCHAR(255));
+  INSERT INTO _charset_check VALUES (1,'Pokémon'),(2,'ポケットモンスター'),(3,'Świąteczna edycja');
+  SELECT id,title FROM _charset_check;
+  DROP TABLE _charset_check;"
+```
+
+(The `mysql` CLI prints a password-on-command-line warning on stderr; that is expected.)
+
+### Persistent data directory
+
+The data directory is bind-mounted to `./data/mysql` (gitignored) — a real host path, **not** an ephemeral container path. Recreating the container never loses data. The application cannot verify that this path sits on durable storage — that is a human check.
+
+To reset the dev database completely:
+
+```bash
+docker compose down && rm -rf data/mysql
+```
+
+Note: the MySQL image creates the database and user only on **first** initialization (empty data directory). Changing `MYSQL_USER`/`MYSQL_PASSWORD` in `.env` later has no effect until you reset.
+
 ## Environment variables
 
 All variables live in a single root `.env` file (see `.env.example`):
 
-| Variable              | Used by    | Purpose                              |
-| --------------------- | ---------- | ------------------------------------ |
-| `NODE_ENV`            | both       | Runtime environment                  |
-| `API_PORT`            | `apps/api` | API listen port (default `3001`)     |
-| `API_HOST`            | `apps/api` | API bind address                     |
-| `WEB_PORT`            | `apps/web` | Web dev server port (default `3000`) |
-| `NEXT_PUBLIC_API_URL` | `apps/web` | Browser-facing API base URL          |
-| `DATABASE_URL`        | `apps/api` | PostgreSQL connection string         |
-| `REDIS_URL`           | `apps/api` | Redis connection string              |
-| `SESSION_SECRET`      | `apps/api` | Secret used to sign session cookies  |
-| `OPENAI_API_KEY`      | `apps/api` | LLM provider key                     |
-| `ANTHROPIC_API_KEY`   | `apps/api` | LLM provider key                     |
-| `IGDB_CLIENT_ID`      | `apps/api` | IGDB credentials                     |
-| `IGDB_CLIENT_SECRET`  | `apps/api` | IGDB credentials                     |
+| Variable              | Used by    | Purpose                                 |
+| --------------------- | ---------- | --------------------------------------- |
+| `NODE_ENV`            | both       | Runtime environment                     |
+| `API_PORT`            | `apps/api` | API listen port (default `3001`)        |
+| `API_HOST`            | `apps/api` | API bind address                        |
+| `WEB_PORT`            | `apps/web` | Web dev server port (default `3000`)    |
+| `NEXT_PUBLIC_API_URL` | `apps/web` | Browser-facing API base URL             |
+| `MYSQL_HOST`          | `apps/api` | MySQL host (default `localhost`)        |
+| `MYSQL_PORT`          | `apps/api` | MySQL port (default `3306`)             |
+| `MYSQL_DATABASE`      | `apps/api` | Database name (default `gameshelf`)     |
+| `MYSQL_USER`          | `apps/api` | App database user (default `gameshelf`) |
+| `MYSQL_PASSWORD`      | `apps/api` | App database user password              |
+| `MYSQL_ROOT_PASSWORD` | compose    | MySQL root password (compose only)      |
+| `REDIS_URL`           | `apps/api` | Redis connection string                 |
+| `SESSION_SECRET`      | `apps/api` | Secret used to sign session cookies     |
+| `OPENAI_API_KEY`      | `apps/api` | LLM provider key                        |
+| `ANTHROPIC_API_KEY`   | `apps/api` | LLM provider key                        |
+| `IGDB_CLIENT_ID`      | `apps/api` | IGDB credentials                        |
+| `IGDB_CLIENT_SECRET`  | `apps/api` | IGDB credentials                        |
 
 ## Repository layout
 
@@ -110,6 +176,8 @@ All variables live in a single root `.env` file (see `.env.example`):
 ├── tsconfig.base.json  # Shared strict TypeScript config
 ├── .husky/             # Git hooks (pre-commit)
 ├── .env.example        # Environment variable template
+├── docker-compose.yml    # Local dev MySQL (convenience only)
+├── data/                 # Persistent dev data (gitignored)
 ├── .nvmrc              # Pinned Node version
 └── package.json        # Workspaces + root scripts
 ```
