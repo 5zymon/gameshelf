@@ -4,12 +4,15 @@
   "private": true,
   "description": "GameShelf HTTP API (NestJS).",
   "scripts": {
-    "build": "prisma generate && nest build",
+    "build": "prisma generate && nest build -p tsconfig.build.json",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
+    "test": "jest",
+    "test:unit": "jest --selectProjects unit",
+    "test:e2e": "jest --selectProjects e2e",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "lint": "eslint \"src/**/*.ts\"",
+    "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
     "db:migrate": "prisma migrate dev",
     "db:platforms:fetch": "node prisma/igdb-platforms.mjs",
     "db:deploy": "prisma migrate deploy",
@@ -33,10 +36,17 @@
   "devDependencies": {
     "@nestjs/cli": "^11.0.5",
     "@nestjs/schematics": "^11.0.2",
+    "@nestjs/testing": "^11.0.0",
     "@types/express": "^5.0.1",
+    "@types/jest": "^30.0.0",
     "@types/node": "^24.0.0",
+    "@types/supertest": "^7.2.1",
     "dotenv": "^18.0.5",
+    "jest": "^30.5.2",
+    "mysql2": "^3.24.5",
     "prisma": "7.10.0",
+    "supertest": "^7.3.1",
+    "ts-jest": "^29.4.14",
     "typescript": "^5.7.3"
   }
 }

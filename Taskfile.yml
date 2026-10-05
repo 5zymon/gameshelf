@@ -32,6 +32,11 @@ tasks:
     cmds:
       - npm run typecheck
 
+  test:
+    desc: Run the API test suite (unit + e2e; e2e needs a running MySQL with the gameshelf_test database)
+    cmds:
+      - npm run test
+
   format:
     desc: Format the whole repo with Prettier
     cmds:
@@ -71,11 +76,12 @@ tasks:
       - task: typecheck
 
   ci:
-    desc: Full CI gate (generate + check + build + migration check); add the test task here once a runner exists
+    desc: Full CI gate (generate + check + build + tests + migration check)
     cmds:
       - task: db:generate
       - task: check
       - task: build
+      - task: test
       - task: db:migrate:check
 
   clean:
