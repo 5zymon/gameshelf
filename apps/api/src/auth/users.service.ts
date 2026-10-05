@@ -7,6 +7,17 @@ import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PasswordService } from './password.service';
 
+/** Returned by POST /setup once an account already exists (HTTP 409). */
+export const SETUP_COMPLETED_MESSAGE = 'Setup has already been completed';
+
+/**
+ * How many times the first-run insert is attempted before giving up. A losing
+ * racer normally resolves on the first retry once the winner has committed; the
+ * extra attempts cover the short window where the winner's row is not yet
+ * visible to the loser's connection.
+ */
+export const MAX_SETUP_ATTEMPTS = 3;
+
 export interface CreateUserInput {
   email: string;
   password: string;
@@ -26,6 +37,12 @@ export interface UserCredentials {
   createdAt: Date;
 }
 
+/** Validated, normalized, hashed input — the shared half of every creation path. */
+interface PreparedUser {
+  email: string;
+  passwordHash: string;
+}
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -33,15 +50,9 @@ export class UsersService {
     private readonly passwords: PasswordService,
   ) {}
 
+  /** CLI (`user:create`) and every normal creation path. */
   async createUser(input: CreateUserInput): Promise<CreatedUser> {
-    const email = input.email.trim().toLowerCase();
-    if (email === '') {
-      throw new BadRequestException('email must not be blank');
-    }
-    if (input.password.length === 0) {
-      throw new BadRequestException('password must not be empty');
-    }
-    const passwordHash = await this.passwords.hash(input.password);
+    const { email, passwordHash } = await this.prepareUser(input);
     try {
       return await this.prisma.user.create({
         data: { email, passwordHash },
@@ -60,6 +71,77 @@ export class UsersService {
     }
   }
 
+  /**
+   * First-run only: inserts the account iff `users` is empty. The insert is a
+   * single atomic statement, so two concurrent callers can never both win —
+   * the loser's `NOT EXISTS` predicate is false and it affects zero rows.
+   *
+   * Under InnoDB contention the losing caller can be rolled back before the
+   * winner's row becomes visible to it. Because that window is only a few
+   * milliseconds, the insert is retried a bounded number of times: a failed
+   * attempt is followed by a `hasAnyUser()` check, and a retried statement
+   * against the now-committed winner affects zero rows. Both cases surface the
+   * same `ConflictException` (409) as any other closed-setup request. A genuine
+   * error with no user ever created is rethrown after the attempts are
+   * exhausted — never masked as a conflict.
+   *
+   * Shares `prepareUser` with `createUser`, so hashing/validation cannot
+   * diverge. The raw SQL mirrors the `User` model in `prisma/schema.prisma`
+   * (`@@map("users")`, `password_hash`).
+   */
+  async createFirstUser(input: CreateUserInput): Promise<CreatedUser> {
+    // Cheap fast path: closed setup must not pay for Argon2 or leak timing.
+    if (await this.hasAnyUser()) {
+      throw new ConflictException(SETUP_COMPLETED_MESSAGE);
+    }
+    const { email, passwordHash } = await this.prepareUser(input);
+
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= MAX_SETUP_ATTEMPTS; attempt++) {
+      try {
+        const affected = await this.prisma.$executeRaw`
+          INSERT INTO users (email, password_hash)
+          SELECT ${email}, ${passwordHash} FROM DUAL
+          WHERE NOT EXISTS (SELECT 1 FROM users)`;
+        if (affected === 0) {
+          // The emptiness guard held: another caller won the race.
+          throw new ConflictException(SETUP_COMPLETED_MESSAGE);
+        }
+        const created = await this.prisma.user.findUnique({
+          where: { email },
+          select: { id: true, email: true, createdAt: true },
+        });
+        if (created === null) {
+          throw new ConflictException(SETUP_COMPLETED_MESSAGE); // defensive
+        }
+        return created;
+      } catch (error) {
+        // A conflict we raised ourselves is final — do not retry it.
+        if (error instanceof ConflictException) {
+          throw error;
+        }
+        lastError = error;
+        // The winner's row may already be committed; if so this is a conflict
+        // (409), not an internal error.
+        if (await this.hasAnyUser()) {
+          throw new ConflictException(SETUP_COMPLETED_MESSAGE);
+        }
+      }
+    }
+
+    // Attempts exhausted: if a winner appeared in the meantime this is still a
+    // conflict; otherwise surface the real failure rather than masking it.
+    if (await this.hasAnyUser()) {
+      throw new ConflictException(SETUP_COMPLETED_MESSAGE);
+    }
+    throw lastError;
+  }
+
+  /** True iff the `users` table has at least one row (setup is closed). */
+  async hasAnyUser(): Promise<boolean> {
+    return (await this.prisma.user.count()) > 0;
+  }
+
   async findByEmail(email: string): Promise<UserCredentials | null> {
     const normalized = email.trim().toLowerCase();
     if (normalized === '') {
@@ -76,5 +158,18 @@ export class UsersService {
       where: { id },
       select: { id: true, email: true, createdAt: true },
     });
+  }
+
+  /** Single source of truth for trimming/lowercasing, blank checks and hashing. */
+  private async prepareUser(input: CreateUserInput): Promise<PreparedUser> {
+    const email = input.email.trim().toLowerCase();
+    if (email === '') {
+      throw new BadRequestException('email must not be blank');
+    }
+    if (input.password.length === 0) {
+      throw new BadRequestException('password must not be empty');
+    }
+    const passwordHash = await this.passwords.hash(input.password);
+    return { email, passwordHash };
   }
 }
