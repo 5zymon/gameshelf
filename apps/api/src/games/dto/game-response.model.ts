@@ -101,10 +101,32 @@ export class ListGamesMetaModel {
   totalPages!: number;
 }
 
+export class ListGamesFiltersModel {
+  @ApiProperty({
+    type: [GamePlatformModel],
+    description: 'Platforms that have at least one game (sorted by name)',
+  })
+  platforms!: GamePlatformModel[];
+
+  @ApiProperty({
+    type: [String],
+    description: 'Distinct non-null edition values (sorted)',
+    example: ['GOTY Edition'],
+  })
+  editions!: string[];
+}
+
 export class ListGamesResponseModel {
   @ApiProperty({ type: [GameListItemModel] })
   items!: GameListItemModel[];
 
   @ApiProperty({ type: ListGamesMetaModel })
   meta!: ListGamesMetaModel;
+
+  @ApiProperty({
+    type: ListGamesFiltersModel,
+    description:
+      'Available filter values for the filter bar (global, not scoped to the current filter combination)',
+  })
+  filters!: ListGamesFiltersModel;
 }

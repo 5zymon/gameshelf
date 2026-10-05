@@ -90,6 +90,11 @@ model Game {
   platform Platform @relation(fields: [platformId], references: [id])
 
   @@index([platformId])
+  @@index([edition])
+  @@index([releaseYear])
+  @@index([publisher])
+  @@index([genre])
+  @@index([playerCount])
   @@map("games")
 }
 
