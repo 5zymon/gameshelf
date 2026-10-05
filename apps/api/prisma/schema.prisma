@@ -100,8 +100,10 @@ model Game {
 
 // One row per uploaded photo (ADR-002: the queue's unit of work is the
 // photo). `status` lifecycle (set by the import pipeline, ticket 3.x):
-// queued -> processing -> completed | failed. Kept as a bounded String
-// because the card does not enumerate the values (unlike Game.source).
+// queued -> processing -> done | needs_attention | failed; the user may
+// then dismiss a needs_attention/failed job (spec §4.2.4). Kept as a
+// bounded String (not an enum) because the values are application-level
+// states, unlike Game.source.
 model ImportJob {
   id              Int       @id @default(autoincrement())
   status          String    @db.VarChar(32)
@@ -128,6 +130,7 @@ model UnrecognizedItem {
   rawTitle    String   @map("raw_title") @db.VarChar(255)
   rawPlatform String?  @map("raw_platform") @db.VarChar(255)
   reason      String?  @db.Text
+  dismissedAt DateTime? @map("dismissed_at")
   createdAt   DateTime @default(now()) @map("created_at")
 
   importJob ImportJob @relation(fields: [importJobId], references: [id], onDelete: Cascade)
