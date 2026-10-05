@@ -28,6 +28,10 @@ services:
     volumes:
       # Persistent host path (gitignored) — never an ephemeral container path.
       - ./data/mysql:/var/lib/mysql
+      # One-time bootstrap: creates the Prisma shadow database for
+      # `prisma migrate dev` (runs only on first initialization of an
+      # empty data dir — see README, "Migrations").
+      - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test:
         [

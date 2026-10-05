@@ -1,0 +1,31 @@
+// GameShelf — Prisma schema (ADR-003: Prisma is the data-access layer).
+//
+// Connection settings live in prisma.config.ts (Prisma ORM v7 moved them
+// out of the schema file). The MySQL URL in the root .env carries an
+// explicit ?charset=utf8mb4 suffix. Note: Prisma's MySQL connector does
+// not parse that parameter — utf8mb4 is enforced anyway because the
+// migration engine connects with utf8mb4 on MySQL >= 5.5.3 and every
+// generated table declares DEFAULT CHARACTER SET utf8mb4 (README,
+// "Migrations").
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+// Placeholder model proving the migration workflow end-to-end. Ticket 1.1
+// replaces it with the full GameShelf schema (User, Session, Platform,
+// Game, ImportJob, UnrecognizedItem).
+model Game {
+  id        Int      @id @default(autoincrement())
+  title     String   @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("games")
+}

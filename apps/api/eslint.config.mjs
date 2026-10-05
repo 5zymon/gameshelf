@@ -2,6 +2,9 @@ import eslintConfigPrettier from 'eslint-config-prettier/flat';
 import base from '../../eslint.config.base.mjs';
 
 export default [
+  {
+    ignores: ['src/generated/**'],
+  },
   ...base,
   {
     languageOptions: {
