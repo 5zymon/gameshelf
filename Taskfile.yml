@@ -47,6 +47,16 @@ tasks:
     cmds:
       - npm run build
 
+  db:generate:
+    desc: Generate the Prisma client
+    cmds:
+      - npm run db:generate
+
+  db:migrate:check:
+    desc: Fail if schema.prisma and the deployed database have diverged (needs a running MySQL)
+    cmds:
+      - npm run db:migrate:check
+
   fix:
     desc: Apply ESLint autofixes and Prettier formatting
     cmds:
@@ -61,10 +71,12 @@ tasks:
       - task: typecheck
 
   ci:
-    desc: Full CI gate (check + build); add the test task here once a runner exists
+    desc: Full CI gate (generate + check + build + migration check); add the test task here once a runner exists
     cmds:
+      - task: db:generate
       - task: check
       - task: build
+      - task: db:migrate:check
 
   clean:
     desc: Remove node_modules and build output

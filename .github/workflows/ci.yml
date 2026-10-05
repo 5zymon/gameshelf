@@ -1,0 +1,88 @@
+# GameShelf CI — ticket 0.6
+#
+# Runs on every push and pull request. Gates:
+#   install -> prisma generate -> lint -> typecheck -> build
+#   -> prisma migrate deploy -> migration drift check
+#
+# The same checks run locally: `task ci` (README, "CI").
+
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Lint, typecheck, build, migration check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      # Throwaway MySQL for the migration check. Pinned major.minor per
+      # ADR-001 (never "latest"); same image and server charset as
+      # docker-compose.yml so CI exercises the same database as dev.
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: gameshelf
+          MYSQL_USER: gameshelf
+          MYSQL_PASSWORD: gameshelf
+        ports:
+          - 3306:3306
+        options: >-
+          --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+          --health-start-period=30s
+    env:
+      # Throwaway credentials — the container is discarded with the run.
+      # Same shape as .env.example:35 (explicit ?charset=utf8mb4).
+      DATABASE_URL: mysql://gameshelf:gameshelf@127.0.0.1:3306/gameshelf?charset=utf8mb4
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node
+        # Explicitly pinned. Keep in sync with .nvmrc and engines.node
+        # (>=24 <25) in package.json.
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24.21.0
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Must run before any TypeScript check or build: the API compiles
+      # against the generated client (apps/api/src/generated, gitignored).
+      - name: Prisma generate
+        run: npm run db:generate
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      # Migration check against a real (throwaway) database:
+      # 1. deploy the committed migrations, then
+      # 2. fail if the deployed state and schema.prisma have diverged —
+      #    i.e. a schema change without a committed migration.
+      - name: Apply committed migrations
+        run: npm run db:deploy
+
+      - name: Migration drift check
+        run: npm run db:migrate:check
