@@ -18,14 +18,115 @@ datasource db {
   provider = "mysql"
 }
 
-// Placeholder model proving the migration workflow end-to-end. Ticket 1.1
-// replaces it with the full GameShelf schema (User, Session, Platform,
-// Game, ImportJob, UnrecognizedItem).
-model Game {
-  id        Int      @id @default(autoincrement())
-  title     String   @db.VarChar(255)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+// Game.source — where a record's data came from (spec distinguishes
+// IGDB-sourced from MobyGames-sourced records; MANUAL is the default for
+// hand-entered rows).
+enum GameSource {
+  IGDB
+  MobyGames
+  MANUAL
+}
 
+// Single permission level — NO role/permission column (decision #14).
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique @db.VarChar(255)
+  passwordHash String   @map("password_hash") @db.VarChar(255)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  sessions Session[]
+
+  @@map("users")
+}
+
+// Server-side session (ADR-004). `id` is the session token held in the
+// cookie; as the primary key it is indexed (acceptance criterion).
+model Session {
+  id        String   @id @db.VarChar(255)
+  userId    Int      @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  userAgent String?  @map("user_agent") @db.VarChar(255)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+// Canonical platform record — defeats "PS5" vs "PlayStation 5" duplicates.
+model Platform {
+  id              Int     @id @default(autoincrement())
+  name            String  @unique @db.VarChar(255)
+  abbreviation    String? @db.VarChar(255)
+  alternativeName String? @map("alternative_name") @db.VarChar(255)
+  igdbId          Int?    @map("igdb_id")
+  slug            String  @unique @db.VarChar(255)
+
+  games Game[]
+
+  @@map("platforms")
+}
+
+// `edition` is a first-class attribute (research §4.2) — not IGDB-only.
+// `rawMetadata` is archival (raw IGDB/MobyGames payload) and is NEVER
+// queried; all queryable data is in the normalized columns (ADR-001).
+model Game {
+  id          Int        @id @default(autoincrement())
+  title       String     @db.VarChar(255)
+  platformId  Int        @map("platform_id")
+  edition     String?    @db.VarChar(255)
+  releaseYear Int?       @map("release_year")
+  publisher   String?    @db.VarChar(255)
+  genre       String?    @db.VarChar(255)
+  playerCount Int?       @map("player_count")
+  coverUrl    String?    @map("cover_url") @db.VarChar(2083)
+  rawMetadata String?    @map("raw_metadata") @db.MediumText
+  enrichedAt  DateTime?  @map("enriched_at")
+  source      GameSource @default(MANUAL)
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  platform Platform @relation(fields: [platformId], references: [id])
+
+  @@index([platformId])
   @@map("games")
+}
+
+// One row per uploaded photo (ADR-002: the queue's unit of work is the
+// photo). `status` lifecycle (set by the import pipeline, ticket 3.x):
+// queued -> processing -> completed | failed. Kept as a bounded String
+// because the card does not enumerate the values (unlike Game.source).
+model ImportJob {
+  id              Int       @id @default(autoincrement())
+  status          String    @db.VarChar(32)
+  declaredCount   Int?      @map("declared_count")
+  recognizedCount Int       @default(0) @map("recognized_count")
+  importedCount   Int       @default(0) @map("imported_count")
+  unrecognizedCount Int     @default(0) @map("unrecognized_count")
+  errorMessage    String?   @map("error_message") @db.Text
+  createdAt       DateTime  @default(now()) @map("created_at")
+  completedAt     DateTime? @map("completed_at")
+
+  unrecognizedItems UnrecognizedItem[]
+
+  @@index([status])
+  @@map("import_jobs")
+}
+
+// Trace for items the vision model could not match (decision #12).
+// `rawTitle` is the raw recognized title — stored even though it is never
+// imported into Game.
+model UnrecognizedItem {
+  id          Int      @id @default(autoincrement())
+  importJobId Int      @map("import_job_id")
+  rawTitle    String   @map("raw_title") @db.VarChar(255)
+  rawPlatform String?  @map("raw_platform") @db.VarChar(255)
+  reason      String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  importJob ImportJob @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+
+  @@index([importJobId])
+  @@map("unrecognized_items")
 }
