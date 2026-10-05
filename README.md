@@ -102,6 +102,8 @@ The API has a two-tier Jest suite (`apps/api/jest.config.js`), run from the repo
 
 (`test:unit` / `test:e2e` are `apps/api` workspace scripts; from the root use `npm run test:unit --workspace apps/api` etc., or `task test` for the full suite.)
 
+The Jest scripts set `NODE_OPTIONS=--experimental-vm-modules` because `@nestjs/schedule` is ESM-only while ts-jest runs in CommonJS mode. This is test-only and does not affect runtime.
+
 **Test database.** The e2e tier uses a dedicated `gameshelf_test` database (never the dev `gameshelf` one), selected by `DATABASE_TEST_URL` in `.env` (default: `mysql://gameshelf:gameshelf@localhost:3306/gameshelf_test?charset=utf8mb4`).
 
 - **Fresh data dir:** `docker compose up -d mysql` creates it automatically — `docker/mysql-init/02-test-database.sql` runs on first initialization of an empty data directory.
@@ -288,29 +290,30 @@ docker compose down && rm -rf data/redis
 
 All variables live in a single root `.env` file (see `.env.example`):
 
-| Variable              | Used by    | Purpose                                 |
-| --------------------- | ---------- | --------------------------------------- |
-| `NODE_ENV`            | both       | Runtime environment                     |
-| `API_PORT`            | `apps/api` | API listen port (default `3001`)        |
-| `API_HOST`            | `apps/api` | API bind address                        |
-| `WEB_PORT`            | `apps/web` | Web dev server port (default `3000`)    |
-| `NEXT_PUBLIC_API_URL` | `apps/web` | Browser-facing API base URL             |
-| `MYSQL_HOST`          | `apps/api` | MySQL host (default `localhost`)        |
-| `MYSQL_PORT`          | `apps/api` | MySQL port (default `3306`)             |
-| `MYSQL_DATABASE`      | `apps/api` | Database name (default `gameshelf`)     |
-| `MYSQL_USER`          | `apps/api` | App database user (default `gameshelf`) |
-| `MYSQL_PASSWORD`      | `apps/api` | App database user password              |
-| `MYSQL_ROOT_PASSWORD` | compose    | MySQL root password (compose only)      |
-| `DATABASE_URL`        | `apps/api` | Prisma connection string (utf8mb4)      |
-| `DATABASE_SHADOW_URL` | `apps/api` | Prisma shadow DB (migrate dev only)     |
-| `REDIS_HOST`          | `apps/api` | Redis host (default `localhost`)        |
-| `REDIS_PORT`          | `apps/api` | Redis port (default `6379`)             |
-| `REDIS_URL`           | `apps/api` | Redis connection string                 |
-| `SESSION_SECRET`      | `apps/api` | Secret used to sign session cookies     |
-| `OPENAI_API_KEY`      | `apps/api` | LLM provider key                        |
-| `ANTHROPIC_API_KEY`   | `apps/api` | LLM provider key                        |
-| `IGDB_CLIENT_ID`      | `apps/api` | IGDB credentials                        |
-| `IGDB_CLIENT_SECRET`  | `apps/api` | IGDB credentials                        |
+| Variable              | Used by    | Purpose                                                           |
+| --------------------- | ---------- | ----------------------------------------------------------------- |
+| `NODE_ENV`            | both       | Runtime environment                                               |
+| `API_PORT`            | `apps/api` | API listen port (default `3001`)                                  |
+| `API_HOST`            | `apps/api` | API bind address                                                  |
+| `WEB_PORT`            | `apps/web` | Web dev server port (default `3000`)                              |
+| `NEXT_PUBLIC_API_URL` | `apps/web` | Browser-facing API base URL                                       |
+| `MYSQL_HOST`          | `apps/api` | MySQL host (default `localhost`)                                  |
+| `MYSQL_PORT`          | `apps/api` | MySQL port (default `3306`)                                       |
+| `MYSQL_DATABASE`      | `apps/api` | Database name (default `gameshelf`)                               |
+| `MYSQL_USER`          | `apps/api` | App database user (default `gameshelf`)                           |
+| `MYSQL_PASSWORD`      | `apps/api` | App database user password                                        |
+| `MYSQL_ROOT_PASSWORD` | compose    | MySQL root password (compose only)                                |
+| `DATABASE_URL`        | `apps/api` | Prisma connection string (utf8mb4)                                |
+| `DATABASE_SHADOW_URL` | `apps/api` | Prisma shadow DB (migrate dev only)                               |
+| `REDIS_HOST`          | `apps/api` | Redis host (default `localhost`)                                  |
+| `REDIS_PORT`          | `apps/api` | Redis port (default `6379`)                                       |
+| `REDIS_URL`           | `apps/api` | Redis connection string                                           |
+| `SESSION_SECRET`      | `apps/api` | HMAC-SHA256 key for session tokens (≥32 chars)                    |
+| `SESSION_TTL_MINUTES` | `apps/api` | Sliding session lifetime in minutes (default `10080`; no "never") |
+| `OPENAI_API_KEY`      | `apps/api` | LLM provider key                                                  |
+| `ANTHROPIC_API_KEY`   | `apps/api` | LLM provider key                                                  |
+| `IGDB_CLIENT_ID`      | `apps/api` | IGDB credentials                                                  |
+| `IGDB_CLIENT_SECRET`  | `apps/api` | IGDB credentials                                                  |
 
 ## Repository layout
 
