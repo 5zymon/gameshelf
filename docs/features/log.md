@@ -1,5 +1,9 @@
 # Directory Update Log
 
+## 2026-10-06
+
+- **Added**: [Web Auth UI](/web-auth-ui.md) — the Next.js (`apps/web`) login/setup wiring for ticket 2.5: server-side route protection (`/setup` ↔ `/login` setup-state redirects, `(app)` layout session guard), the same-origin `/api` rewrite that keeps the `gameshelf_session` httpOnly cookie on the web origin, SSR cookie forwarding in `lib/api.ts`, the cookie-only/no-token guarantee, status-to-message error handling (notably `400` → input-validation message vs `401` non-leaking credentials vs generic network fallback), and a six-criterion manual acceptance script with the proxy smoke commands and expected statuses.
+
 ## 2026-10-05
 
 - **Updated**: [Auth API](/auth-api.md) and [Auth Foundation](/auth-foundation.md) — recorded that public self-registration is deliberately disabled (only the one-time `POST /setup` and the future operator CLI create users) and corrected the stale "signup" wording; added an e2e regression spec (`apps/api/test/e2e/no-registration.e2e-spec.ts`) asserting that `POST /auth/register` and similar paths return `404` and create no user.

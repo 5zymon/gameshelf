@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import './globals.css';
 
 export const metadata: Metadata = {
   title: 'GameShelf',
@@ -12,7 +13,7 @@ export default function RootLayout({
 }): React.ReactElement {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body className="min-h-dvh bg-ink text-fog antialiased">{children}</body>
     </html>
   );
 }
