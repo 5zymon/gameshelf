@@ -4,9 +4,9 @@ Track, organize, and discover your video game library.
 
 GameShelf is an npm-workspaces monorepo with two packages:
 
-| Package | Path | Description |
-| --- | --- | --- |
-| `@gameshelf/api` | `apps/api` | HTTP API built with [NestJS](https://nestjs.com/) |
+| Package          | Path       | Description                                        |
+| ---------------- | ---------- | -------------------------------------------------- |
+| `@gameshelf/api` | `apps/api` | HTTP API built with [NestJS](https://nestjs.com/)  |
 | `@gameshelf/web` | `apps/web` | Frontend built with [Next.js](https://nextjs.org/) |
 
 ## Prerequisites
@@ -49,33 +49,42 @@ npm run dev
 
 Other useful scripts (all run from the root):
 
-| Command | Description |
-| --- | --- |
-| `npm run dev` | Start API + web in watch mode |
-| `npm run dev:api` | Start only the NestJS API |
-| `npm run dev:web` | Start only the Next.js frontend |
-| `npm run build` | Build both workspaces |
-| `npm run typecheck` | Type-check both workspaces |
-| `npm run lint` | Lint both workspaces |
+| Command                | Description                         |
+| ---------------------- | ----------------------------------- |
+| `npm run dev`          | Start API + web in watch mode       |
+| `npm run dev:api`      | Start only the NestJS API           |
+| `npm run dev:web`      | Start only the Next.js frontend     |
+| `npm run build`        | Build both workspaces               |
+| `npm run typecheck`    | Type-check both workspaces          |
+| `npm run lint`         | Lint both workspaces                |
+| `npm run lint:fix`     | Lint both workspaces and autofix    |
+| `npm run format`       | Format the whole repo with Prettier |
+| `npm run format:check` | Check formatting without writing    |
+
+### Code quality and git hooks
+
+ESLint runs the typed `strictTypeChecked` and `stylisticTypeChecked` presets, while Prettier owns formatting (conflicting ESLint rules are disabled via `eslint-config-prettier`).
+
+`npm install` runs `husky`, which points Git at `.husky/`. The `pre-commit` hook runs `lint-staged` (ESLint `--fix` + Prettier on staged files) and then a full `npm run typecheck`; commits that fail either check are rejected.
 
 ## Environment variables
 
 All variables live in a single root `.env` file (see `.env.example`):
 
-| Variable | Used by | Purpose |
-| --- | --- | --- |
-| `NODE_ENV` | both | Runtime environment |
-| `API_PORT` | `apps/api` | API listen port (default `3001`) |
-| `API_HOST` | `apps/api` | API bind address |
-| `WEB_PORT` | `apps/web` | Web dev server port (default `3000`) |
-| `NEXT_PUBLIC_API_URL` | `apps/web` | Browser-facing API base URL |
-| `DATABASE_URL` | `apps/api` | PostgreSQL connection string |
-| `REDIS_URL` | `apps/api` | Redis connection string |
-| `SESSION_SECRET` | `apps/api` | Secret used to sign session cookies |
-| `OPENAI_API_KEY` | `apps/api` | LLM provider key |
-| `ANTHROPIC_API_KEY` | `apps/api` | LLM provider key |
-| `IGDB_CLIENT_ID` | `apps/api` | IGDB credentials |
-| `IGDB_CLIENT_SECRET` | `apps/api` | IGDB credentials |
+| Variable              | Used by    | Purpose                              |
+| --------------------- | ---------- | ------------------------------------ |
+| `NODE_ENV`            | both       | Runtime environment                  |
+| `API_PORT`            | `apps/api` | API listen port (default `3001`)     |
+| `API_HOST`            | `apps/api` | API bind address                     |
+| `WEB_PORT`            | `apps/web` | Web dev server port (default `3000`) |
+| `NEXT_PUBLIC_API_URL` | `apps/web` | Browser-facing API base URL          |
+| `DATABASE_URL`        | `apps/api` | PostgreSQL connection string         |
+| `REDIS_URL`           | `apps/api` | Redis connection string              |
+| `SESSION_SECRET`      | `apps/api` | Secret used to sign session cookies  |
+| `OPENAI_API_KEY`      | `apps/api` | LLM provider key                     |
+| `ANTHROPIC_API_KEY`   | `apps/api` | LLM provider key                     |
+| `IGDB_CLIENT_ID`      | `apps/api` | IGDB credentials                     |
+| `IGDB_CLIENT_SECRET`  | `apps/api` | IGDB credentials                     |
 
 ## Repository layout
 
@@ -86,6 +95,7 @@ All variables live in a single root `.env` file (see `.env.example`):
 │   └── web/            # Next.js frontend
 ├── docs/               # OKF feature documentation bundle
 ├── tsconfig.base.json  # Shared strict TypeScript config
+├── .husky/             # Git hooks (pre-commit)
 ├── .env.example        # Environment variable template
 ├── .nvmrc              # Pinned Node version
 └── package.json        # Workspaces + root scripts

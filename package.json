@@ -17,12 +17,33 @@
     "build": "npm run build --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "clean": "rm -rf node_modules apps/*/node_modules apps/*/.next apps/*/dist"
+    "lint:fix": "npm run lint --workspaces --if-present -- --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "clean": "rm -rf node_modules apps/*/node_modules apps/*/.next apps/*/dist",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "apps/api/**/*.ts": [
+      "eslint --fix --config apps/api/eslint.config.mjs",
+      "prettier --write"
+    ],
+    "apps/web/**/*.{ts,tsx}": [
+      "eslint --fix --config apps/web/eslint.config.mjs",
+      "prettier --write"
+    ],
+    "**/*.{js,mjs,cjs,json,md,yml,yaml,css}": [
+      "prettier --write"
+    ]
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
     "concurrently": "^9.1.2",
     "eslint": "^9.39.5",
+    "eslint-config-prettier": "^10.1.8",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.6.0",
+    "prettier": "^3.9.9",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.71.0"
   }
