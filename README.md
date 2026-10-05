@@ -14,7 +14,7 @@ GameShelf is an npm-workspaces monorepo with two packages:
 - **Node.js 24 LTS** (`>=24 <25`) — pinned in `.nvmrc` and `package.json` (`engines.node`).
 - **npm 11+** (ships with Node 24).
 - [nvm](https://github.com/nvm-sh/nvm) (optional but recommended) to select the pinned Node version.
-- **Docker** (optional) — only for the convenience `docker-compose.yml` that starts the dev MySQL. The app itself needs just a MySQL 8.4 server reachable at `MYSQL_HOST:MYSQL_PORT`; a system-installed MySQL works identically.
+- **Docker** (optional) — only for the convenience `docker-compose.yml` that starts the dev MySQL and Redis. The app itself needs just a MySQL 8.4 server reachable at `MYSQL_HOST:MYSQL_PORT` and a Redis 7.4 server reachable at `REDIS_HOST:REDIS_PORT`; system-installed servers work identically.
 
 The root scripts call `concurrently` and the workspace CLIs, so everything runs from the repository root.
 
@@ -141,6 +141,62 @@ docker compose down && rm -rf data/mysql
 
 Note: the MySQL image creates the database and user only on **first** initialization (empty data directory). Changing `MYSQL_USER`/`MYSQL_PASSWORD` in `.env` later has no effect until you reset.
 
+## Redis (local dev)
+
+GameShelf uses **Redis 7.4** as the BullMQ job queue backing store (ADR-002).
+
+### Starting the queue
+
+Docker Compose is a **convenience, not a dependency**: the app only needs a Redis server reachable at `REDIS_HOST:REDIS_PORT`. A system-installed Redis 7.4 with AOF enabled works identically.
+
+```bash
+docker compose up -d redis     # starts the pinned redis:7.4
+docker compose ps              # wait until the service is "healthy"
+```
+
+(`docker compose up -d` starts both services at once.)
+
+### Confirming AOF persistence
+
+AOF is enabled via the `--appendonly yes` command flag in `docker-compose.yml`. Verify it:
+
+```bash
+docker compose exec redis redis-cli CONFIG GET appendonly
+```
+
+Expected:
+
+```
+appendonly
+yes
+```
+
+### Confirming data persistence
+
+Write a key, restart Redis, and read it back:
+
+```bash
+docker compose exec redis redis-cli SET persistence-test "survives-restart"
+docker compose restart redis
+docker compose exec redis redis-cli GET persistence-test
+```
+
+Expected: `survives-restart`
+
+### Persistent data directory
+
+The data directory is bind-mounted to `./data/redis` (gitignored) — a real host path, **not** an ephemeral container path. Recreating the container never loses data. The application cannot verify that this path sits on durable storage — that is a human check.
+
+To reset the dev Redis completely:
+
+```bash
+docker compose down && rm -rf data/redis
+```
+
+### Connection settings
+
+`REDIS_HOST` and `REDIS_PORT` from `.env` (defaults: `localhost` / `6379`). `REDIS_URL` is also available in `.env.example` for convenience.
+
 ## Environment variables
 
 All variables live in a single root `.env` file (see `.env.example`):
@@ -158,6 +214,8 @@ All variables live in a single root `.env` file (see `.env.example`):
 | `MYSQL_USER`          | `apps/api` | App database user (default `gameshelf`) |
 | `MYSQL_PASSWORD`      | `apps/api` | App database user password              |
 | `MYSQL_ROOT_PASSWORD` | compose    | MySQL root password (compose only)      |
+| `REDIS_HOST`          | `apps/api` | Redis host (default `localhost`)        |
+| `REDIS_PORT`          | `apps/api` | Redis port (default `6379`)             |
 | `REDIS_URL`           | `apps/api` | Redis connection string                 |
 | `SESSION_SECRET`      | `apps/api` | Secret used to sign session cookies     |
 | `OPENAI_API_KEY`      | `apps/api` | LLM provider key                        |
@@ -176,7 +234,7 @@ All variables live in a single root `.env` file (see `.env.example`):
 ├── tsconfig.base.json  # Shared strict TypeScript config
 ├── .husky/             # Git hooks (pre-commit)
 ├── .env.example        # Environment variable template
-├── docker-compose.yml    # Local dev MySQL (convenience only)
+├── docker-compose.yml    # Local dev MySQL + Redis (convenience only)
 ├── data/                 # Persistent dev data (gitignored)
 ├── .nvmrc              # Pinned Node version
 └── package.json        # Workspaces + root scripts
