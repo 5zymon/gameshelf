@@ -37,8 +37,13 @@ jobs:
           MYSQL_PASSWORD: gameshelf
         ports:
           - 3306:3306
+        # Server-level charset per ADR-001 — mysqld arguments, so they go in
+        # `command` (same pattern as docker-compose.yml), never in `options`
+        # (those are docker-create flags).
+        command:
+          - --character-set-server=utf8mb4
+          - --collation-server=utf8mb4_0900_ai_ci
         options: >-
-          --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
           --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
           --health-interval=5s
           --health-timeout=5s
