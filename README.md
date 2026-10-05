@@ -67,6 +67,19 @@ ESLint runs the typed `strictTypeChecked` and `stylisticTypeChecked` presets, wh
 
 `npm install` runs `husky`, which points Git at `.husky/`. The `pre-commit` hook runs `lint-staged` (ESLint `--fix` + Prettier on staged files) and then a full `npm run typecheck`; commits that fail either check are rejected.
 
+### Task shortcuts
+
+A [`Taskfile.yml`](./Taskfile.yml) provides [Task](https://taskfile.dev/) shortcuts (install the `task` binary first):
+
+| Command       | Description                                          |
+| ------------- | ---------------------------------------------------- |
+| `task --list` | List all available tasks                             |
+| `task check`  | Run all quality gates: format check, lint, typecheck |
+| `task ci`     | `task check` plus a production build                 |
+| `task fix`    | Apply ESLint autofixes and Prettier formatting       |
+
+There is no unit-test runner in the repo yet; once one is added, its script should be wired into `task check`/`task ci`.
+
 ## Environment variables
 
 All variables live in a single root `.env` file (see `.env.example`):

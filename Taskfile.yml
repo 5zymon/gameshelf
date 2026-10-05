@@ -1,0 +1,72 @@
+version: '3'
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  install:
+    desc: Install dependencies for both workspaces and set up git hooks
+    cmds:
+      - npm install
+
+  dev:
+    desc: Start the API and the web app in watch mode
+    cmds:
+      - npm run dev
+
+  lint:
+    desc: Lint both workspaces with ESLint
+    cmds:
+      - npm run lint
+
+  lint:fix:
+    desc: Lint both workspaces and apply ESLint autofixes
+    cmds:
+      - npm run lint:fix
+
+  typecheck:
+    desc: Type-check both workspaces
+    cmds:
+      - npm run typecheck
+
+  format:
+    desc: Format the whole repo with Prettier
+    cmds:
+      - npm run format
+
+  format:check:
+    desc: Check formatting without writing changes
+    cmds:
+      - npm run format:check
+
+  build:
+    desc: Build both workspaces
+    cmds:
+      - npm run build
+
+  fix:
+    desc: Apply ESLint autofixes and Prettier formatting
+    cmds:
+      - task: lint:fix
+      - task: format
+
+  check:
+    desc: Run all quality gates (format check, lint, typecheck)
+    cmds:
+      - task: format:check
+      - task: lint
+      - task: typecheck
+
+  ci:
+    desc: Full CI gate (check + build); add the test task here once a runner exists
+    cmds:
+      - task: check
+      - task: build
+
+  clean:
+    desc: Remove node_modules and build output
+    cmds:
+      - npm run clean
