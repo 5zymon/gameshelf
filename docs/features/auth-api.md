@@ -102,8 +102,12 @@ to equalize response time and avoid a user-enumeration timing oracle.
 
 # Out of scope
 
-- Registration and rate limiting; the one-time bootstrap endpoint is
-  documented in [First-run Setup](/first-run-setup.md).
+- Self-registration is deliberately disabled: no public signup/register route
+  exists, and the e2e regression test
+  (`apps/api/test/e2e/no-registration.e2e-spec.ts`) asserts that
+  `POST /auth/register` and similar paths return `404`. The one-time bootstrap
+  endpoint is documented in [First-run Setup](/first-run-setup.md).
+- Rate limiting.
 - CSRF tokens (relying on `SameSite=Lax`) and account lockout.
 - CORS credentials configuration (web integration, ticket 2.5).
 - Web client wiring and multi-level roles/permissions.

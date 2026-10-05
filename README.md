@@ -90,6 +90,26 @@ A [`Taskfile.yml`](./Taskfile.yml) provides [Task](https://taskfile.dev/) shortc
 | `task ci`     | `task check` plus a production build, tests and the migration check |
 | `task fix`    | Apply ESLint autofixes and Prettier formatting                      |
 
+## Accounts and registration
+
+GameShelf has **no public self-registration**. There is deliberately no signup
+route or signup link, and paths such as `POST /auth/register`, `POST /signup`
+or `POST /users` return `404`. This is a security decision, not an unfinished
+feature — do not "helpfully" add a public registration endpoint. The absence
+is enforced by the regression test
+`apps/api/test/e2e/no-registration.e2e-spec.ts` (part of `npm run test`).
+
+Accounts are provisioned only by:
+
+- **First-run setup** — `POST /setup` creates the very first account and is
+  permanently disabled (`409 Setup has already been completed`) once a user
+  exists. See [`docs/features/first-run-setup.md`](./docs/features/first-run-setup.md).
+- **The CLI** — an operator-run `user:create` command (ticket 2.7). It is not
+  implemented yet; when added it reuses `UsersService`.
+
+Additional users therefore require operator action. The web client exposes no
+signup page or link either; that is enforced by the frontend ticket.
+
 ## Testing
 
 The API has a two-tier Jest suite (`apps/api/jest.config.js`), run from the repository root:

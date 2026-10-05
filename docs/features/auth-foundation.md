@@ -15,8 +15,11 @@ credential comes from the environment. There is **no JWT dependency** — sessio
 database, so revocation is immediate and no token payload can be forged.
 
 This ticket ships services and configuration only. The HTTP
-signup/login/logout endpoints, cookie handling, and the global guard are
-provided by the [Auth API](/auth-api.md) on top of these services.
+login/logout/me endpoints, cookie handling, and the global guard are
+provided by the [Auth API](/auth-api.md) on top of these services. There is
+**no signup/registration endpoint** — self-registration is deliberately
+disabled and user creation is only possible via the one-time `POST /setup`
+or the operator CLI.
 
 # Password hashing
 
