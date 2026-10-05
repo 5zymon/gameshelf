@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { SESSION_COOKIE_NAME } from './auth/session-cookie';
 import { createGlobalValidationPipe } from './common/validation-pipe';
 
 async function bootstrap(): Promise<void> {
@@ -12,6 +13,7 @@ async function bootstrap(): Promise<void> {
     .setTitle('GameShelf API')
     .setDescription('Catalog API for the GameShelf game library.')
     .setVersion('0.1')
+    .addCookieAuth(SESSION_COOKIE_NAME)
     .build();
   const document = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, document);

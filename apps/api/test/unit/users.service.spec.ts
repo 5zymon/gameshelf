@@ -7,6 +7,7 @@ import type { PrismaService } from '../../src/prisma/prisma.service';
 interface UsersPrismaMock {
   user: {
     create: jest.Mock;
+    findUnique: jest.Mock;
   };
 }
 
@@ -19,7 +20,9 @@ function createService(): {
   prisma: UsersPrismaMock;
   passwords: PasswordsMock;
 } {
-  const prisma: UsersPrismaMock = { user: { create: jest.fn() } };
+  const prisma: UsersPrismaMock = {
+    user: { create: jest.fn(), findUnique: jest.fn() },
+  };
   const passwords: PasswordsMock = { hash: jest.fn() };
   return {
     service: new UsersService(
@@ -103,5 +106,55 @@ describe('UsersService (unit)', () => {
         'A user with email "ash@example.com" already exists',
       ),
     );
+  });
+
+  describe('findByEmail', () => {
+    it('normalizes the email and selects the credential row', async () => {
+      const row = {
+        id: 1,
+        email: 'ash@example.com',
+        passwordHash: 'ARGON2HASH',
+        createdAt: new Date('2026-10-05T12:00:00.000Z'),
+      };
+      prisma.user.findUnique.mockResolvedValue(row);
+
+      const result = await service.findByEmail('  Ash@Example.COM ');
+
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { email: 'ash@example.com' },
+        select: {
+          id: true,
+          email: true,
+          passwordHash: true,
+          createdAt: true,
+        },
+      });
+      expect(result).toEqual(row);
+    });
+
+    it('returns null for a blank email without querying', async () => {
+      await expect(service.findByEmail('   ')).resolves.toBeNull();
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findById', () => {
+    it('selects only id/email/createdAt (never passwordHash)', async () => {
+      const row = {
+        id: 7,
+        email: 'ash@example.com',
+        createdAt: new Date('2026-10-05T12:00:00.000Z'),
+      };
+      prisma.user.findUnique.mockResolvedValue(row);
+
+      const result = await service.findById(7);
+
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { id: 7 },
+        select: { id: true, email: true, createdAt: true },
+      });
+      expect(result).toEqual(row);
+      expect(result).not.toHaveProperty('passwordHash');
+    });
   });
 });

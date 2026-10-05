@@ -14,9 +14,9 @@ hashed with Argon2id, sessions are stored server-side in MySQL, and every
 credential comes from the environment. There is **no JWT dependency** — sessions are opaque random tokens held in the
 database, so revocation is immediate and no token payload can be forged.
 
-This ticket ships services and configuration only. HTTP signup/login/logout,
-controllers, DTOs, cookies, and guards are deliberately out of scope (see
-[Out of scope](#out-of-scope)).
+This ticket ships services and configuration only. The HTTP
+signup/login/logout endpoints, cookie handling, and the global guard are
+provided by the [Auth API](/auth-api.md) on top of these services.
 
 # Password hashing
 
@@ -98,8 +98,8 @@ internally (scheduled). `AppModule` imports `ScheduleModule.forRoot()` and
 
 # Out of scope
 
-- HTTP surface: signup/login/logout endpoints, controllers, DTOs, cookies.
-- Guards, session middleware, and request authentication.
+- HTTP surface: implemented by the [Auth API](/auth-api.md) (`POST /auth/login`,
+  `POST /auth/logout`, `GET /auth/me`, cookies, and the global guard).
 - Password policy and strength rules.
 - Roles and permissions (single permission level — decision #14).
 - Frontend auth UI.

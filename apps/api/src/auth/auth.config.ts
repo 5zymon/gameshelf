@@ -17,6 +17,8 @@ export interface AuthConfig {
   sessionSecret: string;
   /** Finite sliding session lifetime in milliseconds. */
   sessionTtlMs: number;
+  /** Send the session cookie only over HTTPS (`Secure` flag). */
+  cookieSecure: boolean;
 }
 
 export function loadAuthConfig(config: ConfigService): AuthConfig {
@@ -40,5 +42,17 @@ export function loadAuthConfig(config: ConfigService): AuthConfig {
         `(a finite lifetime; "never" is not supported)`,
     );
   }
-  return { sessionSecret, sessionTtlMs: minutes * 60_000 };
+  const rawSecure = config.get<string>('SESSION_COOKIE_SECURE');
+  let cookieSecure = false;
+  if (rawSecure !== undefined && rawSecure !== '') {
+    const v = rawSecure.trim().toLowerCase();
+    if (v === 'true' || v === '1') cookieSecure = true;
+    else if (v === 'false' || v === '0') cookieSecure = false;
+    else {
+      throw new Error(
+        `SESSION_COOKIE_SECURE must be "true"/"1" or "false"/"0" (got "${rawSecure}")`,
+      );
+    }
+  }
+  return { sessionSecret, sessionTtlMs: minutes * 60_000, cookieSecure };
 }
