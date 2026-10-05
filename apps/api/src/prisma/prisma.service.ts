@@ -15,6 +15,9 @@ export class PrismaService
       // `mariadb:` (the mariadb driver is MySQL-compatible and parses
       // `?charset=utf8mb4`).
       adapter: new PrismaMariaDb(config.getOrThrow<string>('DATABASE_URL')),
+      ...(config.get<string>('PRISMA_LOG_QUERIES') === '1'
+        ? { log: [{ emit: 'stdout' as const, level: 'query' as const }] }
+        : {}),
     });
   }
 

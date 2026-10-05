@@ -53,22 +53,23 @@ npm run dev
 
 Other useful scripts (all run from the root):
 
-| Command                    | Description                            |
-| -------------------------- | -------------------------------------- |
-| `npm run dev`              | Start API + web in watch mode          |
-| `npm run dev:api`          | Start only the NestJS API              |
-| `npm run dev:web`          | Start only the Next.js frontend        |
-| `npm run build`            | Build both workspaces                  |
-| `npm run db:migrate`       | Local migration (Prisma, shadow DB)    |
-| `npm run db:deploy`        | Apply committed migrations             |
-| `npm run db:migrate:check` | Fail if schema and deployed DB diverge |
-| `npm run db:generate`      | Regenerate the Prisma client           |
-| `npm run db:studio`        | Open Prisma Studio                     |
-| `npm run typecheck`        | Type-check both workspaces             |
-| `npm run lint`             | Lint both workspaces                   |
-| `npm run lint:fix`         | Lint both workspaces and autofix       |
-| `npm run format`           | Format the whole repo with Prettier    |
-| `npm run format:check`     | Check formatting without writing       |
+| Command                      | Description                                                         |
+| ---------------------------- | ------------------------------------------------------------------- |
+| `npm run dev`                | Start API + web in watch mode                                       |
+| `npm run dev:api`            | Start only the NestJS API                                           |
+| `npm run dev:web`            | Start only the Next.js frontend                                     |
+| `npm run build`              | Build both workspaces                                               |
+| `npm run db:migrate`         | Local migration (Prisma, shadow DB)                                 |
+| `npm run db:platforms:fetch` | Fetch the canonical IGDB platform list as a data migration (stdout) |
+| `npm run db:deploy`          | Apply committed migrations                                          |
+| `npm run db:migrate:check`   | Fail if schema and deployed DB diverge                              |
+| `npm run db:generate`        | Regenerate the Prisma client                                        |
+| `npm run db:studio`          | Open Prisma Studio                                                  |
+| `npm run typecheck`          | Type-check both workspaces                                          |
+| `npm run lint`               | Lint both workspaces                                                |
+| `npm run lint:fix`           | Lint both workspaces and autofix                                    |
+| `npm run format`             | Format the whole repo with Prettier                                 |
+| `npm run format:check`       | Check formatting without writing                                    |
 
 ### Code quality and git hooks
 
