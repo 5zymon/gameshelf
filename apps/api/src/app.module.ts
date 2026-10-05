@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { GamesModule } from './games/games.module';
+import { ImportJobsModule } from './import-jobs/import-jobs.module';
 import { PlatformsModule } from './platforms/platforms.module';
 import { PrismaModule } from './prisma/prisma.module';
 
@@ -16,6 +17,7 @@ import { PrismaModule } from './prisma/prisma.module';
     }),
     PrismaModule,
     GamesModule,
+    ImportJobsModule,
     PlatformsModule,
   ],
   controllers: [AppController],

@@ -1,0 +1,133 @@
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Query,
+} from '@nestjs/common';
+import {
+  ApiBadRequestResponse,
+  ApiConflictResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiParam,
+  ApiTags,
+} from '@nestjs/swagger';
+import { DismissImportJobDto } from './dto/dismiss-import-job.dto';
+import { DismissUnrecognizedItemDto } from './dto/dismiss-unrecognized-item.dto';
+import { ImportJobIdParamDto } from './dto/import-job-id-param.dto';
+import {
+  ImportJobDetailModel,
+  ListImportJobsResponseModel,
+  UnrecognizedItemModel,
+} from './dto/import-job-response.model';
+import { ListImportJobsQueryDto } from './dto/list-import-jobs-query.dto';
+import { UnrecognizedItemIdParamDto } from './dto/unrecognized-item-id-param.dto';
+import { ImportJobsService } from './import-jobs.service';
+
+@ApiTags('import-jobs')
+@Controller('import-jobs')
+export class ImportJobsController {
+  constructor(private readonly importJobsService: ImportJobsService) {}
+
+  @Get()
+  @ApiOperation({
+    summary: 'List import runs with status and counts, newest first',
+    description:
+      'Pagination is deterministic (createdAt DESC, id DESC tiebreaker). ' +
+      '`meta.total` reflects the filtered set.',
+  })
+  @ApiOkResponse({ type: ListImportJobsResponseModel })
+  @ApiBadRequestResponse({ description: 'Invalid page/limit/status values' })
+  list(
+    @Query() query: ListImportJobsQueryDto,
+  ): Promise<ListImportJobsResponseModel> {
+    return this.importJobsService.list(query);
+  }
+
+  @Get(':id')
+  @ApiOperation({
+    summary: 'Get a single import run with its unrecognized items (full trace)',
+    description:
+      'Includes dismissed items — the trace outlives dismissal (spec §4.2.5).',
+  })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiOkResponse({ type: ImportJobDetailModel })
+  @ApiNotFoundResponse({ description: 'Import job not found' })
+  findOne(@Param() params: ImportJobIdParamDto): Promise<ImportJobDetailModel> {
+    return this.importJobsService.findOne(params.id);
+  }
+
+  @Get(':id/unrecognized')
+  @ApiOperation({
+    summary: 'Flagged items awaiting review (non-dismissed only)',
+  })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiOkResponse({ type: [UnrecognizedItemModel] })
+  @ApiNotFoundResponse({ description: 'Import job not found' })
+  listUnrecognized(
+    @Param() params: ImportJobIdParamDto,
+  ): Promise<UnrecognizedItemModel[]> {
+    return this.importJobsService.listUnrecognized(params.id);
+  }
+
+  @Patch(':id')
+  @ApiOperation({
+    summary:
+      'Dismiss a needs-attention/failed job (body: {"status":"dismissed"})',
+    description:
+      'Idempotent: dismissing an already-dismissed job is a 200 no-op. ' +
+      'Dismissal is sticky — no endpoint transitions it back.',
+  })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiOkResponse({ type: ImportJobDetailModel })
+  @ApiBadRequestResponse({
+    description: "Validation error (only status 'dismissed' is accepted)",
+  })
+  @ApiNotFoundResponse({ description: 'Import job not found' })
+  @ApiConflictResponse({
+    description: 'Job is not needs-attention or failed',
+  })
+  dismiss(
+    @Param() params: ImportJobIdParamDto,
+    // Validated by the global pipe (only `{"status":"dismissed"}` passes);
+    // the value itself needs no handling, hence the unused-arg prefix.
+    @Body() _dto: DismissImportJobDto,
+  ): Promise<ImportJobDetailModel> {
+    return this.importJobsService.dismissJob(params.id);
+  }
+
+  @Patch(':id/unrecognized/:itemId')
+  @ApiOperation({
+    summary: 'Dismiss/acknowledge a flagged item (body: {"dismissed":true})',
+    description:
+      'One-way: stamps dismissed_at; there is no un-dismiss. ' +
+      'Idempotent: re-dismissing is a 200 no-op.',
+  })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiParam({ name: 'itemId', type: Number })
+  @ApiOkResponse({ type: UnrecognizedItemModel })
+  @ApiBadRequestResponse({
+    description: 'Validation error (dismissed must be true)',
+  })
+  @ApiNotFoundResponse({
+    description: 'Import job or unrecognized item not found',
+  })
+  dismissUnrecognizedItem(
+    @Param() params: UnrecognizedItemIdParamDto,
+    @Body() dto: DismissUnrecognizedItemDto,
+  ): Promise<UnrecognizedItemModel> {
+    if (!dto.dismissed) {
+      throw new BadRequestException(
+        'Only dismissing is supported (dismissed must be true)',
+      );
+    }
+    return this.importJobsService.dismissUnrecognizedItem(
+      params.id,
+      params.itemId,
+    );
+  }
+}
