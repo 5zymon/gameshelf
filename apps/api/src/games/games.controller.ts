@@ -35,9 +35,17 @@ export class GamesController {
   constructor(private readonly gamesService: GamesService) {}
 
   @Get()
-  @ApiOperation({ summary: 'List games (paginated)' })
+  @ApiOperation({
+    summary: 'List games (paginated, filterable, searchable, sortable)',
+    description:
+      'Filters combine with AND. `q` is a case-insensitive partial title match (LIKE). ' +
+      'Sorting is deterministic (id tiebreaker); `sort=year` puts unknown years last. ' +
+      '`meta.total` reflects the filtered set. `filters` returns available platform/edition values.',
+  })
   @ApiOkResponse({ type: ListGamesResponseModel })
-  @ApiBadRequestResponse({ description: 'Invalid page/limit values' })
+  @ApiBadRequestResponse({
+    description: 'Invalid page/limit/filter/sort values',
+  })
   list(@Query() query: ListGamesQueryDto): Promise<ListGamesResponseModel> {
     return this.gamesService.list(query);
   }

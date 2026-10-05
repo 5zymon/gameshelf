@@ -26,7 +26,9 @@ export class GamesService {
   async list(query: ListGamesQueryDto): Promise<ListGamesResponseModel> {
     const page = query.page ?? 1;
     const limit = query.limit ?? 20;
-    const [items, total] = await Promise.all([
+    const where = this.buildWhere(query);
+    const orderBy = this.buildOrderBy(query);
+    const [items, total, platforms, editions] = await Promise.all([
       this.prisma.game.findMany({
         select: {
           id: true,
@@ -35,15 +37,33 @@ export class GamesService {
           coverUrl: true,
           platform: { select: PLATFORM_SELECT },
         },
-        orderBy: { id: 'asc' },
+        where,
+        orderBy,
         skip: (page - 1) * limit,
         take: limit,
       }),
-      this.prisma.game.count(),
+      this.prisma.game.count({ where }),
+      this.prisma.platform.findMany({
+        where: { games: { some: {} } },
+        select: { id: true, name: true, slug: true },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.game.findMany({
+        distinct: ['edition'],
+        where: { edition: { not: null } },
+        select: { edition: true },
+        orderBy: { edition: 'asc' },
+      }),
     ]);
     return {
       items,
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+      filters: {
+        platforms,
+        editions: editions.flatMap((e) =>
+          e.edition === null ? [] : [e.edition],
+        ),
+      },
     };
   }
 
@@ -123,6 +143,68 @@ export class GamesService {
       throw new NotFoundException(`Game with id ${String(id)} not found`);
     }
     await this.prisma.game.delete({ where: { id } });
+  }
+
+  private buildWhere(query: ListGamesQueryDto): Prisma.GameWhereInput {
+    const where: Prisma.GameWhereInput = {};
+    if (query.platformId !== undefined) {
+      where.platformId = query.platformId;
+    }
+    const edition = this.trimToUndefined(query.edition);
+    if (edition !== undefined) {
+      where.edition = edition;
+    }
+    if (query.year !== undefined) {
+      where.releaseYear = query.year;
+    }
+    const publisher = this.trimToUndefined(query.publisher);
+    if (publisher !== undefined) {
+      where.publisher = publisher;
+    }
+    const genre = this.trimToUndefined(query.genre);
+    if (genre !== undefined) {
+      where.genre = genre;
+    }
+    if (query.playerCount !== undefined) {
+      where.playerCount = query.playerCount;
+    }
+    const q = this.trimToUndefined(query.q);
+    if (q !== undefined) {
+      where.title = { contains: this.escapeLike(q) };
+    }
+    return where;
+  }
+
+  private buildOrderBy(
+    query: ListGamesQueryDto,
+  ): Prisma.GameOrderByWithRelationInput[] {
+    const order: Prisma.SortOrder = query.order ?? 'asc';
+    // Every case returns an array so the `id` tiebreaker is always the last
+    // element.
+    switch (query.sort) {
+      case 'title':
+        return [{ title: order }, { id: 'asc' }];
+      case 'year':
+        return [{ releaseYear: { sort: order, nulls: 'last' } }, { id: 'asc' }];
+      case 'platform':
+        return [{ platform: { name: order } }, { id: 'asc' }];
+      case 'createdAt':
+        return [{ createdAt: order }, { id: 'asc' }];
+      default:
+        return [{ id: 'asc' }];
+    }
+  }
+
+  private trimToUndefined(value: string | undefined): string | undefined {
+    if (value === undefined) {
+      return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed === '' ? undefined : trimmed;
+  }
+
+  private escapeLike(value: string): string {
+    return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
   }
 
   private async assertPlatformExists(platformId: number): Promise<void> {
