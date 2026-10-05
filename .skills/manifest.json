@@ -1,0 +1,30 @@
+[
+  {
+    "name": "vercel-react-best-practices",
+    "source": "https://github.com/vercel-labs/agent-skills",
+    "commit": "063bee94c3f4df8453406c830b0a7df0f2860278",
+    "license": "MIT",
+    "upstream_path": "skills/react-best-practices"
+  },
+  {
+    "name": "nestjs-best-practices",
+    "source": "https://github.com/Kadajett/agent-nestjs-skills",
+    "commit": "3986e0cede33958e000f959031cbee0cd83c2941",
+    "license": "MIT",
+    "upstream_path": "skills/nestjs-best-practices"
+  },
+  {
+    "name": "tailwind-best-practices",
+    "source": "https://github.com/AsyrafHussin/agent-skills",
+    "commit": "1aa0ff717c10309226c9e678f00873976450fd76",
+    "license": "MIT",
+    "upstream_path": "skills/tailwind-best-practices"
+  },
+  {
+    "name": "frontend-design",
+    "source": "https://github.com/anthropics/skills",
+    "commit": "8a1541c4a3ffa5a20a5a91de0dcf3f0bab1d1ef4",
+    "license": "Apache-2.0",
+    "upstream_path": "skills/frontend-design"
+  }
+]
