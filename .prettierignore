@@ -12,3 +12,4 @@ out/
 
 # Vendored agent skills
 .opencode/skills/
+.skills/
