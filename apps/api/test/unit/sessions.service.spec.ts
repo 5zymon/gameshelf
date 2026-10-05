@@ -39,7 +39,11 @@ function createService(): {
       deleteMany: jest.fn(),
     },
   };
-  const config: AuthConfig = { sessionSecret: SECRET, sessionTtlMs: TTL_MS };
+  const config: AuthConfig = {
+    sessionSecret: SECRET,
+    sessionTtlMs: TTL_MS,
+    cookieSecure: false,
+  };
   return {
     service: new SessionsService(mock as unknown as PrismaService, config),
     mock,

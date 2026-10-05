@@ -21,6 +21,7 @@ describe('Platforms API (e2e)', () => {
 
   beforeEach(async () => {
     await resetDatabase(test.prisma);
+    await test.login();
   });
 
   afterAll(async () => {

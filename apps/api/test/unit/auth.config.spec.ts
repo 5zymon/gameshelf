@@ -16,7 +16,11 @@ describe('loadAuthConfig (unit)', () => {
       config({ SESSION_SECRET: SECRET, SESSION_TTL_MINUTES: '120' }),
     );
 
-    expect(result).toEqual({ sessionSecret: SECRET, sessionTtlMs: 7_200_000 });
+    expect(result).toEqual({
+      sessionSecret: SECRET,
+      sessionTtlMs: 7_200_000,
+      cookieSecure: false,
+    });
   });
 
   it('defaults a missing SESSION_TTL_MINUTES to 7 days', () => {
@@ -53,6 +57,41 @@ describe('loadAuthConfig (unit)', () => {
       expect(() =>
         loadAuthConfig(
           config({ SESSION_SECRET: SECRET, SESSION_TTL_MINUTES: value }),
+        ),
+      ).toThrow();
+    },
+  );
+
+  it('defaults cookieSecure to false when absent or empty', () => {
+    expect(
+      loadAuthConfig(config({ SESSION_SECRET: SECRET })).cookieSecure,
+    ).toBe(false);
+    expect(
+      loadAuthConfig(
+        config({ SESSION_SECRET: SECRET, SESSION_COOKIE_SECURE: '' }),
+      ).cookieSecure,
+    ).toBe(false);
+  });
+
+  it.each([
+    ['true', true],
+    ['1', true],
+    ['false', false],
+    ['0', false],
+  ])('parses SESSION_COOKIE_SECURE=%s to %s', (value, expected) => {
+    expect(
+      loadAuthConfig(
+        config({ SESSION_SECRET: SECRET, SESSION_COOKIE_SECURE: value }),
+      ).cookieSecure,
+    ).toBe(expected);
+  });
+
+  it.each(['yes', 'on', '2', 'maybe'])(
+    'rejects SESSION_COOKIE_SECURE=%s (strict boolean only)',
+    (value) => {
+      expect(() =>
+        loadAuthConfig(
+          config({ SESSION_SECRET: SECRET, SESSION_COOKIE_SECURE: value }),
         ),
       ).toThrow();
     },

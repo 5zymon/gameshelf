@@ -18,6 +18,14 @@ export interface CreatedUser {
   createdAt: Date;
 }
 
+/** Full credential row used during login — never leaves the service. */
+export interface UserCredentials {
+  id: number;
+  email: string;
+  passwordHash: string;
+  createdAt: Date;
+}
+
 @Injectable()
 export class UsersService {
   constructor(
@@ -50,5 +58,23 @@ export class UsersService {
       }
       throw error;
     }
+  }
+
+  async findByEmail(email: string): Promise<UserCredentials | null> {
+    const normalized = email.trim().toLowerCase();
+    if (normalized === '') {
+      return null;
+    }
+    return this.prisma.user.findUnique({
+      where: { email: normalized },
+      select: { id: true, email: true, passwordHash: true, createdAt: true },
+    });
+  }
+
+  async findById(id: number): Promise<CreatedUser | null> {
+    return this.prisma.user.findUnique({
+      where: { id },
+      select: { id: true, email: true, createdAt: true },
+    });
   }
 }
