@@ -10,6 +10,9 @@ dist/
 out/
 *.tsbuildinfo
 
+# Prisma generated client (build artifact)
+apps/api/src/generated/
+
 # Vendored agent skills
 .opencode/skills/
 .skills/
