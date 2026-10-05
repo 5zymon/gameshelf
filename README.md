@@ -66,6 +66,7 @@ Other useful scripts (all run from the root):
 | `npm run db:generate`        | Regenerate the Prisma client                                        |
 | `npm run db:studio`          | Open Prisma Studio                                                  |
 | `npm run typecheck`          | Type-check both workspaces                                          |
+| `npm run test`               | Run the API test suite (unit + e2e)                                 |
 | `npm run lint`               | Lint both workspaces                                                |
 | `npm run lint:fix`           | Lint both workspaces and autofix                                    |
 | `npm run format`             | Format the whole repo with Prettier                                 |
@@ -81,14 +82,36 @@ ESLint runs the typed `strictTypeChecked` and `stylisticTypeChecked` presets, wh
 
 A [`Taskfile.yml`](./Taskfile.yml) provides [Task](https://taskfile.dev/) shortcuts (install the `task` binary first):
 
-| Command       | Description                                                  |
-| ------------- | ------------------------------------------------------------ |
-| `task --list` | List all available tasks                                     |
-| `task check`  | Run all quality gates: format check, lint, typecheck         |
-| `task ci`     | `task check` plus a production build and the migration check |
-| `task fix`    | Apply ESLint autofixes and Prettier formatting               |
+| Command       | Description                                                         |
+| ------------- | ------------------------------------------------------------------- |
+| `task --list` | List all available tasks                                            |
+| `task check`  | Run all quality gates: format check, lint, typecheck                |
+| `task test`   | Run the API test suite (unit + e2e)                                 |
+| `task ci`     | `task check` plus a production build, tests and the migration check |
+| `task fix`    | Apply ESLint autofixes and Prettier formatting                      |
 
-There is no unit-test runner in the repo yet; once one is added, its script should be wired into `task check`/`task ci`.
+## Testing
+
+The API has a two-tier Jest suite (`apps/api/jest.config.js`), run from the repository root:
+
+| Command             | What it runs                                                                        |
+| ------------------- | ----------------------------------------------------------------------------------- |
+| `npm run test`      | Both tiers (unit, then e2e)                                                         |
+| `npm run test:unit` | Unit tests only — services with a mocked `PrismaService`, **no database needed**    |
+| `npm run test:e2e`  | E2E tests only — a real Nest app (supertest) against a real MySQL **test** database |
+
+(`test:unit` / `test:e2e` are `apps/api` workspace scripts; from the root use `npm run test:unit --workspace apps/api` etc., or `task test` for the full suite.)
+
+**Test database.** The e2e tier uses a dedicated `gameshelf_test` database (never the dev `gameshelf` one), selected by `DATABASE_TEST_URL` in `.env` (default: `mysql://gameshelf:gameshelf@localhost:3306/gameshelf_test?charset=utf8mb4`).
+
+- **Fresh data dir:** `docker compose up -d mysql` creates it automatically — `docker/mysql-init/02-test-database.sql` runs on first initialization of an empty data directory.
+- **Existing data dir:** the init scripts only run once, so create it manually one time:
+
+  ```bash
+  docker compose exec -T mysql mysql -uroot -p"$(grep '^MYSQL_ROOT_PASSWORD=' .env | cut -d= -f2)" < docker/mysql-init/02-test-database.sql
+  ```
+
+The e2e tier is **re-runnable**: before the suite it applies the committed migrations (`prisma migrate deploy`) and wipes all tables; every test starts from a reset database.
 
 ## CI (GitHub Actions)
 
@@ -101,6 +124,7 @@ There is no unit-test runner in the repo yet; once one is added, its script shou
 | Lint                  | `npm run lint`             | ESLint (typed, strict) on both workspaces                           |
 | Typecheck             | `npm run typecheck`        | `tsc --noEmit` on both workspaces                                   |
 | Build                 | `npm run build`            | Production build of both workspaces                                 |
+| Test                  | `npm run test`             | API unit + e2e tests (e2e against the `gameshelf_test` database)    |
 | Apply migrations      | `npm run db:deploy`        | `prisma migrate deploy` against a throwaway MySQL service container |
 | Migration drift check | `npm run db:migrate:check` | Fail if `schema.prisma` and the deployed database have diverged     |
 
@@ -111,8 +135,8 @@ There is no unit-test runner in the repo yet; once one is added, its script shou
 ### Running the same checks locally
 
 ```bash
-docker compose up -d mysql   # only needed for the migration check
-task ci                       # generate, format check, lint, typecheck, build, migration check
+docker compose up -d mysql   # needed for the tests and the migration check
+task ci                       # generate, format check, lint, typecheck, build, test, migration check
 ```
 
 On machines without [`task`](https://taskfile.dev/), the raw-npm equivalent:
@@ -123,6 +147,7 @@ npm run format:check
 npm run lint
 npm run typecheck
 npm run build
+npm run test
 npm run db:deploy
 npm run db:migrate:check
 ```
@@ -199,7 +224,7 @@ Prisma is the data-access layer (ADR-003). The schema lives at `apps/api/prisma/
 
 The generated Prisma client is a **build artifact**: it is written to `apps/api/src/generated/` (gitignored) and regenerated automatically by `npm run build` — never commit it.
 
-The **shadow database** (`gameshelf_shadow`) is created by `docker/mysql-init/01-prisma-shadow.sql` on **first initialization only**, and is required by `prisma migrate dev` (local work). To change it you must reset the data directory: `docker compose down && rm -rf data/mysql`.
+The **shadow database** (`gameshelf_shadow`) is created by `docker/mysql-init/01-prisma-shadow.sql` on **first initialization only**, and is required by `prisma migrate dev` (local work). The **test database** (`gameshelf_test`, used by the e2e tier — see "Testing") is created the same way by `docker/mysql-init/02-test-database.sql`. To change either you must reset the data directory: `docker compose down && rm -rf data/mysql`.
 
 **Character set:** the `?charset=utf8mb4` suffix in `DATABASE_URL` is declarative — Prisma's MySQL connector does not parse it. The real enforcement is threefold: the migration engine connects with `utf8mb4` (MySQL ≥ 5.5.3), every generated table declares `DEFAULT CHARACTER SET utf8mb4`, and the server runs with `--character-set-server=utf8mb4` (see "Confirming the character set").
 
@@ -299,7 +324,7 @@ All variables live in a single root `.env` file (see `.env.example`):
 ├── tsconfig.base.json  # Shared strict TypeScript config
 ├── .husky/             # Git hooks (pre-commit)
 ├── .env.example        # Environment variable template
-├── docker/             # One-time MySQL init scripts (Prisma shadow DB)
+├── docker/             # One-time MySQL init scripts (shadow DB + test DB)
 ├── docker-compose.yml    # Local dev MySQL + Redis (convenience only)
 ├── data/                 # Persistent dev data (gitignored)
 ├── .nvmrc              # Pinned Node version

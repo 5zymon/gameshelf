@@ -22,6 +22,7 @@
     "db:platforms:fetch": "npm run db:platforms:fetch --workspace apps/api",
     "db:studio": "npm run db:studio --workspace apps/api",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
     "lint:fix": "npm run lint --workspaces --if-present -- --fix",
     "format": "prettier --write . '!data'",

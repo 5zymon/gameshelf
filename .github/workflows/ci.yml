@@ -2,7 +2,7 @@
 #
 # Runs on every push and pull request. Gates:
 #   install -> prisma generate -> lint -> typecheck -> build
-#   -> prisma migrate deploy -> migration drift check
+#   -> test (unit + e2e) -> prisma migrate deploy -> migration drift check
 #
 # The same checks run locally: `task ci` (README, "CI").
 
@@ -21,7 +21,7 @@ concurrency:
 
 jobs:
   ci:
-    name: Lint, typecheck, build, migration check
+    name: Lint, typecheck, build, test, migration check
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -37,6 +37,12 @@ jobs:
           MYSQL_PASSWORD: gameshelf
         ports:
           - 3306:3306
+        # Mount the one-time bootstrap scripts so the fresh CI container
+        # creates gameshelf_shadow (migrate dev) and gameshelf_test (e2e)
+        # with the app user's grants, exactly like a fresh docker-compose
+        # data dir does in local dev.
+        volumes:
+          - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
         # Server-level charset per ADR-001 — mysqld arguments, so they go in
         # `command` (same pattern as docker-compose.yml), never in `options`
         # (those are docker-create flags).
@@ -81,6 +87,14 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # Two-tier API test suite: unit (mocked Prisma, no database) and e2e
+      # (real Nest app + supertest against the gameshelf_test database
+      # created by docker/mysql-init/02-test-database.sql).
+      - name: Test
+        env:
+          DATABASE_TEST_URL: mysql://gameshelf:gameshelf@127.0.0.1:3306/gameshelf_test?charset=utf8mb4
+        run: npm run test
 
       # Migration check against a real (throwaway) database:
       # 1. deploy the committed migrations, then
