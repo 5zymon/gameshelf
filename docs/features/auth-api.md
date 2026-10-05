@@ -102,7 +102,8 @@ to equalize response time and avoid a user-enumeration timing oracle.
 
 # Out of scope
 
-- Registration / first-run setup endpoint and rate limiting.
+- Registration and rate limiting; the one-time bootstrap endpoint is
+  documented in [First-run Setup](/first-run-setup.md).
 - CSRF tokens (relying on `SameSite=Lax`) and account lockout.
-- CORS credentials configuration (web integration, ticket 2.3).
+- CORS credentials configuration (web integration, ticket 2.5).
 - Web client wiring and multi-level roles/permissions.

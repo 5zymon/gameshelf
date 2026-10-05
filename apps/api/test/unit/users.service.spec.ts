@@ -1,6 +1,10 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { PasswordService } from '../../src/auth/password.service';
-import { UsersService } from '../../src/auth/users.service';
+import {
+  MAX_SETUP_ATTEMPTS,
+  SETUP_COMPLETED_MESSAGE,
+  UsersService,
+} from '../../src/auth/users.service';
 import { Prisma } from '../../src/generated/prisma/client';
 import type { PrismaService } from '../../src/prisma/prisma.service';
 
@@ -8,7 +12,9 @@ interface UsersPrismaMock {
   user: {
     create: jest.Mock;
     findUnique: jest.Mock;
+    count: jest.Mock;
   };
+  $executeRaw: jest.Mock;
 }
 
 interface PasswordsMock {
@@ -21,7 +27,8 @@ function createService(): {
   passwords: PasswordsMock;
 } {
   const prisma: UsersPrismaMock = {
-    user: { create: jest.fn(), findUnique: jest.fn() },
+    user: { create: jest.fn(), findUnique: jest.fn(), count: jest.fn() },
+    $executeRaw: jest.fn(),
   };
   const passwords: PasswordsMock = { hash: jest.fn() };
   return {
@@ -155,6 +162,163 @@ describe('UsersService (unit)', () => {
       });
       expect(result).toEqual(row);
       expect(result).not.toHaveProperty('passwordHash');
+    });
+  });
+
+  describe('createFirstUser', () => {
+    it('inserts atomically when the users table is empty', async () => {
+      const createdAt = new Date('2026-10-05T12:00:00.000Z');
+      passwords.hash.mockResolvedValue('ARGON2HASH');
+      prisma.user.count.mockResolvedValue(0);
+      prisma.$executeRaw.mockResolvedValue(1);
+      prisma.user.findUnique.mockResolvedValue({
+        id: 1,
+        email: 'ash@example.com',
+        createdAt,
+      });
+
+      const result = await service.createFirstUser({
+        email: '  Ash@Example.COM ',
+        password: 'pikachu123',
+      });
+
+      expect(passwords.hash).toHaveBeenCalledWith('pikachu123');
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+      const [strings, ...values] = prisma.$executeRaw.mock.calls[0] as [
+        string[],
+        ...unknown[],
+      ];
+      const sql = strings.join('?');
+      expect(sql).toContain('INSERT INTO users (email, password_hash)');
+      expect(sql).toContain('WHERE NOT EXISTS (SELECT 1 FROM users)');
+      expect(values).toEqual(['ash@example.com', 'ARGON2HASH']);
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { email: 'ash@example.com' },
+        select: { id: true, email: true, createdAt: true },
+      });
+      expect(result).toEqual({ id: 1, email: 'ash@example.com', createdAt });
+      expect(result).not.toHaveProperty('passwordHash');
+    });
+
+    it('rejects with 409 without hashing or inserting when a user already exists', async () => {
+      prisma.user.count.mockResolvedValue(1);
+
+      await expect(
+        service.createFirstUser({
+          email: 'ash@example.com',
+          password: 'pikachu123',
+        }),
+      ).rejects.toThrow(new ConflictException(SETUP_COMPLETED_MESSAGE));
+      expect(passwords.hash).not.toHaveBeenCalled();
+      expect(prisma.$executeRaw).not.toHaveBeenCalled();
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('rejects with 409 when the atomic insert affects no rows', async () => {
+      passwords.hash.mockResolvedValue('ARGON2HASH');
+      prisma.user.count.mockResolvedValue(0);
+      prisma.$executeRaw.mockResolvedValue(0);
+
+      await expect(
+        service.createFirstUser({
+          email: 'ash@example.com',
+          password: 'pikachu123',
+        }),
+      ).rejects.toThrow(new ConflictException(SETUP_COMPLETED_MESSAGE));
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('retries after a transient insert failure and resolves the created user', async () => {
+      const createdAt = new Date('2026-10-05T12:00:00.000Z');
+      passwords.hash.mockResolvedValue('ARGON2HASH');
+      prisma.user.count.mockResolvedValue(0);
+      prisma.$executeRaw
+        .mockRejectedValueOnce(new Error('deadlock found'))
+        .mockResolvedValueOnce(1);
+      prisma.user.findUnique.mockResolvedValue({
+        id: 1,
+        email: 'ash@example.com',
+        createdAt,
+      });
+
+      const result = await service.createFirstUser({
+        email: 'ash@example.com',
+        password: 'pikachu123',
+      });
+
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(2);
+      expect(prisma.user.findUnique).toHaveBeenCalledWith({
+        where: { email: 'ash@example.com' },
+        select: { id: true, email: true, createdAt: true },
+      });
+      expect(result).toEqual({ id: 1, email: 'ash@example.com', createdAt });
+      expect(result).not.toHaveProperty('passwordHash');
+    });
+
+    it('retries and returns 409 when the retried insert affects no rows', async () => {
+      passwords.hash.mockResolvedValue('ARGON2HASH');
+      prisma.user.count.mockResolvedValue(0);
+      prisma.$executeRaw
+        .mockRejectedValueOnce(new Error('deadlock found'))
+        .mockResolvedValueOnce(0);
+
+      await expect(
+        service.createFirstUser({
+          email: 'ash@example.com',
+          password: 'pikachu123',
+        }),
+      ).rejects.toThrow(new ConflictException(SETUP_COMPLETED_MESSAGE));
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(2);
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('maps a contended insert failure to 409 without surfacing the raw error', async () => {
+      passwords.hash.mockResolvedValue('ARGON2HASH');
+      prisma.user.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+      prisma.$executeRaw.mockRejectedValue(new Error('deadlock found'));
+
+      let caught: unknown;
+      try {
+        await service.createFirstUser({
+          email: 'ash@example.com',
+          password: 'pikachu123',
+        });
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBeInstanceOf(ConflictException);
+      expect((caught as Error).message).toBe(SETUP_COMPLETED_MESSAGE);
+      expect((caught as Error).message).not.toContain('deadlock');
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('rethrows the original error after attempts are exhausted when no user exists', async () => {
+      passwords.hash.mockResolvedValue('ARGON2HASH');
+      prisma.user.count.mockResolvedValue(0);
+      prisma.$executeRaw.mockRejectedValue(new Error('connection lost'));
+
+      await expect(
+        service.createFirstUser({
+          email: 'ash@example.com',
+          password: 'pikachu123',
+        }),
+      ).rejects.toThrow('connection lost');
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(MAX_SETUP_ATTEMPTS);
+      expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('hasAnyUser', () => {
+    it('is false when the users table is empty', async () => {
+      prisma.user.count.mockResolvedValue(0);
+      await expect(service.hasAnyUser()).resolves.toBe(false);
+    });
+
+    it('is true when at least one user exists', async () => {
+      prisma.user.count.mockResolvedValue(3);
+      await expect(service.hasAnyUser()).resolves.toBe(true);
     });
   });
 });

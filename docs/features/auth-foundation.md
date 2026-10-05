@@ -34,6 +34,12 @@ row. A duplicate email (unique constraint `users.email`, Prisma `P2002`) maps
 to `409`. The returned `CreatedUser` carries `id`, `email`, and `createdAt`
 — **never** `passwordHash`.
 
+`UsersService.createFirstUser` shares the same `prepareUser()` normalization,
+validation, and hashing path and additionally inserts only while `users` is
+empty (atomic `INSERT … SELECT … WHERE NOT EXISTS`), backing the one-time
+bootstrap documented in [First-run Setup](/first-run-setup.md). `hasAnyUser()`
+reports whether any account exists.
+
 # Session model
 
 Sessions live in the `sessions` table:
@@ -92,7 +98,7 @@ internally (scheduled). `AppModule` imports `ScheduleModule.forRoot()` and
 | Service                 | Methods                                                                                                  |
 | ----------------------- | -------------------------------------------------------------------------------------------------------- |
 | `PasswordService`       | `hash(plain)`, `verify(hash, plain)`                                                                     |
-| `UsersService`          | `createUser({ email, password })`                                                                        |
+| `UsersService`          | `createUser({ email, password })`, `createFirstUser({ email, password })`, `hasAnyUser()`                |
 | `SessionsService`       | `create(userId, { userAgent?, now? })`, `validate(token, now?)`, `revoke(token)`, `cleanupExpired(now?)` |
 | `SessionCleanupService` | `cleanup()` (`@Interval(3600000)`)                                                                       |
 
