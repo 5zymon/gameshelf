@@ -53,21 +53,22 @@ npm run dev
 
 Other useful scripts (all run from the root):
 
-| Command                | Description                         |
-| ---------------------- | ----------------------------------- |
-| `npm run dev`          | Start API + web in watch mode       |
-| `npm run dev:api`      | Start only the NestJS API           |
-| `npm run dev:web`      | Start only the Next.js frontend     |
-| `npm run build`        | Build both workspaces               |
-| `npm run db:migrate`   | Local migration (Prisma, shadow DB) |
-| `npm run db:deploy`    | Apply committed migrations          |
-| `npm run db:generate`  | Regenerate the Prisma client        |
-| `npm run db:studio`    | Open Prisma Studio                  |
-| `npm run typecheck`    | Type-check both workspaces          |
-| `npm run lint`         | Lint both workspaces                |
-| `npm run lint:fix`     | Lint both workspaces and autofix    |
-| `npm run format`       | Format the whole repo with Prettier |
-| `npm run format:check` | Check formatting without writing    |
+| Command                    | Description                            |
+| -------------------------- | -------------------------------------- |
+| `npm run dev`              | Start API + web in watch mode          |
+| `npm run dev:api`          | Start only the NestJS API              |
+| `npm run dev:web`          | Start only the Next.js frontend        |
+| `npm run build`            | Build both workspaces                  |
+| `npm run db:migrate`       | Local migration (Prisma, shadow DB)    |
+| `npm run db:deploy`        | Apply committed migrations             |
+| `npm run db:migrate:check` | Fail if schema and deployed DB diverge |
+| `npm run db:generate`      | Regenerate the Prisma client           |
+| `npm run db:studio`        | Open Prisma Studio                     |
+| `npm run typecheck`        | Type-check both workspaces             |
+| `npm run lint`             | Lint both workspaces                   |
+| `npm run lint:fix`         | Lint both workspaces and autofix       |
+| `npm run format`           | Format the whole repo with Prettier    |
+| `npm run format:check`     | Check formatting without writing       |
 
 ### Code quality and git hooks
 
@@ -79,14 +80,53 @@ ESLint runs the typed `strictTypeChecked` and `stylisticTypeChecked` presets, wh
 
 A [`Taskfile.yml`](./Taskfile.yml) provides [Task](https://taskfile.dev/) shortcuts (install the `task` binary first):
 
-| Command       | Description                                          |
-| ------------- | ---------------------------------------------------- |
-| `task --list` | List all available tasks                             |
-| `task check`  | Run all quality gates: format check, lint, typecheck |
-| `task ci`     | `task check` plus a production build                 |
-| `task fix`    | Apply ESLint autofixes and Prettier formatting       |
+| Command       | Description                                                  |
+| ------------- | ------------------------------------------------------------ |
+| `task --list` | List all available tasks                                     |
+| `task check`  | Run all quality gates: format check, lint, typecheck         |
+| `task ci`     | `task check` plus a production build and the migration check |
+| `task fix`    | Apply ESLint autofixes and Prettier formatting               |
 
 There is no unit-test runner in the repo yet; once one is added, its script should be wired into `task check`/`task ci`.
+
+## CI (GitHub Actions)
+
+[`.github/workflows/ci.yml`](./.github/workflows/ci.yml) runs on **every push and every pull request** (all branches) on an `ubuntu-latest` runner. The single job is named `ci` and gates the run with:
+
+| Step                  | Command                    | What it does                                                        |
+| --------------------- | -------------------------- | ------------------------------------------------------------------- |
+| Install               | `npm ci`                   | Deterministic install with lockfile-based caching                   |
+| Prisma generate       | `npm run db:generate`      | Generate the client before any TypeScript check or build            |
+| Lint                  | `npm run lint`             | ESLint (typed, strict) on both workspaces                           |
+| Typecheck             | `npm run typecheck`        | `tsc --noEmit` on both workspaces                                   |
+| Build                 | `npm run build`            | Production build of both workspaces                                 |
+| Apply migrations      | `npm run db:deploy`        | `prisma migrate deploy` against a throwaway MySQL service container |
+| Migration drift check | `npm run db:migrate:check` | Fail if `schema.prisma` and the deployed database have diverged     |
+
+**Pinned versions.** Node is pinned to **24.21.0** (kept in sync with `.nvmrc` and `engines.node` in `package.json`); the MySQL service container is pinned to **8.4** per ADR-001, with throwaway credentials that are discarded with the run.
+
+**Failure semantics.** Any lint error or type error fails the run — type errors are never warnings-only (`tsc --noEmit` plus error-level typed ESLint rules). A schema change without a committed migration fails the drift check, because the deployed state no longer matches `schema.prisma`.
+
+### Running the same checks locally
+
+```bash
+docker compose up -d mysql   # only needed for the migration check
+task ci                       # generate, format check, lint, typecheck, build, migration check
+```
+
+On machines without [`task`](https://taskfile.dev/), the raw-npm equivalent:
+
+```bash
+npm run db:generate
+npm run format:check
+npm run lint
+npm run typecheck
+npm run build
+npm run db:deploy
+npm run db:migrate:check
+```
+
+If the local drift check fails because the dev database is stale, run `npm run db:migrate` first — the check compares the _live_ dev database against `schema.prisma`.
 
 ## Database (local dev)
 
