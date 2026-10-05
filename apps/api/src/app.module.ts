@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { GamesModule } from './games/games.module';
+import { PrismaModule } from './prisma/prisma.module';
 
 @Module({
   imports: [
@@ -11,6 +13,8 @@ import { AppService } from './app.service';
       // read the same file the web app does.
       envFilePath: ['../../.env', '.env'],
     }),
+    PrismaModule,
+    GamesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

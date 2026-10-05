@@ -1,0 +1,110 @@
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+/** Platform projection used in every game response (D4). */
+export class GamePlatformModel {
+  @ApiProperty({ example: 1 })
+  id!: number;
+
+  @ApiProperty({ example: 'PlayStation 5' })
+  name!: string;
+
+  @ApiProperty({ example: 'ps5' })
+  slug!: string;
+}
+
+/** Lighter list projection (D4). */
+export class GameListItemModel {
+  @ApiProperty({ example: 1 })
+  id!: number;
+
+  @ApiProperty({ example: 'Hollow Knight' })
+  title!: string;
+
+  @ApiPropertyOptional({ nullable: true, example: 'GOTY Edition' })
+  edition!: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 'https://example.com/hk.jpg',
+  })
+  coverUrl!: string | null;
+
+  @ApiProperty({ type: GamePlatformModel })
+  platform!: GamePlatformModel;
+}
+
+/** Full record (D4): all Game fields incl. rawMetadata + platform. */
+export class GameDetailModel {
+  @ApiProperty({ example: 1 })
+  id!: number;
+
+  @ApiProperty({ example: 'Hollow Knight' })
+  title!: string;
+
+  @ApiProperty({ example: 1 })
+  platformId!: number;
+
+  @ApiPropertyOptional({ nullable: true, example: 'GOTY Edition' })
+  edition!: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 2017 })
+  releaseYear!: number | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'Team Cherry' })
+  publisher!: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 'Metroidvania' })
+  genre!: string | null;
+
+  @ApiPropertyOptional({ nullable: true, example: 1 })
+  playerCount!: number | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 'https://example.com/hk.jpg',
+  })
+  coverUrl!: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Raw IGDB/MobyGames payload (archival)',
+  })
+  rawMetadata!: string | null;
+
+  @ApiPropertyOptional({ nullable: true, format: 'date-time' })
+  enrichedAt!: Date | null;
+
+  @ApiProperty({ enum: ['IGDB', 'MobyGames', 'MANUAL'], example: 'MANUAL' })
+  source!: string;
+
+  @ApiProperty({ format: 'date-time' })
+  createdAt!: Date;
+
+  @ApiProperty({ format: 'date-time' })
+  updatedAt!: Date;
+
+  @ApiProperty({ type: GamePlatformModel })
+  platform!: GamePlatformModel;
+}
+
+export class ListGamesMetaModel {
+  @ApiProperty({ example: 1 })
+  page!: number;
+
+  @ApiProperty({ example: 20 })
+  limit!: number;
+
+  @ApiProperty({ example: 42 })
+  total!: number;
+
+  @ApiProperty({ example: 3 })
+  totalPages!: number;
+}
+
+export class ListGamesResponseModel {
+  @ApiProperty({ type: [GameListItemModel] })
+  items!: GameListItemModel[];
+
+  @ApiProperty({ type: ListGamesMetaModel })
+  meta!: ListGamesMetaModel;
+}
