@@ -37,12 +37,6 @@ jobs:
           MYSQL_PASSWORD: gameshelf
         ports:
           - 3306:3306
-        # Mount the one-time bootstrap scripts so the fresh CI container
-        # creates gameshelf_shadow (migrate dev) and gameshelf_test (e2e)
-        # with the app user's grants, exactly like a fresh docker-compose
-        # data dir does in local dev.
-        volumes:
-          - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
         # Server-level charset per ADR-001 — mysqld arguments, so they go in
         # `command` (same pattern as docker-compose.yml), never in `options`
         # (those are docker-create flags).
@@ -61,6 +55,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+
+      # GitHub Actions starts service containers before checkout, so the
+      # docker/mysql-init bind mount would be empty when MySQL initializes, and
+      # the root-owned host directory it creates breaks actions/checkout's clean.
+      # Apply the same committed bootstrap script(s) after checkout instead.
+      - name: Create test database
+        run: |
+          set -euo pipefail
+          cid="$(docker ps --filter 'publish=3306' --format '{{.ID}}' | head -n1)"
+          if [ -z "$cid" ]; then
+            echo "MySQL service container not found on port 3306" >&2
+            exit 1
+          fi
+          docker exec -i "$cid" mysql -uroot -proot < docker/mysql-init/02-test-database.sql
 
       - name: Set up Node
         # Explicitly pinned. Keep in sync with .nvmrc and engines.node
