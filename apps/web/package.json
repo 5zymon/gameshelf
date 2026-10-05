@@ -1,0 +1,27 @@
+{
+  "name": "@gameshelf/web",
+  "version": "0.1.0",
+  "private": true,
+  "description": "GameShelf web frontend (Next.js).",
+  "scripts": {
+    "dev": "next dev --port 3000",
+    "build": "next build",
+    "start": "next start --port 3000",
+    "lint": "eslint \"src/**/*.{ts,tsx}\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@next/env": "^15.5.27",
+    "next": "^15.2.4",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "eslint-config-next": "15.5.27",
+    "typescript": "^5.7.3"
+  }
+}
