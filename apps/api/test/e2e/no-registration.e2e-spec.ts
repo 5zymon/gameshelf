@@ -18,6 +18,9 @@ const FORBIDDEN_SIGNUP_PATHS = [
   '/users',
 ] as const;
 
+/** A signup handler must not be mounted under any HTTP method. */
+const FORBIDDEN_METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
+
 describe('No self-registration (e2e)', () => {
   let test: TestApp;
 
@@ -37,17 +40,19 @@ describe('No self-registration (e2e)', () => {
     return test.app.getHttpServer() as Server;
   }
 
-  it('returns 404 for signup paths and creates no user', async () => {
+  it('returns 404 for signup paths on every HTTP method and creates no user', async () => {
     for (const path of FORBIDDEN_SIGNUP_PATHS) {
-      const res = await request(server()).post(path).send({
-        email: 'intruder@example.com',
-        password: 'correct horse battery staple',
-      });
+      for (const method of FORBIDDEN_METHODS) {
+        const res = await request(server())[method](path).send({
+          email: 'intruder@example.com',
+          password: 'correct horse battery staple',
+        });
 
-      // 404 (not 401) proves no handler is mounted: the global SessionGuard is
-      // bound per matched route, so an unknown path is rejected by the router
-      // before any guard runs.
-      expect(res.status).toBe(404);
+        // 404 (not 401) proves no handler is mounted for this method: the
+        // global SessionGuard only runs for a matched route, so an unknown
+        // path is rejected by the router before any guard runs.
+        expect(res.status).toBe(404);
+      }
     }
 
     await expect(test.prisma.user.count()).resolves.toBe(0);
