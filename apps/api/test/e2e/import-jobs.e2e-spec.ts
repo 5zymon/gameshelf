@@ -17,12 +17,33 @@ interface ImportJobBody {
   id: number;
   status: string;
   declaredCount: number | null;
+  photoRef: string | null;
+  batchId: string | null;
+  bullJobId: string | null;
   recognizedCount: number;
   importedCount: number;
   unrecognizedCount: number;
+  pendingCount: number;
+  needsAttention: boolean;
+  declaredCountMismatch: boolean;
+  queueState: string | null;
   errorMessage: string | null;
   createdAt: string;
   completedAt: string | null;
+}
+
+interface ImportBatchProgressBody {
+  batchId: string;
+  total: number;
+  queued: number;
+  processing: number;
+  done: number;
+  needsAttention: number;
+  failed: number;
+  dismissed: number;
+  completedCount: number;
+  pendingCount: number;
+  allCompleted: boolean;
 }
 
 interface ImportJobDetailBody extends ImportJobBody {
@@ -467,6 +488,209 @@ describe('ImportJobs API (e2e)', () => {
         .send(body);
 
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe('computed progress fields (ticket 3.6)', () => {
+    it('detail: a declared mismatch surfaces needsAttention + declaredCountMismatch', async () => {
+      const job = await importJobs.createJob({ declaredCount: 5 });
+      await importJobs.markCompleted(job.id, {
+        recognizedCount: 3,
+        importedCount: 3,
+        unrecognizedCount: 0,
+      });
+
+      const res = await test.request.get(`/import-jobs/${String(job.id)}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        needsAttention: true,
+        declaredCountMismatch: true,
+        pendingCount: 0,
+        batchId: null,
+        queueState: null,
+      });
+    });
+
+    it('detail: a clean done job has both flags false', async () => {
+      const job = await importJobs.createJob({ declaredCount: 2 });
+      await importJobs.markCompleted(job.id, {
+        recognizedCount: 2,
+        importedCount: 2,
+        unrecognizedCount: 0,
+      });
+
+      const res = await test.request.get(`/import-jobs/${String(job.id)}`);
+
+      expect(res.body).toMatchObject({
+        status: 'done',
+        needsAttention: false,
+        declaredCountMismatch: false,
+        pendingCount: 0,
+      });
+    });
+
+    it('detail: a failed job exposes its reason and unresolved count', async () => {
+      const job = await importJobs.createJob({ declaredCount: 12 });
+      await importJobs.markFailed(job.id, 'LLM request timed out', {
+        recognizedCount: 12,
+        importedCount: 10,
+        unrecognizedCount: 0,
+      });
+
+      const res = await test.request.get(`/import-jobs/${String(job.id)}`);
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        status: 'failed',
+        errorMessage: 'LLM request timed out',
+        pendingCount: 2,
+        needsAttention: false,
+      });
+    });
+  });
+
+  describe('GET /import-jobs?batchId=', () => {
+    it('returns only jobs from the requested batch', async () => {
+      const a1 = await importJobs.createJob({ batchId: 'batch-a' });
+      const a2 = await importJobs.createJob({ batchId: 'batch-a' });
+      await importJobs.createJob({ batchId: 'batch-b' });
+
+      const res = await test.request
+        .get('/import-jobs')
+        .query({ batchId: 'batch-a' });
+
+      expect(res.status).toBe(200);
+      const body = res.body as ImportJobsListBody;
+      expect(body.items.map((j) => j.id).sort((x, y) => x - y)).toEqual(
+        [a1.id, a2.id].sort((x, y) => x - y),
+      );
+      expect(body.meta.total).toBe(2);
+    });
+
+    it('rejects a batchId longer than 64 chars with 400', async () => {
+      const res = await test.request
+        .get('/import-jobs')
+        .query({ batchId: 'x'.repeat(65) });
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('GET /import-jobs/batches/:batchId', () => {
+    it('aggregates the batch into an X-of-Y model', async () => {
+      await importJobs.createJob({ batchId: 'batch-x' });
+      const processing = await importJobs.createJob({ batchId: 'batch-x' });
+      await importJobs.markProcessing(processing.id);
+      const done = await importJobs.createJob({ batchId: 'batch-x' });
+      await importJobs.markCompleted(done.id, {
+        recognizedCount: 1,
+        importedCount: 1,
+        unrecognizedCount: 0,
+      });
+      const attention = await importJobs.createJob({ batchId: 'batch-x' });
+      await importJobs.markCompleted(attention.id, {
+        recognizedCount: 0,
+        importedCount: 0,
+        unrecognizedCount: 0,
+      });
+      const failed = await importJobs.createJob({ batchId: 'batch-x' });
+      await importJobs.markFailed(failed.id, 'boom');
+      const dismissed = await importJobs.createJob({ batchId: 'batch-x' });
+      await importJobs.markCompleted(dismissed.id, {
+        recognizedCount: 0,
+        importedCount: 0,
+        unrecognizedCount: 0,
+      });
+      await importJobs.dismissJob(dismissed.id);
+
+      const res = await test.request.get('/import-jobs/batches/batch-x');
+
+      expect(res.status).toBe(200);
+      const body = res.body as ImportBatchProgressBody;
+      expect(body).toEqual({
+        batchId: 'batch-x',
+        total: 6,
+        queued: 1,
+        processing: 1,
+        done: 1,
+        needsAttention: 1,
+        failed: 1,
+        dismissed: 1,
+        completedCount: 4,
+        pendingCount: 2,
+        allCompleted: false,
+      });
+    });
+
+    it('returns 404 for an unknown batch', async () => {
+      const res = await test.request.get('/import-jobs/batches/nope');
+
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 400 for a batchId longer than 64 chars', async () => {
+      const res = await test.request.get(
+        `/import-jobs/batches/${'x'.repeat(65)}`,
+      );
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('POST /import-jobs/:id/retry (validation only)', () => {
+    it('returns 404 for an unknown job', async () => {
+      const res = await test.request.post('/import-jobs/999999/retry');
+
+      expect(res.status).toBe(404);
+    });
+
+    it.each(['queued', 'processing', 'done', 'dismissed'] as const)(
+      'returns 409 for a %s job without enqueueing',
+      async (status) => {
+        const job = await importJobs.createJob({ photoRef: 'p.png' });
+        if (status === 'processing') {
+          await importJobs.markProcessing(job.id);
+        } else if (status === 'done') {
+          await importJobs.markCompleted(job.id, {
+            recognizedCount: 1,
+            importedCount: 1,
+            unrecognizedCount: 0,
+          });
+        } else if (status === 'dismissed') {
+          await importJobs.markCompleted(job.id, {
+            recognizedCount: 0,
+            importedCount: 0,
+            unrecognizedCount: 0,
+          });
+          await importJobs.dismissJob(job.id);
+        }
+
+        const res = await test.request.post(
+          `/import-jobs/${String(job.id)}/retry`,
+        );
+
+        expect(res.status).toBe(409);
+        const row = await test.prisma.importJob.findUniqueOrThrow({
+          where: { id: job.id },
+        });
+        expect(row.status).toBe(status);
+      },
+    );
+
+    it('returns 409 for a failed job with no stored photo', async () => {
+      const job = await importJobs.createJob({});
+      await importJobs.markFailed(job.id, 'boom');
+
+      const res = await test.request.post(
+        `/import-jobs/${String(job.id)}/retry`,
+      );
+
+      expect(res.status).toBe(409);
+      const row = await test.prisma.importJob.findUniqueOrThrow({
+        where: { id: job.id },
+      });
+      expect(row.status).toBe('failed');
     });
   });
 

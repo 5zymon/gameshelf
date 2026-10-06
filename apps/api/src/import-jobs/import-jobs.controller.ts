@@ -3,11 +3,15 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   Patch,
+  Post,
   Query,
 } from '@nestjs/common';
 import {
+  ApiAcceptedResponse,
   ApiBadRequestResponse,
   ApiConflictResponse,
   ApiNotFoundResponse,
@@ -18,8 +22,10 @@ import {
 } from '@nestjs/swagger';
 import { DismissImportJobDto } from './dto/dismiss-import-job.dto';
 import { DismissUnrecognizedItemDto } from './dto/dismiss-unrecognized-item.dto';
+import { ImportBatchIdParamDto } from './dto/import-batch-id-param.dto';
 import { ImportJobIdParamDto } from './dto/import-job-id-param.dto';
 import {
+  ImportBatchProgressModel,
   ImportJobDetailModel,
   ListImportJobsResponseModel,
   UnrecognizedItemModel,
@@ -48,6 +54,19 @@ export class ImportJobsController {
     return this.importJobsService.list(query);
   }
 
+  @Get('batches/:batchId')
+  @ApiOperation({
+    summary: 'Aggregate progress for one upload batch (X of Y photos)',
+  })
+  @ApiParam({ name: 'batchId', type: String })
+  @ApiOkResponse({ type: ImportBatchProgressModel })
+  @ApiNotFoundResponse({ description: 'Import batch not found' })
+  getBatch(
+    @Param() params: ImportBatchIdParamDto,
+  ): Promise<ImportBatchProgressModel> {
+    return this.importJobsService.getBatchProgress(params.batchId);
+  }
+
   @Get(':id')
   @ApiOperation({
     summary: 'Get a single import run with its unrecognized items (full trace)',
@@ -59,6 +78,21 @@ export class ImportJobsController {
   @ApiNotFoundResponse({ description: 'Import job not found' })
   findOne(@Param() params: ImportJobIdParamDto): Promise<ImportJobDetailModel> {
     return this.importJobsService.findOne(params.id);
+  }
+
+  @Post(':id/retry')
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({
+    summary: 'Retry a failed import: re-runs only unresolved titles',
+  })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiAcceptedResponse({ type: ImportJobDetailModel })
+  @ApiNotFoundResponse({ description: 'Import job not found' })
+  @ApiConflictResponse({
+    description: 'Only failed jobs with a stored photo can be retried',
+  })
+  retry(@Param() params: ImportJobIdParamDto): Promise<ImportJobDetailModel> {
+    return this.importJobsService.retryJob(params.id);
   }
 
   @Get(':id/unrecognized')

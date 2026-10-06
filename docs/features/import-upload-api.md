@@ -1,10 +1,10 @@
 ---
 type: Feature
 title: Import Photo Upload API
-description: POST /import/upload — multi-photo multipart upload, optional per-photo declared counts, ephemeral storage, and background queuing.
+description: POST /import/upload — multi-photo multipart upload, optional per-photo declared counts, ephemeral storage, background queuing, and a batch id for aggregate progress.
 tags: [api, import, upload]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T00:00:00Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T13:30:00Z }
 ---
 
 # Overview
@@ -51,6 +51,7 @@ cookie is required; an unauthenticated request is `401`).
 
 ```json
 {
+  "batchId": "c1f0a4e2-...-9b3d",
   "jobs": [
     { "id": 42, "jobId": "1", "status": "queued", "declaredCount": 12 },
     { "id": 43, "jobId": "2", "status": "queued", "declaredCount": null }
@@ -60,7 +61,10 @@ cookie is required; an unauthenticated request is `401`).
 
 `id` is the persisted `import_jobs` row (poll it via
 `GET /import-jobs/:id`); `jobId` is the BullMQ job id; `status` is always
-`queued` on this path.
+`queued` on this path. `batchId` groups every photo from this request: poll
+`GET /import-jobs/batches/:batchId` for aggregate progress (X of Y) or filter
+the list with `GET /import-jobs?batchId=` — see
+[Import Jobs API](/import-jobs-api.md).
 
 # What the request does, in order
 
@@ -75,13 +79,15 @@ cookie is required; an unauthenticated request is `401`).
    (`400` on violation).
 3. **Ephemeral storage.** Each photo is written to `IMPORT_PHOTOS_DIR` under a
    random UUID filename (extension derived from the mimetype).
-4. **Job row.** One `import_jobs` row per photo with `status = 'queued'` and
-   `photo_ref` set to the stored filename.
+4. **Job row.** One `import_jobs` row per photo with `status = 'queued'`,
+   `photo_ref` set to the stored filename, and the request's one `batch_id`.
 5. **Enqueue.** One BullMQ job per photo on the `photo-import` queue, named
    `photo`, with payload `{ photoRef, declaredCount, importJobId }` and
    `attempts: 3` + exponential backoff (the worker retries transient failures).
-   See [Photo Import Pipeline](/photo-import-pipeline.md).
-6. **Return** the created ids immediately (`202`).
+   See [Photo Import Pipeline](/photo-import-pipeline.md). The BullMQ id is
+   stored on the row (`bull_job_id`) best-effort, so the read API can report
+   live queue state.
+6. **Return** the batch id and created ids immediately (`202`).
 
 # Ephemeral storage
 
@@ -118,8 +124,9 @@ photos already enqueued earlier in the same request stay queued.
   queues.
 - **Photo deletion sweep** (ticket 3.8) — the pipeline deletes a photo after its
   job completes; the sweep cleans up orphans.
-- **Retry** (ticket 3.6) and **item resolution** — see
-  [Import Jobs API](/import-jobs-api.md).
+- **Retry** (`POST /import-jobs/:id/retry`) and **item resolution** — see
+  [Import Jobs API](/import-jobs-api.md). Retry is implemented; item
+  resolution is not.
 - **Thumbnails / a photo gallery** — deliberately not built; storage is
   ephemeral only.
 - **HEIC and other formats** — only JPEG/PNG/WebP are accepted.

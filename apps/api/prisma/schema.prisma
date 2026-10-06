@@ -125,11 +125,18 @@ model ImportJob {
   // rows (ticket 3.5). Non-null means the single vision call already ran, so a
   // BullMQ retry never repeats it (acceptance criterion).
   visionCompletedAt DateTime? @map("vision_completed_at")
+  // Groups every photo from one upload request (ticket 3.6), so aggregate
+  // batch progress (X of Y) is durable and survives a restart.
+  batchId         String?   @map("batch_id") @db.VarChar(64)
+  // The BullMQ job currently backing this run (ticket 3.6); refreshed on a
+  // user retry. Supplementary to the durable status, never authoritative.
+  bullJobId       String?   @map("bull_job_id") @db.VarChar(64)
 
   unrecognizedItems UnrecognizedItem[]
   recognizedItems   RecognizedItem[]
 
   @@index([status])
+  @@index([batchId])
   @@map("import_jobs")
 }
 

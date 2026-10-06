@@ -25,3 +25,10 @@ export const IGDB_REQUEST_INTERVAL_MS = 300;
 
 /** Per-IGDB-request timeout. */
 export const IGDB_REQUEST_TIMEOUT_MS = 5000;
+
+/**
+ * How long the read API waits for BullMQ state (ticket 3.6) before falling
+ * back to the durable MySQL status. Redis being slow/down must never hang a
+ * read request.
+ */
+export const IMPORT_QUEUE_STATE_TIMEOUT_MS = 2_000;

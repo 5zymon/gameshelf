@@ -54,6 +54,46 @@ export class ImportJobModel {
 
   @ApiPropertyOptional({ nullable: true, format: 'date-time' })
   completedAt!: Date | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Upload batch this run belongs to (groups one upload request)',
+    example: 'c1f0a4e2-...-9b3d',
+  })
+  batchId!: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'BullMQ job id backing this run (refreshed on retry)',
+    example: '17',
+  })
+  bullJobId!: string | null;
+
+  @ApiProperty({
+    description: 'Unresolved titles (recognized, neither imported nor flagged)',
+    example: 1,
+  })
+  pendingCount!: number;
+
+  @ApiProperty({
+    description: 'Completed with at least one review trigger',
+    example: true,
+  })
+  needsAttention!: boolean;
+
+  @ApiProperty({
+    description: 'declaredCount differs from recognizedCount (ticket 4.8)',
+    example: false,
+  })
+  declaredCountMismatch!: boolean;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'Raw BullMQ state; null when terminal/unknown/Redis unavailable',
+    example: 'active',
+  })
+  queueState!: string | null;
 }
 
 /** One row of `unrecognized_items` — a flagged item with its raw title. */
@@ -134,6 +174,46 @@ export class ImportJobDetailModel {
   @ApiPropertyOptional({ nullable: true, format: 'date-time' })
   completedAt!: Date | null;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Upload batch this run belongs to (groups one upload request)',
+    example: 'c1f0a4e2-...-9b3d',
+  })
+  batchId!: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'BullMQ job id backing this run (refreshed on retry)',
+    example: '17',
+  })
+  bullJobId!: string | null;
+
+  @ApiProperty({
+    description: 'Unresolved titles (recognized, neither imported nor flagged)',
+    example: 1,
+  })
+  pendingCount!: number;
+
+  @ApiProperty({
+    description: 'Completed with at least one review trigger',
+    example: true,
+  })
+  needsAttention!: boolean;
+
+  @ApiProperty({
+    description: 'declaredCount differs from recognizedCount (ticket 4.8)',
+    example: false,
+  })
+  declaredCountMismatch!: boolean;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'Raw BullMQ state; null when terminal/unknown/Redis unavailable',
+    example: 'active',
+  })
+  queueState!: string | null;
+
   @ApiProperty({ type: [UnrecognizedItemModel] })
   unrecognizedItems!: UnrecognizedItemModel[];
 }
@@ -158,4 +238,52 @@ export class ListImportJobsResponseModel {
 
   @ApiProperty({ type: ListImportJobsMetaModel })
   meta!: ListImportJobsMetaModel;
+}
+
+/**
+ * Aggregate progress for one upload batch (ticket 3.6): the X-of-Y view over
+ * every photo in the request, derived from the durable job statuses.
+ */
+export class ImportBatchProgressModel {
+  @ApiProperty({ example: 'c1f0a4e2-...-9b3d' })
+  batchId!: string;
+
+  @ApiProperty({ example: 5, description: 'Photos in the batch' })
+  total!: number;
+
+  @ApiProperty({ example: 1 })
+  queued!: number;
+
+  @ApiProperty({ example: 1 })
+  processing!: number;
+
+  @ApiProperty({ example: 2 })
+  done!: number;
+
+  @ApiProperty({ example: 1 })
+  needsAttention!: number;
+
+  @ApiProperty({ example: 0 })
+  failed!: number;
+
+  @ApiProperty({ example: 0 })
+  dismissed!: number;
+
+  @ApiProperty({
+    example: 3,
+    description: 'Photos that reached a terminal status',
+  })
+  completedCount!: number;
+
+  @ApiProperty({
+    example: 2,
+    description: 'Photos still queued or processing (X of Y: Y - X)',
+  })
+  pendingCount!: number;
+
+  @ApiProperty({
+    example: false,
+    description: 'Every photo reached a terminal status',
+  })
+  allCompleted!: boolean;
 }
