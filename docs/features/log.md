@@ -2,6 +2,7 @@
 
 ## 2026-10-06
 
+- **Updated**: [Web Auth UI](/web-auth-ui.md) — ticket 2.6: authenticated navigation shell (catalog/platforms/import/settings), optimistic `middleware.ts` cookie check, request-cached `requireUser()` guard in the shell and every protected route, and the session-expiry-on-navigation behavior.
 - **Added**: [Web Auth UI](/web-auth-ui.md) — the Next.js (`apps/web`) login/setup wiring for ticket 2.5: server-side route protection (`/setup` ↔ `/login` setup-state redirects, `(app)` layout session guard), the same-origin `/api` rewrite that keeps the `gameshelf_session` httpOnly cookie on the web origin, SSR cookie forwarding in `lib/api.ts`, the cookie-only/no-token guarantee, status-to-message error handling (notably `400` → input-validation message vs `401` non-leaking credentials vs generic network fallback), and a six-criterion manual acceptance script with the proxy smoke commands and expected statuses.
 
 ## 2026-10-05
