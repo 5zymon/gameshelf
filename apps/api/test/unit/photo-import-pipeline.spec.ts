@@ -52,7 +52,7 @@ interface Harness {
   };
   storage: { read: jest.Mock; delete: jest.Mock };
   vision: { recognize: jest.Mock };
-  resolver: { resolve: jest.Mock };
+  resolver: { resolve: jest.Mock; resolveBatch: jest.Mock };
 }
 
 function makeJob(
@@ -213,6 +213,7 @@ function createHarness(): Harness {
     resolve: jest.fn((): Promise<CatalogResolution> =>
       Promise.resolve({ kind: 'unrecognized', reason: 'none' }),
     ),
+    resolveBatch: jest.fn(),
   };
 
   const pipeline = new PhotoImportPipelineService(

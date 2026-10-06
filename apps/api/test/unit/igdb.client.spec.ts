@@ -23,7 +23,13 @@ import {
 
 const TOKEN_URL = IGDB_TOKEN_URL_DEFAULT;
 const GAMES_URL = 'https://api.igdb.com/v4/games';
+const MULTIQUERY_URL = 'https://api.igdb.com/v4/multiquery';
 const PLATFORMS_URL = 'https://api.igdb.com/v4/platforms';
+
+/** Number of `query games "gN"` sub-queries in a multiquery request body. */
+function countSubQueries(body: string): number {
+  return (body.match(/query games "/g) ?? []).length;
+}
 
 function headers(map: Record<string, string>): {
   get(name: string): string | null;
@@ -113,6 +119,26 @@ function clientWith(
   return { client: new IgdbClient(http, config(), permissiveLimiter()), http };
 }
 
+/** Routes a fake non-token handler by request URL; unknown URLs get an empty 200. */
+function byUrl(
+  routes: Record<
+    string,
+    (request: IgdbHttpRequest) => Promise<IgdbHttpResponse>
+  >,
+): (request: IgdbHttpRequest) => Promise<IgdbHttpResponse> {
+  return (request) => {
+    const route = routes[request.url];
+    return route ? route(request) : Promise.resolve(httpResponse(200, []));
+  };
+}
+
+/** The `where id = (…)` id list from a hydration request body. */
+function hydrationIds(body: string): number[] {
+  const ids = /where id = \(([^)]*)\)/.exec(body)?.[1];
+  if (ids === undefined || ids === '') return [];
+  return ids.split(',').map((raw) => Number(raw));
+}
+
 describe('escapeApicalypse (unit)', () => {
   it('escapes a double quote used in a title', () => {
     expect(escapeApicalypse('a"b')).toBe('a\\"b');
@@ -130,6 +156,17 @@ describe('escapeApicalypse (unit)', () => {
     expect(escapeApicalypse('Halo: Combat Evolved')).toBe(
       'Halo: Combat Evolved',
     );
+  });
+
+  it('strips newline and carriage-return control characters', () => {
+    expect(escapeApicalypse('a\nb\rc')).toBe('a b c');
+  });
+
+  it('strips a NUL control character and leaves no C0/C1 controls', () => {
+    const escaped = escapeApicalypse('Halo\u00002');
+    expect(escaped).toBe('Halo 2');
+    // eslint-disable-next-line no-control-regex -- asserts no C0/DEL controls remain
+    expect(escaped).toMatch(/^[^\u0000-\u001F\u007F]*$/u);
   });
 });
 
@@ -202,6 +239,25 @@ describe('IgdbClient (unit)', () => {
     expect(gamesRequest?.body).toContain(
       'search "Halo\\"; fields name; limit 1; //";',
     );
+  });
+
+  it('requests exactly the catalog fields (no wildcard, no alternative_names)', async () => {
+    const { client, http } = clientWith(() =>
+      Promise.resolve(httpResponse(200, [])),
+    );
+
+    await client.searchGames('Halo');
+
+    const gamesRequest = http.requests.find(
+      (request) => request.url === GAMES_URL,
+    );
+    expect(gamesRequest?.body).toBe(
+      'search "Halo"; fields name,first_release_date,cover.url,' +
+        'involved_companies.company.name,genres.name,platforms.id,' +
+        'platforms.name,platforms.abbreviation,summary,version_parent; limit 10;',
+    );
+    expect(gamesRequest?.body).not.toContain('fields *');
+    expect(gamesRequest?.body).not.toContain('alternative_names');
   });
 
   it('caches the OAuth token across calls until it expires', async () => {
@@ -477,6 +533,553 @@ describe('IgdbClient (unit)', () => {
     expect(health.status).toBe('error');
     expect(health.token).toBe('error');
     expect(health.message).toContain('IGDB_CLIENT_ID');
+  });
+});
+
+describe('IgdbClient.multiqueryGames (unit)', () => {
+  let delays: number[] = [];
+
+  beforeEach(() => {
+    delays = [];
+    jest.spyOn(globalThis, 'setTimeout').mockImplementation(((
+      callback: (...args: unknown[]) => void,
+      ms?: number,
+    ) => {
+      delays.push(ms ?? 0);
+      callback();
+      return 0 as unknown as NodeJS.Timeout;
+    }) as typeof setTimeout);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('sends no request and returns [] for zero titles', async () => {
+    const { client, http } = clientWith(() =>
+      Promise.resolve(httpResponse(200, [])),
+    );
+
+    await expect(client.multiqueryGames([])).resolves.toEqual([]);
+    expect(http.requests).toHaveLength(0);
+  });
+
+  it('packs 2 titles into one multiquery request with ids-only fields', async () => {
+    const { client, http } = clientWith(() =>
+      Promise.resolve(httpResponse(200, [])),
+    );
+
+    await client.multiqueryGames(['Halo', 'Doom']);
+
+    const requests = http.requests.filter((r) => r.url === MULTIQUERY_URL);
+    expect(requests).toHaveLength(1);
+    expect(countSubQueries(requests[0]?.body ?? '')).toBe(2);
+    expect(requests[0]?.body).toContain('query games "g0" {');
+    expect(requests[0]?.body).toContain('query games "g1" {');
+    expect(requests[0]?.body).toContain('search "Halo"');
+    expect(requests[0]?.body).toContain('search "Doom"');
+    expect(requests[0]?.body).toContain('fields id;');
+    expect(http.requests.some((r) => r.url === GAMES_URL)).toBe(false);
+  });
+
+  it('packs 10 titles into one multiquery request', async () => {
+    const { client, http } = clientWith(() =>
+      Promise.resolve(httpResponse(200, [])),
+    );
+
+    await client.multiqueryGames(
+      Array.from({ length: 10 }, (_, i) => `T${String(i)}`),
+    );
+
+    const requests = http.requests.filter((r) => r.url === MULTIQUERY_URL);
+    expect(requests).toHaveLength(1);
+    expect(countSubQueries(requests[0]?.body ?? '')).toBe(10);
+    for (let i = 0; i < 10; i += 1) {
+      expect(requests[0]?.body).toContain(`query games "g${String(i)}" {`);
+    }
+  });
+
+  it('splits 11 titles into requests of 10 and 1 (no hydration without ids)', async () => {
+    const { client, http } = clientWith(() =>
+      Promise.resolve(httpResponse(200, [])),
+    );
+
+    await client.multiqueryGames(
+      Array.from({ length: 11 }, (_, i) => `T${String(i)}`),
+    );
+
+    const requests = http.requests.filter((r) => r.url === MULTIQUERY_URL);
+    expect(requests).toHaveLength(2);
+    expect(countSubQueries(requests[0]?.body ?? '')).toBe(10);
+    expect(countSubQueries(requests[1]?.body ?? '')).toBe(1);
+    expect(http.requests.some((r) => r.url === GAMES_URL)).toBe(false);
+  });
+
+  it('attributes results by sub-query name, not response order', async () => {
+    const { client } = clientWith(
+      byUrl({
+        [MULTIQUERY_URL]: () =>
+          Promise.resolve(
+            httpResponse(200, [
+              { name: 'g1', result: [{ id: 2 }] },
+              { name: 'g0', result: [{ id: 1 }] },
+              { name: 'g2' },
+            ]),
+          ),
+        [GAMES_URL]: () =>
+          Promise.resolve(
+            httpResponse(200, [
+              { id: 1, name: 'Halo' },
+              { id: 2, name: 'Doom' },
+            ]),
+          ),
+      }),
+    );
+
+    const results = await client.multiqueryGames(['Halo', 'Doom', 'Unknown']);
+
+    expect(results).toEqual([
+      [{ id: 1, name: 'Halo' }],
+      [{ id: 2, name: 'Doom' }],
+      [],
+    ]);
+  });
+
+  it('ignores an unnamed entry in a mixed named/positional response (M1)', async () => {
+    const { client } = clientWith(
+      byUrl({
+        [MULTIQUERY_URL]: () =>
+          Promise.resolve(
+            httpResponse(200, [
+              { name: 'g0', result: [{ id: 1 }] },
+              [{ id: 2 }],
+            ]),
+          ),
+        [GAMES_URL]: () =>
+          Promise.resolve(
+            httpResponse(200, [
+              { id: 1, name: 'Halo' },
+              { id: 2, name: 'Doom' },
+            ]),
+          ),
+      }),
+    );
+
+    const results = await client.multiqueryGames(['Halo', 'Doom']);
+
+    // The unnamed array entry must NOT be attributed to g1 by position.
+    expect(results).toEqual([[{ id: 1, name: 'Halo' }], []]);
+  });
+
+  it('treats an omitted named sub-query (g0) as an empty candidate list (M1)', async () => {
+    const { client } = clientWith(
+      byUrl({
+        [MULTIQUERY_URL]: () =>
+          Promise.resolve(
+            httpResponse(200, [{ name: 'g1', result: [{ id: 2 }] }]),
+          ),
+        [GAMES_URL]: () =>
+          Promise.resolve(httpResponse(200, [{ id: 2, name: 'Doom' }])),
+      }),
+    );
+
+    await expect(client.multiqueryGames(['Halo', 'Doom'])).resolves.toEqual([
+      [],
+      [{ id: 2, name: 'Doom' }],
+    ]);
+  });
+
+  it('maps the legacy wholly-unnamed array-of-arrays response positionally', async () => {
+    const { client } = clientWith(
+      byUrl({
+        [MULTIQUERY_URL]: () =>
+          Promise.resolve(httpResponse(200, [[{ id: 1 }], [{ id: 2 }]])),
+        [GAMES_URL]: () =>
+          Promise.resolve(
+            httpResponse(200, [
+              { id: 1, name: 'Halo' },
+              { id: 2, name: 'Doom' },
+            ]),
+          ),
+      }),
+    );
+
+    await expect(client.multiqueryGames(['Halo', 'Doom'])).resolves.toEqual([
+      [{ id: 1, name: 'Halo' }],
+      [{ id: 2, name: 'Doom' }],
+    ]);
+  });
+
+  it('requests only ids in phase 1 and the full catalog fields in hydration', async () => {
+    const { client, http } = clientWith(
+      byUrl({
+        [MULTIQUERY_URL]: () =>
+          Promise.resolve(
+            httpResponse(200, [{ name: 'g0', result: [{ id: 5 }] }]),
+          ),
+        [GAMES_URL]: () =>
+          Promise.resolve(httpResponse(200, [{ id: 5, name: 'Halo' }])),
+      }),
+    );
+
+    await client.multiqueryGames(['Halo']);
+
+    const multiBody =
+      http.requests.find((r) => r.url === MULTIQUERY_URL)?.body ?? '';
+    expect(multiBody).toContain('fields id;');
+    expect(multiBody).not.toContain('cover.url');
+    expect(multiBody).not.toContain('alternative_names');
+
+    const gamesBody =
+      http.requests.find((r) => r.url === GAMES_URL)?.body ?? '';
+    expect(gamesBody).toBe(
+      'fields name,first_release_date,cover.url,' +
+        'involved_companies.company.name,genres.name,platforms.id,' +
+        'platforms.name,platforms.abbreviation,summary,version_parent; ' +
+        'where id = (5); limit 500;',
+    );
+    expect(gamesBody).not.toContain('fields *');
+    expect(gamesBody).not.toContain('alternative_names');
+  });
+
+  it('drops a phase-1 id that hydration does not return', async () => {
+    const { client } = clientWith(
+      byUrl({
+        [MULTIQUERY_URL]: () =>
+          Promise.resolve(
+            httpResponse(200, [{ name: 'g0', result: [{ id: 1 }, { id: 2 }] }]),
+          ),
+        [GAMES_URL]: () =>
+          Promise.resolve(httpResponse(200, [{ id: 2, name: 'D' }])),
+      }),
+    );
+
+    await expect(client.multiqueryGames(['Halo'])).resolves.toEqual([
+      [{ id: 2, name: 'D' }],
+    ]);
+  });
+
+  it('dedupes a shared id into one hydration request and attributes it to both titles', async () => {
+    const { client, http } = clientWith(
+      byUrl({
+        [MULTIQUERY_URL]: () =>
+          Promise.resolve(
+            httpResponse(200, [
+              { name: 'g0', result: [{ id: 7 }] },
+              { name: 'g1', result: [{ id: 7 }] },
+            ]),
+          ),
+        [GAMES_URL]: () =>
+          Promise.resolve(httpResponse(200, [{ id: 7, name: 'Shared' }])),
+      }),
+    );
+
+    const results = await client.multiqueryGames(['A', 'B']);
+
+    const gamesRequests = http.requests.filter((r) => r.url === GAMES_URL);
+    expect(gamesRequests).toHaveLength(1);
+    expect(gamesRequests[0]?.body).toContain('where id = (7)');
+    expect(results).toEqual([
+      [{ id: 7, name: 'Shared' }],
+      [{ id: 7, name: 'Shared' }],
+    ]);
+  });
+
+  it('throws a permanent IgdbError when the hydration body is not an array', async () => {
+    const { client } = clientWith(
+      byUrl({
+        [MULTIQUERY_URL]: () =>
+          Promise.resolve(
+            httpResponse(200, [{ name: 'g0', result: [{ id: 5 }] }]),
+          ),
+        [GAMES_URL]: () =>
+          Promise.resolve(httpResponse(200, { message: 'nope' })),
+      }),
+    );
+
+    const error = await client
+      .multiqueryGames(['Halo'])
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(IgdbError);
+    expect((error as IgdbError).retryable).toBe(false);
+    expect((error as IgdbError).message).toBe(
+      'IGDB returned an unexpected response',
+    );
+  });
+
+  it('returns 11 titles across 2 chunks as 11 arrays in input order (m2)', async () => {
+    const { client, http } = clientWith(
+      byUrl({
+        [MULTIQUERY_URL]: (request) =>
+          request.body.includes('search "T0"')
+            ? Promise.resolve(
+                httpResponse(
+                  200,
+                  Array.from({ length: 10 }, (_, i) => ({
+                    name: `g${String(i)}`,
+                    result: [{ id: i + 1 }],
+                  })),
+                ),
+              )
+            : Promise.resolve(
+                httpResponse(200, [{ name: 'g0', result: [{ id: 11 }] }]),
+              ),
+        [GAMES_URL]: (request) =>
+          Promise.resolve(
+            httpResponse(
+              200,
+              hydrationIds(request.body).map((id) => ({
+                id,
+                name: `Game ${String(id)}`,
+              })),
+            ),
+          ),
+      }),
+    );
+
+    const results = await client.multiqueryGames(
+      Array.from({ length: 11 }, (_, i) => `T${String(i)}`),
+    );
+
+    expect(http.requests.filter((r) => r.url === MULTIQUERY_URL)).toHaveLength(
+      2,
+    );
+    expect(results).toHaveLength(11);
+    for (let i = 0; i < 11; i += 1) {
+      expect(results[i]).toEqual([
+        { id: i + 1, name: `Game ${String(i + 1)}` },
+      ]);
+    }
+    const gamesRequest = http.requests.find((r) => r.url === GAMES_URL);
+    expect(hydrationIds(gamesRequest?.body ?? '')).toEqual([
+      1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11,
+    ]);
+  });
+
+  it('dedupes an id shared across chunks into one hydration request (m2)', async () => {
+    const { client, http } = clientWith(
+      byUrl({
+        [MULTIQUERY_URL]: (request) =>
+          request.body.includes('search "T0"')
+            ? Promise.resolve(
+                httpResponse(200, [
+                  { name: 'g0', result: [{ id: 3 }] },
+                  ...Array.from({ length: 9 }, (_, i) => ({
+                    name: `g${String(i + 1)}`,
+                  })),
+                ]),
+              )
+            : Promise.resolve(
+                httpResponse(200, [{ name: 'g0', result: [{ id: 3 }] }]),
+              ),
+        [GAMES_URL]: () =>
+          Promise.resolve(httpResponse(200, [{ id: 3, name: 'Shared' }])),
+      }),
+    );
+
+    const results = await client.multiqueryGames(
+      Array.from({ length: 11 }, (_, i) => `T${String(i)}`),
+    );
+
+    expect(http.requests.filter((r) => r.url === GAMES_URL)).toHaveLength(1);
+    expect(results[0]).toEqual([{ id: 3, name: 'Shared' }]);
+    expect(results[10]).toEqual([{ id: 3, name: 'Shared' }]);
+    for (let i = 1; i <= 9; i += 1) {
+      expect(results[i]).toEqual([]);
+    }
+  });
+
+  it('splits hydration at the 500-id cap and rebuilds titles in order', async () => {
+    const titleCount = 51;
+    const idsPerTitle = 10;
+    const idsForTitle = (index: number): number[] =>
+      Array.from(
+        { length: idsPerTitle },
+        (_, offset) => index * idsPerTitle + offset + 1,
+      );
+
+    const { client, http } = clientWith(
+      byUrl({
+        [MULTIQUERY_URL]: (request) => {
+          const titleIndexes = [
+            ...request.body.matchAll(/search "T(\d+)";/g),
+          ].map((match) => Number(match[1]));
+          return Promise.resolve(
+            httpResponse(
+              200,
+              titleIndexes.map((titleIndex, subIndex) => ({
+                name: `g${String(subIndex)}`,
+                result: idsForTitle(titleIndex).map((id) => ({ id })),
+              })),
+            ),
+          );
+        },
+        [GAMES_URL]: (request) =>
+          Promise.resolve(
+            httpResponse(
+              200,
+              hydrationIds(request.body).map((id) => ({
+                id,
+                name: `Game ${String(id)}`,
+              })),
+            ),
+          ),
+      }),
+    );
+
+    const results = await client.multiqueryGames(
+      Array.from({ length: titleCount }, (_, index) => `T${String(index)}`),
+    );
+
+    // 51 titles × 10 ids = 510 distinct ids: hydration chunks of 500 then 10.
+    const gamesRequests = http.requests.filter((r) => r.url === GAMES_URL);
+    expect(gamesRequests).toHaveLength(2);
+    expect(hydrationIds(gamesRequests[0]?.body ?? '')).toHaveLength(500);
+    expect(hydrationIds(gamesRequests[0]?.body ?? '')[0]).toBe(1);
+    expect(hydrationIds(gamesRequests[0]?.body ?? '')[499]).toBe(500);
+    expect(hydrationIds(gamesRequests[1]?.body ?? '')).toEqual([
+      501, 502, 503, 504, 505, 506, 507, 508, 509, 510,
+    ]);
+
+    expect(results).toHaveLength(titleCount);
+    for (let index = 0; index < titleCount; index += 1) {
+      expect(results[index]).toEqual(
+        idsForTitle(index).map((id) => ({ id, name: `Game ${String(id)}` })),
+      );
+    }
+  });
+
+  it('resolves the token per HTTP request and re-acquires it across chunks (m3)', async () => {
+    let now = 1_000_000;
+    const nowSpy = jest.spyOn(Date, 'now').mockImplementation(() => now);
+    let tokenCount = 0;
+    let multiqueryCalls = 0;
+    const http = new FakeHttpClient((request) => {
+      if (request.url === TOKEN_URL) {
+        tokenCount += 1;
+        return Promise.resolve(
+          httpResponse(200, {
+            access_token: `token-${String(tokenCount)}`,
+            expires_in: 100,
+          }),
+        );
+      }
+      if (request.url === MULTIQUERY_URL) {
+        multiqueryCalls += 1;
+        // The first token's expiresAt is now + 40s; lapse it before chunk 2.
+        if (multiqueryCalls === 1) now += 41_000;
+        return Promise.resolve(httpResponse(200, []));
+      }
+      return Promise.resolve(httpResponse(200, []));
+    });
+    const client = new IgdbClient(http, config(), permissiveLimiter());
+
+    await client.multiqueryGames(
+      Array.from({ length: 11 }, (_, index) => `T${String(index)}`),
+    );
+
+    // Two phase-1 chunks, and the cached token had lapsed for the second.
+    expect(multiqueryCalls).toBe(2);
+    expect(tokenCount).toBe(2);
+    nowSpy.mockRestore();
+  });
+
+  it('escapes a title that could break out of the search term', async () => {
+    const { client, http } = clientWith(() =>
+      Promise.resolve(httpResponse(200, [])),
+    );
+
+    await client.multiqueryGames(['Halo"; fields name;']);
+
+    const body =
+      http.requests.find((r) => r.url === MULTIQUERY_URL)?.body ?? '';
+    expect(body).toContain('search "Halo\\"; fields name;";');
+  });
+
+  it('routes token plus 2 multiquery chunks through the limiter (no hydration without ids)', async () => {
+    const limiter = permissiveLimiter();
+    const scheduleSpy = jest.spyOn(limiter, 'schedule');
+    const http = new FakeHttpClient((request) =>
+      request.url === TOKEN_URL
+        ? Promise.resolve(
+            httpResponse(200, { access_token: 'token-1', expires_in: 3600 }),
+          )
+        : Promise.resolve(httpResponse(200, [])),
+    );
+    const client = new IgdbClient(http, config(), limiter);
+
+    await client.multiqueryGames(
+      Array.from({ length: 11 }, (_, i) => `T${String(i)}`),
+    );
+
+    // 1 token acquisition + 2 batched searches (10 + 1); no ids -> no hydration.
+    expect(scheduleSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it('routes token plus 2 searches plus 1 hydration through the limiter when ids exist', async () => {
+    const limiter = permissiveLimiter();
+    const scheduleSpy = jest.spyOn(limiter, 'schedule');
+    const http = new FakeHttpClient((request) => {
+      if (request.url === TOKEN_URL) {
+        return Promise.resolve(
+          httpResponse(200, { access_token: 'token-1', expires_in: 3600 }),
+        );
+      }
+      if (request.url === MULTIQUERY_URL) {
+        return Promise.resolve(
+          httpResponse(200, [{ name: 'g0', result: [{ id: 1 }] }]),
+        );
+      }
+      return Promise.resolve(httpResponse(200, [{ id: 1, name: 'Halo' }]));
+    });
+    const client = new IgdbClient(http, config(), limiter);
+
+    await client.multiqueryGames(
+      Array.from({ length: 11 }, (_, i) => `T${String(i)}`),
+    );
+
+    // Both chunks return the same id -> one deduped hydration request.
+    expect(scheduleSpy).toHaveBeenCalledTimes(4);
+  });
+
+  it('retries a 429 on the first multiquery call and then hydrates', async () => {
+    let multiqueryCalls = 0;
+    const { client } = clientWith(
+      byUrl({
+        [MULTIQUERY_URL]: () => {
+          multiqueryCalls += 1;
+          return Promise.resolve(
+            multiqueryCalls === 1
+              ? httpResponse(429, { message: 'too many requests' })
+              : httpResponse(200, [{ name: 'g0', result: [{ id: 1 }] }]),
+          );
+        },
+        [GAMES_URL]: () =>
+          Promise.resolve(httpResponse(200, [{ id: 1, name: 'Halo' }])),
+      }),
+    );
+
+    const results = await client.multiqueryGames(['Halo']);
+
+    expect(results).toEqual([[{ id: 1, name: 'Halo' }]]);
+    expect(delays.length).toBeGreaterThan(0);
+  });
+
+  it('throws a permanent IgdbError when the body is not an array', async () => {
+    const { client } = clientWith(() =>
+      Promise.resolve(httpResponse(200, { message: 'nope' })),
+    );
+
+    const error = await client
+      .multiqueryGames(['Halo'])
+      .catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(IgdbError);
+    expect((error as IgdbError).retryable).toBe(false);
+    expect((error as IgdbError).message).toBe(
+      'IGDB returned an unexpected response',
+    );
   });
 });
 

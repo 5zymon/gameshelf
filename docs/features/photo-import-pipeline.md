@@ -155,8 +155,14 @@ with a single IGDB implementation, `IgdbGameCatalogResolver`:
   upstream `429` is retried inside the client with bounded exponential backoff
   before it ever reaches the pipeline;
 - results are normalized (lowercase, diacritics/punctuation stripped,
-  whitespace collapsed); the first exact normalized-name match wins, otherwise
-  a containment match with a shorter/longer length ratio ≥ 0.8;
+  whitespace collapsed) and scored by a shared similarity function
+  (`title-match.ts`): normalized equality scores 1, otherwise a Levenshtein
+  ratio (boosted by containment) must reach `CONFIDENT_MATCH_MIN_SCORE = 0.8`.
+  A minor typo such as `Haloo` → `Halo` (0.8) or `Pokeman` → `Pokemon` (0.857)
+  is accepted; a title that differs only by an installment/version token
+  (`Fifa 24` vs `Fifa 23`, `Halo` vs `Halo 2`, `GTA V` vs `GTA IV`) scores 0 and
+  is never treated as a typo, so it stays unresolved rather than matching the
+  wrong game;
 - a non-`429` 5xx/network/timeout — or a `429` whose internal retries are
   exhausted — becomes `transient` and is retried by the job; a 401/403 or
   malformed query becomes `unrecognized`, and no match becomes `unrecognized`.
@@ -181,8 +187,12 @@ first `npm run platforms:sync`) shows up as review noise. The `reason` is a
 fixed, UI-translatable token rather than prose, so the UI can render a
 dedicated message and the value stays stable if wording changes.
 
-The MobyGames fallback (ticket 4.5) and IGDB multiquery batching (ticket 4.3)
-plug into the same port.
+The MobyGames fallback (ticket 4.5) plugs into the same port. The port also
+exposes a batched `resolveBatch()` (ticket 4.3) that resolves many titles in two
+phases — a batched `/v4/multiquery` id search (≤10 sub-queries per request) then
+a batched `/v4/games` hydration (≤500 ids per request); the pipeline still calls
+the per-title `resolve()`, so production request reduction and batch integration
+are owned by ticket 4.4.
 
 # Retry configuration
 
@@ -261,6 +271,6 @@ a failed job.
 
 # Out of scope
 
-- MobyGames fallback (4.5) and IGDB multiquery batching (4.3).
+- MobyGames fallback (4.5) and pipeline integration of batched resolution (4.4).
 - Manual item resolution (pick candidate / manual add).
 - Frontend progress/flagged-item views.
