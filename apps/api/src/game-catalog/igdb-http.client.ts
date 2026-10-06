@@ -12,6 +12,8 @@ export interface IgdbHttpRequest {
 export interface IgdbHttpResponse {
   status: number;
   ok: boolean;
+  /** Optional header seam; used to honor Retry-After on a 429. */
+  headers?: { get(name: string): string | null };
   json: () => Promise<unknown>;
   text: () => Promise<string>;
 }
@@ -54,6 +56,7 @@ export class FetchIgdbHttpClient extends IgdbHttpClient {
     return {
       status: response.status,
       ok: response.ok,
+      headers: response.headers,
       json: async (): Promise<unknown> => response.json(),
       text: () => response.text(),
     };
