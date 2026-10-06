@@ -95,11 +95,14 @@ Key properties:
   `processing`, so a late writer can never clobber a newer terminal status.
 - **Timeout headroom (title ceiling).** The 300 s budget is sized for a shelf
   of up to ~50 titles: one vision call (`VISION_REQUEST_TIMEOUT_MS = 30 s`)
-  plus ~50 sequential IGDB lookups at `IGDB_REQUEST_INTERVAL_MS = 300 ms` and
-  up to `IGDB_REQUEST_TIMEOUT_MS = 5 s` each worst-cases at
-  ≈ 30 s + 50 × 5.3 s ≈ 295 s. A photo recognized with substantially more than
-  ~50 titles can exceed the timeout; it is retried, and on the last attempt
-  marked `failed` with the partial counters.
+  plus ~50 sequential IGDB lookups paced by the central rate limiter
+  ([IGDB Client & Rate Limiter](/igdb-client.md), 4 req/s, 8 concurrent, so a
+  single sequential path waits ~250 ms per request) with up to
+  `IGDB_REQUEST_TIMEOUT_MS = 5 s` each, worst-casing at
+  ≈ 30 s + 50 × 5.25 s ≈ 295 s. (Upstream `429`s are retried inside the client,
+  bounded and small relative to the budget.) A photo recognized with
+  substantially more than ~50 titles can exceed the timeout; it is retried, and
+  on the last attempt marked `failed` with the partial counters.
 - **Idempotency.** Importing a title creates the `Game` and claims its
   `recognized_item` via `updateMany({ status: 'pending' })`; a zero-row claim
   throws so the batch rolls back. The **same guarded claim** runs for a flagged
@@ -146,12 +149,17 @@ Key properties:
 with a single IGDB implementation, `IgdbGameCatalogResolver`:
 
 - `IgdbClient` obtains an OAuth client-credentials token (cached until
-  `expiry − 60 s`) and issues one `POST /v4/games` search per title;
+  `expiry − 60 s`, token URL defaulting to the Twitch endpoint) and issues one
+  `POST /v4/games` search per title; every call goes through the central
+  [IGDB Client & Rate Limiter](/igdb-client.md) (4 req/s, 8 concurrent), and an
+  upstream `429` is retried inside the client with bounded exponential backoff
+  before it ever reaches the pipeline;
 - results are normalized (lowercase, diacritics/punctuation stripped,
   whitespace collapsed); the first exact normalized-name match wins, otherwise
   a containment match with a shorter/longer length ratio ≥ 0.8;
-- a 429/5xx/network/timeout becomes `transient`, a 401/403 or malformed query
-  becomes `unrecognized`, and no match becomes `unrecognized`.
+- a non-`429` 5xx/network/timeout — or a `429` whose internal retries are
+  exhausted — becomes `transient` and is retried by the job; a 401/403 or
+  malformed query becomes `unrecognized`, and no match becomes `unrecognized`.
 
 A matched candidate is mapped to a seeded `Platform` row (IGDB id first, then
 name/abbreviation/alternative name). When no seeded platform matches, the item

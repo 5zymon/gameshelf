@@ -20,9 +20,6 @@ export const IMPORT_RETRY_BACKOFF_MS = 5000;
  */
 export const IMPORT_MIN_CONFIDENCE = 0;
 
-/** Minimum spacing between IGDB requests, to stay under the rate limit. */
-export const IGDB_REQUEST_INTERVAL_MS = 300;
-
 /** Per-IGDB-request timeout. */
 export const IGDB_REQUEST_TIMEOUT_MS = 5000;
 
@@ -35,10 +32,14 @@ export const IMPORT_QUEUE_STATE_TIMEOUT_MS = 2_000;
 
 /**
  * Hard ceiling on one photo-import job (ticket 3.7): one vision call
- * (`VISION_REQUEST_TIMEOUT_MS = 30 s`) plus the per-title IGDB lookups, which
- * run sequentially at `IGDB_REQUEST_INTERVAL_MS` (300 ms) with an
- * `IGDB_REQUEST_TIMEOUT_MS` (5 s) ceiling each. A realistic shelf (≤ ~50
- * titles) worst-cases at ~30 s + 50 × 5.3 s ≈ 295 s; 300 s bounds it with
+ * (`VISION_REQUEST_TIMEOUT_MS = 30 s`) plus the per-title IGDB lookups. Since
+ * ticket 4.1 those lookups go through one central rate limiter (4 req/s, 8
+ * concurrent), which paces requests beyond the window (≈250 ms each in the
+ * worst case), and each request has an `IGDB_REQUEST_TIMEOUT_MS` (5 s) ceiling. IGDB 429s are retried
+ * internally up to `IGDB_MAX_ATTEMPTS = 3` with exponential backoff (base
+ * 500 ms, cap 5 s), while timeouts/5xx/network failures remain BullMQ's
+ * responsibility. A realistic shelf (≤ ~50 titles) worst-cases at
+ * ~30 s + 50 × (5 s + 250 ms limiter pacing) ≈ 295 s; 300 s bounds it with
  * headroom. A job that exceeds this is treated as transient and retried.
  */
 export const IMPORT_JOB_TIMEOUT_MS = 300_000;
