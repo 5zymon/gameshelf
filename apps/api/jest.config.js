@@ -9,8 +9,10 @@ const shared = {
 module.exports = {
   // Serial workers: the e2e tier shares one test database (each test file
   // resets it in beforeEach), so parallel workers would wipe each other's
-  // data. `maxWorkers` is only honored at the root level, not per project.
+  // data. `maxWorkers` and `testTimeout` are only honored at the root level,
+  // not per project.
   maxWorkers: 1,
+  testTimeout: 30000,
   projects: [
     {
       ...shared,
@@ -25,7 +27,6 @@ module.exports = {
       testMatch: ['**/*.e2e-spec.ts'],
       setupFiles: ['<rootDir>/test/setup-env.ts'],
       globalSetup: '<rootDir>/test/global-setup.ts',
-      testTimeout: 30000,
     },
   ],
 };
