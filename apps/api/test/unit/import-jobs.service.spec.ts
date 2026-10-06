@@ -339,7 +339,7 @@ describe('ImportJobsService (unit)', () => {
       const result = await service.createJob({});
 
       expect(mock.importJob.create).toHaveBeenCalledWith({
-        data: { status: 'queued', declaredCount: null },
+        data: { status: 'queued', declaredCount: null, photoRef: null },
       });
       expect(result).toEqual({ ...JOB, status: 'queued' });
     });
@@ -354,7 +354,21 @@ describe('ImportJobsService (unit)', () => {
       await service.createJob({ declaredCount: 12 });
 
       expect(mock.importJob.create).toHaveBeenCalledWith({
-        data: { status: 'queued', declaredCount: 12 },
+        data: { status: 'queued', declaredCount: 12, photoRef: null },
+      });
+    });
+
+    it('persists the ephemeral photo reference when provided (ticket 3.2)', async () => {
+      mock.importJob.create.mockResolvedValue({
+        ...JOB,
+        status: 'queued',
+        photoRef: 'abc.png',
+      });
+
+      await service.createJob({ photoRef: 'abc.png' });
+
+      expect(mock.importJob.create).toHaveBeenCalledWith({
+        data: { status: 'queued', declaredCount: null, photoRef: 'abc.png' },
       });
     });
   });

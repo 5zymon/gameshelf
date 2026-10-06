@@ -171,9 +171,14 @@ export class ImportJobsService {
   /** One row per uploaded photo (ticket 3.2). */
   async createJob(data: {
     declaredCount?: number | null;
+    photoRef?: string | null;
   }): Promise<ImportJobModel> {
     return this.prisma.importJob.create({
-      data: { status: 'queued', declaredCount: data.declaredCount ?? null },
+      data: {
+        status: 'queued',
+        declaredCount: data.declaredCount ?? null,
+        photoRef: data.photoRef ?? null,
+      },
     });
   }
 

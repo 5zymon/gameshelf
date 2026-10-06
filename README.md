@@ -372,6 +372,7 @@ All variables live in a single root `.env` file (see `.env.example`):
 | `SESSION_TTL_MINUTES` | `apps/api` | Sliding session lifetime in minutes (default `10080`; no "never")                                                     |
 | `OPENAI_API_KEY`      | `apps/api` | LLM provider key                                                                                                      |
 | `ANTHROPIC_API_KEY`   | `apps/api` | LLM provider key                                                                                                      |
+| `IMPORT_PHOTOS_DIR`   | `apps/api` | Ephemeral upload directory (default `<OS temp>/gameshelf-import-photos`)                                              |
 | `IGDB_CLIENT_ID`      | `apps/api` | IGDB credentials                                                                                                      |
 | `IGDB_CLIENT_SECRET`  | `apps/api` | IGDB credentials                                                                                                      |
 

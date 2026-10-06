@@ -109,6 +109,10 @@ model ImportJob {
   id              Int       @id @default(autoincrement())
   status          String    @db.VarChar(32)
   declaredCount   Int?      @map("declared_count")
+  // Filename (not an absolute path) under IMPORT_PHOTOS_DIR; set by the
+  // upload API (ticket 3.2), resolved and deleted by the pipeline (3.5/3.8).
+  // Nullable so the existing createJob({}) callers and legacy rows stay valid.
+  photoRef        String?   @map("photo_ref") @db.VarChar(255)
   recognizedCount Int       @default(0) @map("recognized_count")
   importedCount   Int       @default(0) @map("imported_count")
   unrecognizedCount Int     @default(0) @map("unrecognized_count")
