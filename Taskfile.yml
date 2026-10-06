@@ -33,7 +33,7 @@ tasks:
       - npm run typecheck
 
   test:
-    desc: Run the API test suite (unit + e2e; e2e needs a running MySQL with the gameshelf_test database)
+    desc: Run the API test suite (unit + e2e; e2e needs a running MySQL with the gameshelf_test database and a running Redis)
     cmds:
       - npm run test
 

@@ -23,6 +23,7 @@
     "user:passwd": "ts-node -P tsconfig.json src/cli/users.ts passwd"
   },
   "dependencies": {
+    "@nestjs/bullmq": "^12.0.0",
     "@nestjs/common": "^11.0.12",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.0.12",
@@ -32,8 +33,10 @@
     "@prisma/adapter-mariadb": "7.10.0",
     "@prisma/client": "7.10.0",
     "argon2": "^0.45.1",
+    "bullmq": "^6.3.11",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "ioredis": "^6.0.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2"
   },

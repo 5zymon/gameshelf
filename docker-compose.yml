@@ -49,6 +49,10 @@ services:
       # AOF persistence — queued job state survives a Redis restart.
       - --appendonly
       - 'yes'
+      # ADR-002: BullMQ requires noeviction; an evicting policy can silently
+      # drop job data under memory pressure.
+      - --maxmemory-policy
+      - 'noeviction'
     ports:
       # Localhost-only by default; change the host part to expose it.
       - '127.0.0.1:${REDIS_PORT:-6379}:6379'

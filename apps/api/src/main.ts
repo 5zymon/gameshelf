@@ -6,6 +6,8 @@ import { createGlobalValidationPipe } from './common/validation-pipe';
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
+  // Close BullMQ workers (and Prisma) on SIGTERM/SIGINT.
+  app.enableShutdownHooks();
 
   app.useGlobalPipes(createGlobalValidationPipe());
 
