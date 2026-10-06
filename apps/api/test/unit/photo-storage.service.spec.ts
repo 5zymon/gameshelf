@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { existsSync, mkdtempSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, utimesSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
@@ -103,6 +103,44 @@ describe('PhotoStorageService (unit)', () => {
       const service = createService(undefined);
 
       await expect(service.delete(null)).resolves.toBeUndefined();
+    });
+  });
+
+  describe('list', () => {
+    it('returns an empty list when the directory does not exist', async () => {
+      const dir = join(tmpdir(), `gs-photo-missing-${String(Date.now())}`);
+      const service = createService(dir);
+
+      await expect(service.list()).resolves.toEqual([]);
+    });
+
+    it('returns stored files sorted by mtime, oldest first', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'gs-photo-'));
+      const service = createService(dir);
+      const newer = await service.store(uploadedFile({}));
+      const older = await service.store(uploadedFile({}));
+      utimesSync(join(dir, newer), new Date(2000, 0, 1), new Date(2000, 0, 1));
+      utimesSync(join(dir, older), new Date(1000, 0, 1), new Date(1000, 0, 1));
+
+      const listed = await service.list();
+
+      expect(listed.map((file) => file.name)).toEqual([older, newer]);
+      const [firstListed, secondListed] = listed;
+      if (!firstListed || !secondListed) {
+        throw new Error('expected two listed files');
+      }
+      expect(firstListed.mtimeMs).toBeLessThan(secondListed.mtimeMs);
+    });
+
+    it('ignores subdirectories', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'gs-photo-'));
+      const service = createService(dir);
+      const stored = await service.store(uploadedFile({}));
+      mkdirSync(join(dir, 'nested'));
+
+      const listed = await service.list();
+
+      expect(listed.map((file) => file.name)).toEqual([stored]);
     });
   });
 });

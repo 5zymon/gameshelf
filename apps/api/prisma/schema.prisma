@@ -121,6 +121,13 @@ model ImportJob {
   errorMessage    String?   @map("error_message") @db.Text
   createdAt       DateTime  @default(now()) @map("created_at")
   completedAt     DateTime? @map("completed_at")
+  // Last time this run entered the queue (ticket 3.8): stamped by the upload
+  // creation, by `retryJob` (reset to `queued`), and again by `markProcessing`
+  // (when the worker actually starts). The photo sweep anchors its abandonment
+  // window on this, not `createdAt`, so a job retried inside the 7-day failed
+  // window keeps its photo. Nullable for legacy rows; `createdAt` is the
+  // fallback in `decidePhotoSweep`.
+  enqueuedAt      DateTime? @map("enqueued_at")
   // Set once, inside the same transaction that persists the recognized item
   // rows (ticket 3.5). Non-null means the single vision call already ran, so a
   // BullMQ retry never repeats it (acceptance criterion).

@@ -97,10 +97,11 @@ the list with `GET /import-jobs?batchId=` — see
   mount and no gallery route — the directory is a hand-off buffer between the
   upload request and the worker, not user-facing storage.
 - The import pipeline deletes each photo after processing completes
-  ([Photo Import Pipeline](/photo-import-pipeline.md)); the standalone sweep
-  for photos orphaned by a crash is ticket 3.8. Until then an orphaned photo
-  can remain if enqueueing fails (`503`): the row is marked `failed` and the
-  file is cleaned up by the later deletion pass.
+  ([Photo Import Pipeline](/photo-import-pipeline.md)); a backstop sweep
+  ([Photo Lifecycle & Retention](/photo-lifecycle.md)) removes what is left
+  behind. A photo from a failed enqueue is covered because its row is `failed`
+  and the sweep applies the failed-retention window; a crash between storing a
+  photo and creating its row is covered by the sweep's orphan grace period.
 
 `ImportJob.photoRef` is an opaque internal filename (e.g.
 `3f2a1c9e-....jpg`). It is present in the read models for traceability but is
@@ -122,8 +123,6 @@ photos already enqueued earlier in the same request stay queued.
 - **Recognition / IGDB / MobyGames matching** (ticket 3.5) — the worker does
   it; see [Photo Import Pipeline](/photo-import-pipeline.md). This endpoint only
   queues.
-- **Photo deletion sweep** (ticket 3.8) — the pipeline deletes a photo after its
-  job completes; the sweep cleans up orphans.
 - **Retry** (`POST /import-jobs/:id/retry`) and **item resolution** — see
   [Import Jobs API](/import-jobs-api.md). Retry is implemented; item
   resolution is not.

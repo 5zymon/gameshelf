@@ -6,6 +6,7 @@ import { ImportUploadController } from './import-upload.controller';
 import { ImportUploadService } from './import-upload.service';
 import { PhotoImportPipelineService } from './photo-import-pipeline.service';
 import { PhotoStorageService } from './photo-storage.service';
+import { PhotoSweepService } from './photo-sweep.service';
 
 @Module({
   imports: [GameCatalogModule],
@@ -15,6 +16,7 @@ import { PhotoStorageService } from './photo-storage.service';
     ImportUploadService,
     PhotoStorageService,
     PhotoImportPipelineService,
+    PhotoSweepService,
   ],
   exports: [ImportJobsService, PhotoStorageService, PhotoImportPipelineService],
 })

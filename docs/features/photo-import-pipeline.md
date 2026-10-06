@@ -125,8 +125,12 @@ Key properties:
   retries proceed.
 - **Photo lifecycle.** The photo is deleted after the job reaches a terminal
   _completed_ state — both `done` and `needs_attention`, including zero-item
-  recognition. A `failed` job keeps its photo. (The standalone sweep/cleanup of
-  orphaned photos is ticket 3.8.)
+  recognition. A `failed` job keeps its photo while it is retryable. The
+  standalone backstop sweep is implemented in
+  [Photo Lifecycle & Retention](/photo-lifecycle.md): it removes a leftover
+  file when the pipeline's delete failed, cleans up `dismissed` jobs (which
+  never delete), and removes `failed`/abandoned photos once their retention
+  window passes.
 - **Single vision call.** The `vision_completed_at` marker plus a transaction
   guarantee one vision call per job for sequential retries. A timed-out attempt
   is cancelled at the abort boundary, so it cannot start another external
@@ -245,5 +249,4 @@ a failed job.
 
 - MobyGames fallback (4.5) and IGDB multiquery batching (4.3).
 - Manual item resolution (pick candidate / manual add).
-- The orphaned-photo sweep (3.8).
 - Frontend progress/flagged-item views.
