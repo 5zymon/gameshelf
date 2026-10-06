@@ -8,8 +8,10 @@ interface ImportJobsPrismaMock {
     findMany: jest.Mock;
     count: jest.Mock;
     findUnique: jest.Mock;
+    findFirst: jest.Mock;
     create: jest.Mock;
     update: jest.Mock;
+    updateMany: jest.Mock;
   };
   unrecognizedItem: {
     findMany: jest.Mock;
@@ -17,6 +19,20 @@ interface ImportJobsPrismaMock {
     create: jest.Mock;
     update: jest.Mock;
   };
+  recognizedItem: {
+    findMany: jest.Mock;
+    createMany: jest.Mock;
+    updateMany: jest.Mock;
+    update: jest.Mock;
+    groupBy: jest.Mock;
+  };
+  platform: {
+    findFirst: jest.Mock;
+  };
+  game: {
+    create: jest.Mock;
+  };
+  $transaction: jest.Mock;
 }
 
 function createService(): {
@@ -28,8 +44,10 @@ function createService(): {
       findMany: jest.fn(),
       count: jest.fn(),
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
     },
     unrecognizedItem: {
       findMany: jest.fn(),
@@ -37,7 +55,25 @@ function createService(): {
       create: jest.fn(),
       update: jest.fn(),
     },
+    recognizedItem: {
+      findMany: jest.fn(),
+      createMany: jest.fn(),
+      updateMany: jest.fn(),
+      update: jest.fn(),
+      groupBy: jest.fn(),
+    },
+    platform: {
+      findFirst: jest.fn(),
+    },
+    game: {
+      create: jest.fn(),
+    },
+    $transaction: jest.fn(),
   };
+  // Interactive transactions run the callback against the same mock as `tx`.
+  mock.$transaction.mockImplementation(
+    (callback: (tx: ImportJobsPrismaMock) => unknown) => callback(mock),
+  );
   return {
     service: new ImportJobsService(mock as unknown as PrismaService),
     mock,
@@ -586,6 +622,33 @@ describe('ImportJobsService (unit)', () => {
       });
     });
 
+    it('persists the partial counters when they are supplied', async () => {
+      mock.importJob.findUnique.mockResolvedValue({
+        id: 1,
+        status: 'processing',
+        declaredCount: null,
+      });
+      mock.importJob.update.mockResolvedValue({ ...JOB, status: 'failed' });
+
+      await service.markFailed(1, 'worker killed mid-job', {
+        recognizedCount: 12,
+        importedCount: 10,
+        unrecognizedCount: 0,
+      });
+
+      expect(mock.importJob.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: {
+          status: 'failed',
+          errorMessage: 'worker killed mid-job',
+          completedAt: expect.any(Date) as Date,
+          recognizedCount: 12,
+          importedCount: 10,
+          unrecognizedCount: 0,
+        },
+      });
+    });
+
     it('rejects a terminal job with 409', async () => {
       mock.importJob.findUnique.mockResolvedValue({
         id: 1,
@@ -648,6 +711,327 @@ describe('ImportJobsService (unit)', () => {
       ).rejects.toThrow(
         new NotFoundException('Import job with id 9 not found'),
       );
+      expect(mock.unrecognizedItem.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getPipelineJob', () => {
+    it('selects the pipeline snapshot', async () => {
+      const state = {
+        id: 1,
+        status: 'processing',
+        declaredCount: 2,
+        photoRef: 'p.png',
+        visionCompletedAt: null,
+        recognizedCount: 1,
+        importedCount: 0,
+        unrecognizedCount: 0,
+      };
+      mock.importJob.findUnique.mockResolvedValue(state);
+
+      const result = await service.getPipelineJob(1);
+
+      expect(mock.importJob.findUnique).toHaveBeenCalledWith({
+        where: { id: 1 },
+        select: {
+          id: true,
+          status: true,
+          declaredCount: true,
+          photoRef: true,
+          visionCompletedAt: true,
+          recognizedCount: true,
+          importedCount: true,
+          unrecognizedCount: true,
+        },
+      });
+      expect(result).toBe(state);
+    });
+
+    it('returns null for an unknown job', async () => {
+      mock.importJob.findUnique.mockResolvedValue(null);
+
+      await expect(service.getPipelineJob(9)).resolves.toBeNull();
+    });
+  });
+
+  describe('findJobIdByPhotoRef', () => {
+    it('returns the newest matching id', async () => {
+      mock.importJob.findFirst.mockResolvedValue({ id: 7 });
+
+      await expect(service.findJobIdByPhotoRef('p.png')).resolves.toBe(7);
+      expect(mock.importJob.findFirst).toHaveBeenCalledWith({
+        where: { photoRef: 'p.png' },
+        orderBy: { id: 'desc' },
+        select: { id: true },
+      });
+    });
+
+    it('returns null when no row has that photoRef', async () => {
+      mock.importJob.findFirst.mockResolvedValue(null);
+
+      await expect(service.findJobIdByPhotoRef('x')).resolves.toBeNull();
+    });
+  });
+
+  describe('saveRecognition', () => {
+    it('stamps the marker and inserts the items in one transaction', async () => {
+      mock.importJob.updateMany.mockResolvedValue({ count: 1 });
+      mock.recognizedItem.createMany.mockResolvedValue({ count: 2 });
+
+      const written = await service.saveRecognition(1, [
+        { title: 'A', edition: null, platform: 'PS5', confidence: 0.9 },
+        { title: 'B', edition: 'GOTY', platform: null, confidence: 0.5 },
+      ]);
+
+      expect(mock.importJob.updateMany).toHaveBeenCalledWith({
+        where: { id: 1, visionCompletedAt: null },
+        data: { visionCompletedAt: expect.any(Date) as Date },
+      });
+      expect(mock.recognizedItem.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            importJobId: 1,
+            position: 0,
+            rawTitle: 'A',
+            rawEdition: null,
+            rawPlatform: 'PS5',
+            confidence: 0.9,
+            status: 'pending',
+          },
+          {
+            importJobId: 1,
+            position: 1,
+            rawTitle: 'B',
+            rawEdition: 'GOTY',
+            rawPlatform: null,
+            confidence: 0.5,
+            status: 'pending',
+          },
+        ],
+        skipDuplicates: true,
+      });
+      expect(written).toBe(2);
+    });
+
+    it('writes nothing when the marker is already set (one-shot vision call)', async () => {
+      mock.importJob.updateMany.mockResolvedValue({ count: 0 });
+
+      const written = await service.saveRecognition(1, [
+        { title: 'A', edition: null, platform: null, confidence: 1 },
+      ]);
+
+      expect(mock.recognizedItem.createMany).not.toHaveBeenCalled();
+      expect(written).toBe(0);
+    });
+
+    it('still stamps the marker for an empty recognition', async () => {
+      mock.importJob.updateMany.mockResolvedValue({ count: 1 });
+
+      const written = await service.saveRecognition(1, []);
+
+      expect(mock.recognizedItem.createMany).not.toHaveBeenCalled();
+      expect(written).toBe(0);
+    });
+  });
+
+  describe('listPendingRecognizedItems', () => {
+    it('lists pending items in position order', async () => {
+      mock.recognizedItem.findMany.mockResolvedValue([]);
+
+      await service.listPendingRecognizedItems(1);
+
+      expect(mock.recognizedItem.findMany).toHaveBeenCalledWith({
+        where: { importJobId: 1, status: 'pending' },
+        orderBy: { position: 'asc' },
+        select: {
+          id: true,
+          position: true,
+          rawTitle: true,
+          rawEdition: true,
+          rawPlatform: true,
+          confidence: true,
+          status: true,
+        },
+      });
+    });
+  });
+
+  describe('summarizeRecognizedItems', () => {
+    it('sums the status groups', async () => {
+      mock.recognizedItem.groupBy.mockResolvedValue([
+        { status: 'imported', _count: { _all: 3 } },
+        { status: 'unrecognized', _count: { _all: 1 } },
+        { status: 'pending', _count: { _all: 2 } },
+      ]);
+
+      await expect(service.summarizeRecognizedItems(1)).resolves.toEqual({
+        recognizedCount: 6,
+        importedCount: 3,
+        unrecognizedCount: 1,
+      });
+    });
+  });
+
+  describe('resolvePlatformId', () => {
+    it('prefers an IGDB-id match', async () => {
+      mock.platform.findFirst.mockResolvedValueOnce({ id: 5 });
+
+      await expect(
+        service.resolvePlatformId(
+          [{ igdbId: 11, name: 'Xbox', abbreviation: 'XBOX' }],
+          'Xbox',
+        ),
+      ).resolves.toBe(5);
+      expect(mock.platform.findFirst).toHaveBeenCalledTimes(1);
+      expect(mock.platform.findFirst).toHaveBeenCalledWith({
+        where: { igdbId: { in: [11] } },
+        orderBy: { id: 'asc' },
+        select: { id: true },
+      });
+    });
+
+    it('falls back to a name match when the IGDB id does not match', async () => {
+      mock.platform.findFirst
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 8 });
+
+      await expect(
+        service.resolvePlatformId(
+          [{ igdbId: 99, name: 'PS5', abbreviation: 'PS5' }],
+          'PlayStation 5',
+        ),
+      ).resolves.toBe(8);
+      expect(mock.platform.findFirst).toHaveBeenNthCalledWith(2, {
+        where: {
+          OR: [
+            { name: 'PS5' },
+            { abbreviation: 'PS5' },
+            { alternativeName: 'PS5' },
+          ],
+        },
+        orderBy: { id: 'asc' },
+        select: { id: true },
+      });
+    });
+
+    it('returns null when nothing matches', async () => {
+      mock.platform.findFirst.mockResolvedValue(null);
+
+      await expect(service.resolvePlatformId([], null)).resolves.toBeNull();
+      expect(mock.platform.findFirst).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('commitImportBatch', () => {
+    const candidate = {
+      externalId: 7,
+      title: 'Halo',
+      releaseYear: 2001,
+      publisher: 'Bungie',
+      genre: 'Shooter',
+      coverUrl: 'https://images.igdb.com/halo.jpg',
+      platforms: [],
+      raw: { id: 7 },
+    };
+
+    it('creates a game and claims the recognized item in one transaction', async () => {
+      mock.game.create.mockResolvedValue({ id: 42 });
+      mock.recognizedItem.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.commitImportBatch(5, {
+        resolved: [
+          { recognizedItemId: 1, platformId: 3, edition: 'GOTY', candidate },
+        ],
+        unrecognized: [],
+        transient: [],
+      });
+
+      expect(mock.$transaction).toHaveBeenCalledTimes(1);
+      expect(mock.game.create).toHaveBeenCalledWith({
+        data: {
+          title: 'Halo',
+          platformId: 3,
+          edition: 'GOTY',
+          releaseYear: 2001,
+          publisher: 'Bungie',
+          genre: 'Shooter',
+          coverUrl: 'https://images.igdb.com/halo.jpg',
+          rawMetadata: JSON.stringify({ id: 7 }),
+          enrichedAt: expect.any(Date) as Date,
+          source: 'IGDB',
+        },
+      });
+      expect(mock.recognizedItem.updateMany).toHaveBeenCalledWith({
+        where: { id: 1, importJobId: 5, status: 'pending' },
+        data: { status: 'imported', gameId: 42 },
+      });
+    });
+
+    it('rolls the batch back when the item was already resolved', async () => {
+      mock.game.create.mockResolvedValue({ id: 42 });
+      mock.recognizedItem.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.commitImportBatch(5, {
+          resolved: [
+            { recognizedItemId: 1, platformId: 3, edition: null, candidate },
+          ],
+          unrecognized: [],
+          transient: [],
+        }),
+      ).rejects.toThrow('already resolved');
+    });
+
+    it('records an unrecognized item and marks the recognized item', async () => {
+      mock.unrecognizedItem.create.mockResolvedValue({ id: 9 });
+      mock.recognizedItem.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.commitImportBatch(5, {
+        resolved: [],
+        unrecognized: [
+          {
+            recognizedItemId: 2,
+            rawTitle: 'Mystery',
+            rawPlatform: 'PS4',
+            reason: 'no match',
+          },
+        ],
+        transient: [],
+      });
+
+      expect(mock.recognizedItem.updateMany).toHaveBeenCalledWith({
+        where: { id: 2, importJobId: 5, status: 'pending' },
+        data: { status: 'unrecognized', reason: 'no match' },
+      });
+      expect(mock.unrecognizedItem.create).toHaveBeenCalledWith({
+        data: {
+          importJobId: 5,
+          rawTitle: 'Mystery',
+          rawPlatform: 'PS4',
+          reason: 'no match',
+        },
+      });
+    });
+
+    it('does not create a second UnrecognizedItem when the item was already flagged', async () => {
+      mock.unrecognizedItem.create.mockResolvedValue({ id: 9 });
+      mock.recognizedItem.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.commitImportBatch(5, {
+          resolved: [],
+          unrecognized: [
+            {
+              recognizedItemId: 2,
+              rawTitle: 'Mystery',
+              rawPlatform: 'PS4',
+              reason: 'no match',
+            },
+          ],
+          transient: [],
+        }),
+      ).rejects.toThrow('already resolved');
+
       expect(mock.unrecognizedItem.create).not.toHaveBeenCalled();
     });
   });

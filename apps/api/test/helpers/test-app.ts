@@ -10,6 +10,17 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 export const TEST_USER_EMAIL = 'e2e-player@example.com';
 export const TEST_USER_PASSWORD = 'correct horse battery staple';
 
+/** The provider token type `TestingModuleBuilder.overrideProvider` accepts. */
+type ProviderToken = Parameters<
+  ReturnType<typeof Test.createTestingModule>['overrideProvider']
+>[0];
+
+/** One provider replacement applied when the test module is compiled. */
+export interface TestProviderOverride {
+  provide: ProviderToken;
+  useValue: unknown;
+}
+
 export interface TestApp {
   app: INestApplication;
   prisma: PrismaService;
@@ -17,10 +28,16 @@ export interface TestApp {
   login: () => Promise<void>;
 }
 
-export async function createTestApp(): Promise<TestApp> {
-  const moduleRef = await Test.createTestingModule({
+export async function createTestApp(
+  overrides: TestProviderOverride[] = [],
+): Promise<TestApp> {
+  const builder = Test.createTestingModule({
     imports: [AppModule],
-  }).compile();
+  });
+  for (const override of overrides) {
+    builder.overrideProvider(override.provide).useValue(override.useValue);
+  }
+  const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication({ logger: false });
   app.useGlobalPipes(createGlobalValidationPipe());
   await app.init();

@@ -30,6 +30,16 @@ export const MIME_EXTENSION: Readonly<Record<string, string>> = {
   'image/webp': '.webp',
 };
 
+/** Reverse of `MIME_EXTENSION`: stored-file extension -> mime type. */
+export const EXTENSION_MIME: Readonly<Record<string, string>> = {
+  '.jpg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+};
+
+/** Fallback mime type for an unknown stored extension (never expected). */
+export const DEFAULT_IMAGE_MIME_TYPE = 'application/octet-stream';
+
 /**
  * Multer fileFilter: reject non-JPEG/PNG/WebP with a clear 400.
  *

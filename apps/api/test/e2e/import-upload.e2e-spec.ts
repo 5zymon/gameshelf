@@ -9,6 +9,7 @@ import { MAX_UPLOAD_FILE_SIZE_BYTES } from '../../src/import-jobs/upload.options
 import { PhotoImportHandler } from '../../src/queue/photo-import.handler';
 import { PHOTO_IMPORT_QUEUE } from '../../src/queue/queue.constants';
 import { createTestApp, type TestApp } from '../helpers/test-app';
+import { createNoopPhotoImportHandler } from '../helpers/noop-photo-handler';
 import { resetDatabase } from '../helpers/reset';
 
 const connection = {
@@ -94,7 +95,12 @@ describe('Import photo upload API (e2e)', () => {
   let photoDir: string;
 
   beforeAll(async () => {
-    test = await createTestApp();
+    test = await createTestApp([
+      {
+        provide: PhotoImportHandler,
+        useValue: createNoopPhotoImportHandler(),
+      },
+    ]);
     llm = test.app.get(LlmSettingsService);
     photoDir = test.app.get(PhotoStorageService).directory;
     queue = new Queue(PHOTO_IMPORT_QUEUE, { connection, prefix: queuePrefix });

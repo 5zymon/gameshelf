@@ -19,9 +19,11 @@ ADR-002), and every item the vision model could not match is one row of
 
 The API is read-mostly: the import pipeline (tickets 3.2/3.5) writes through
 service methods on `ImportJobsService` (`createJob`, `markProcessing`,
-`markCompleted`, `markFailed`, `addUnrecognizedItem`), and the user's only
-write path is dismissal. Job _creation_ over HTTP — the multi-photo upload
-that calls `createJob` — is documented separately in the
+`saveRecognition`, `commitImportBatch`, `markCompleted`, `markFailed`,
+`addUnrecognizedItem`), and the user's only write path is dismissal. The
+per-photo worker that drives those methods is documented in
+[Photo Import Pipeline](/photo-import-pipeline.md). Job _creation_ over HTTP —
+the multi-photo upload that calls `createJob` — is documented separately in the
 [Import Photo Upload API](/import-upload-api.md).
 
 # Endpoint contract
@@ -88,9 +90,12 @@ Allowed transitions (anything else is a `409`):
 (`markProcessing`, `markCompleted`, `markFailed`) refuse to touch any job
 that is not `queued`/`processing` — a late or duplicate processor callback
 can never clobber a user dismissal. Dismissal itself is idempotent:
-re-dismissing a dismissed job is a `200` no-op. Retries of a failed import
-are **new jobs** (new rows), never re-runs of the old row (ADR-002: the
-queue's unit of work is the photo; a retry enqueues a fresh unit).
+re-dismissing a dismissed job is a `200` no-op. A **user-initiated retry**
+(ticket 3.6) enqueues a **new** `import_jobs` row, never re-runs the old one
+(ADR-002: the queue's unit of work is the photo; a retry enqueues a fresh
+unit). This is distinct from BullMQ's **automatic** retry of a transient
+failure, which re-runs the **same** row with `attempts: 3` and leaves it
+`processing` between attempts.
 
 # Completion counts
 
@@ -129,6 +134,12 @@ as unrecognized"). That is what makes trigger 3 fire for unreadable items.
 Also note: `raw_title` is `NOT NULL` in the schema while spec §4.2.3 has an
 _Unreadable_ outcome with no title — the processor must store a
 placeholder/empty string for unreadable items.
+
+The failure path also carries counts: `markFailed(jobId, errorMessage, counts?)`
+accepts the same `JobCompletionResult`, so a run that committed earlier batches
+and then failed permanently persists the counters it reached (pending items
+count as recognized) instead of leaving every column at 0. When omitted, the
+counter columns are left untouched.
 
 # Dismissal semantics
 
@@ -187,8 +198,10 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
 - **Photo upload / job creation via HTTP** (ticket 3.2) — documented in the
   [Import Photo Upload API](/import-upload-api.md); `createJob` is the service
   method it calls.
-- **Queue infrastructure** (3.1) and the **processor** (3.5) — they call
-  `markProcessing` / `markCompleted` / `markFailed` / `addUnrecognizedItem`.
+- **The processor itself** (ticket 3.5) — documented in
+  [Photo Import Pipeline](/photo-import-pipeline.md); it calls
+  `markProcessing` / `saveRecognition` / `commitImportBatch` /
+  `markCompleted` / `markFailed`.
 - **Retry endpoint** (3.6) — a retry enqueues a new job; the old row is
   never mutated.
 - **Item resolution** (pick candidate / manual add, 3.6) — dismissal is the

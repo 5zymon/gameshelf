@@ -1,36 +1,23 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import type { Job } from 'bullmq';
+import { PhotoImportPipelineService } from '../import-jobs/photo-import-pipeline.service';
 import type {
   PhotoImportJobData,
   PhotoImportJobResult,
 } from './photo-import.types';
 
 /**
- * Placeholder unit-of-work handler.
+ * BullMQ unit-of-work seam (ticket 3.5).
  *
- * Ticket 3.1 stands the queue up; the real pipeline (vision call +
- * IGDB/MobyGames matching, ADR-002) is ticket 3.5. Until then this
- * acknowledges jobs so the worker is exercised end to end. It performs no
- * catalog writes.
- *
- * This class is the seam used by tests to observe scheduling (override the
- * provider) and will be the insertion point for 3.5.
+ * The worker (`PhotoImportProcessor`) delegates here; this class forwards to
+ * the ADR-002 import pipeline. It stays a thin indirection so tests can
+ * override the provider to observe scheduling without running the pipeline.
  */
 @Injectable()
 export class PhotoImportHandler {
-  private readonly logger = new Logger(PhotoImportHandler.name);
+  constructor(private readonly pipeline: PhotoImportPipelineService) {}
 
   async handle(job: Job<PhotoImportJobData>): Promise<PhotoImportJobResult> {
-    // TODO(ticket 3.5): replace with the ADR-002 import pipeline.
-    this.logger.log(
-      `Photo import job ${String(job.id)} acknowledged (placeholder for ticket 3.5)`,
-    );
-    // No asynchronous work yet; ticket 3.5 introduces the real pipeline. The
-    // Promise keeps the async contract without an empty `await`.
-    return Promise.resolve({
-      recognizedCount: 0,
-      importedCount: 0,
-      unrecognizedCount: 0,
-    });
+    return this.pipeline.run(job);
   }
 }

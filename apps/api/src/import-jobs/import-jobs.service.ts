@@ -5,6 +5,10 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import type {
+  CatalogCandidate,
+  CatalogPlatform,
+} from '../game-catalog/game-catalog.resolver';
 import { ListImportJobsQueryDto } from './dto/list-import-jobs-query.dto';
 import {
   ImportJobDetailModel,
@@ -25,6 +29,67 @@ export interface JobCompletionResult {
   importedCount: number;
   /** Flagged items: unrecognized + unreadable. */
   unrecognizedCount: number;
+}
+
+/** One persisted recognized item as listed for batch resolution. */
+export interface PipelineRecognizedItem {
+  id: number;
+  position: number;
+  rawTitle: string;
+  rawEdition: string | null;
+  rawPlatform: string | null;
+  confidence: number;
+  status: string;
+}
+
+/** The slice of an import job the pipeline needs before it starts work. */
+export interface PipelineJobState {
+  id: number;
+  status: string;
+  declaredCount: number | null;
+  photoRef: string | null;
+  visionCompletedAt: Date | null;
+  recognizedCount: number;
+  importedCount: number;
+  unrecognizedCount: number;
+}
+
+/** One vision item persisted as a pending recognized item. */
+export interface RecognitionItemInput {
+  title: string;
+  edition: string | null;
+  platform: string | null;
+  confidence: number;
+}
+
+/** A title that resolved to a catalog candidate and can be saved. */
+export interface ResolvedImport {
+  recognizedItemId: number;
+  platformId: number;
+  /** Vision-read edition — the catalog's first-class attribute. */
+  edition: string | null;
+  candidate: CatalogCandidate;
+}
+
+/** A title that will never match; it becomes an UnrecognizedItem row. */
+export interface UnrecognizedImport {
+  recognizedItemId: number;
+  rawTitle: string;
+  rawPlatform: string | null;
+  reason: string;
+}
+
+/** A title whose external lookup failed transiently; it stays pending. */
+export interface TransientImport {
+  recognizedItemId: number;
+  reason: string;
+}
+
+/** Everything one batch resolved, committed in a single transaction. */
+export interface ImportBatchOutcome {
+  resolved: ResolvedImport[];
+  unrecognized: UnrecognizedImport[];
+  transient: TransientImport[];
 }
 
 @Injectable()
@@ -224,15 +289,35 @@ export class ImportJobsService {
     });
   }
 
-  /** queued|processing -> failed, with the reason shown to the UI (spec §4.2.7). */
+  /**
+   * queued|processing -> failed, with the reason shown to the UI (spec §4.2.7).
+   *
+   * `counts` carries the counters already reached before the failure (the
+   * pipeline computes them with `summarizeRecognizedItems`), so a permanently
+   * failed run still reports whatever it imported instead of leaving every
+   * counter column at 0. It is optional because a caller with no partial work
+   * (e.g. a job that never got past `queued`) has nothing to persist.
+   */
   async markFailed(
     jobId: number,
     errorMessage: string,
+    counts?: JobCompletionResult,
   ): Promise<ImportJobModel> {
     await this.assertTransition(jobId, ['queued', 'processing']);
     return this.prisma.importJob.update({
       where: { id: jobId },
-      data: { status: 'failed', errorMessage, completedAt: new Date() },
+      data: {
+        status: 'failed',
+        errorMessage,
+        completedAt: new Date(),
+        ...(counts
+          ? {
+              recognizedCount: counts.recognizedCount,
+              importedCount: counts.importedCount,
+              unrecognizedCount: counts.unrecognizedCount,
+            }
+          : {}),
+      },
     });
   }
 
@@ -253,6 +338,228 @@ export class ImportJobsService {
         rawPlatform: data.rawPlatform ?? null,
         reason: data.reason ?? null,
       },
+    });
+  }
+
+  // ---------- pipeline state (ticket 3.5) ----------
+
+  /** The pipeline's job snapshot, or `null` for an unknown id. */
+  async getPipelineJob(jobId: number): Promise<PipelineJobState | null> {
+    return this.prisma.importJob.findUnique({
+      where: { id: jobId },
+      select: {
+        id: true,
+        status: true,
+        declaredCount: true,
+        photoRef: true,
+        visionCompletedAt: true,
+        recognizedCount: true,
+        importedCount: true,
+        unrecognizedCount: true,
+      },
+    });
+  }
+
+  /** Resolves the legacy (no `importJobId` in the payload) photoRef path. */
+  async findJobIdByPhotoRef(photoRef: string): Promise<number | null> {
+    const job = await this.prisma.importJob.findFirst({
+      where: { photoRef },
+      orderBy: { id: 'desc' },
+      select: { id: true },
+    });
+    return job?.id ?? null;
+  }
+
+  /**
+   * Persists the single vision result and its marker in one transaction.
+   *
+   * The `visionCompletedAt: null` guard makes this a one-time write: a retry
+   * (or a duplicate call) sees the marker already set and writes nothing, so
+   * the vision call is never repeated (acceptance criterion). Returns the
+   * number of rows written (0 when recognition was already persisted).
+   */
+  async saveRecognition(
+    jobId: number,
+    items: RecognitionItemInput[],
+  ): Promise<number> {
+    return this.prisma.$transaction(async (tx) => {
+      const marker = await tx.importJob.updateMany({
+        where: { id: jobId, visionCompletedAt: null },
+        data: { visionCompletedAt: new Date() },
+      });
+      if (marker.count !== 1) {
+        return 0;
+      }
+      if (items.length > 0) {
+        await tx.recognizedItem.createMany({
+          data: items.map((item, position) => ({
+            importJobId: jobId,
+            position,
+            rawTitle: item.title,
+            rawEdition: item.edition,
+            rawPlatform: item.platform,
+            confidence: item.confidence,
+            status: 'pending',
+          })),
+          skipDuplicates: true,
+        });
+      }
+      return items.length;
+    });
+  }
+
+  /** Unresolved titles for this job, in recognition order (retry re-entry). */
+  async listPendingRecognizedItems(
+    jobId: number,
+  ): Promise<PipelineRecognizedItem[]> {
+    return this.prisma.recognizedItem.findMany({
+      where: { importJobId: jobId, status: 'pending' },
+      orderBy: { position: 'asc' },
+      select: {
+        id: true,
+        position: true,
+        rawTitle: true,
+        rawEdition: true,
+        rawPlatform: true,
+        confidence: true,
+        status: true,
+      },
+    });
+  }
+
+  /** Counts by per-item status; `status: 'pending'` implies an incomplete run. */
+  async summarizeRecognizedItems(jobId: number): Promise<JobCompletionResult> {
+    const groups = await this.prisma.recognizedItem.groupBy({
+      by: ['status'],
+      where: { importJobId: jobId },
+      _count: { _all: true },
+    });
+    let recognizedCount = 0;
+    let importedCount = 0;
+    let unrecognizedCount = 0;
+    for (const group of groups) {
+      const count = group._count._all;
+      recognizedCount += count;
+      if (group.status === 'imported') {
+        importedCount += count;
+      } else if (group.status === 'unrecognized') {
+        unrecognizedCount += count;
+      }
+    }
+    return { recognizedCount, importedCount, unrecognizedCount };
+  }
+
+  /**
+   * Maps a resolved candidate onto a seeded `Platform` row. IGDB id first
+   * (the canonical link), then name/abbreviation/alternative-name (case
+   * handled by the DB collation). Returns `null` when nothing matches — the
+   * caller flags the item rather than guessing.
+   */
+  async resolvePlatformId(
+    candidatePlatforms: CatalogPlatform[],
+    rawPlatform: string | null,
+  ): Promise<number | null> {
+    const igdbIds = candidatePlatforms
+      .map((platform) => platform.igdbId)
+      .filter((id): id is number => id !== null);
+    if (igdbIds.length > 0) {
+      const byIgdbId = await this.prisma.platform.findFirst({
+        where: { igdbId: { in: igdbIds } },
+        orderBy: { id: 'asc' },
+        select: { id: true },
+      });
+      if (byIgdbId) {
+        return byIgdbId.id;
+      }
+    }
+    const names = [
+      ...candidatePlatforms.map((platform) => platform.name),
+      rawPlatform ?? '',
+    ]
+      .map((name) => name.trim())
+      .filter((name) => name !== '');
+    for (const name of names) {
+      const match = await this.prisma.platform.findFirst({
+        where: {
+          OR: [{ name }, { abbreviation: name }, { alternativeName: name }],
+        },
+        orderBy: { id: 'asc' },
+        select: { id: true },
+      });
+      if (match) {
+        return match.id;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Commits one batch in a single MySQL transaction (never one tx per job).
+   *
+   * Matched titles create a `Game` and claim their recognized item via an
+   * `updateMany({ status: 'pending' })`; a zero-row claim throws so the whole
+   * batch rolls back — a retry can therefore never duplicate a catalog row.
+   * Flagged titles use the **same** guarded claim before creating their
+   * `UnrecognizedItem`, so a duplicate/late processing of an already-flagged
+   * item also rolls back instead of writing a second trace row.
+   */
+  async commitImportBatch(
+    jobId: number,
+    outcome: ImportBatchOutcome,
+  ): Promise<void> {
+    await this.prisma.$transaction(async (tx) => {
+      for (const item of outcome.resolved) {
+        const game = await tx.game.create({
+          data: {
+            title: item.candidate.title,
+            platformId: item.platformId,
+            edition: item.edition,
+            releaseYear: item.candidate.releaseYear,
+            publisher: item.candidate.publisher,
+            genre: item.candidate.genre,
+            coverUrl: item.candidate.coverUrl,
+            rawMetadata: JSON.stringify(item.candidate.raw),
+            enrichedAt: new Date(),
+            source: 'IGDB',
+          },
+        });
+        const claim = await tx.recognizedItem.updateMany({
+          where: {
+            id: item.recognizedItemId,
+            importJobId: jobId,
+            status: 'pending',
+          },
+          data: { status: 'imported', gameId: game.id },
+        });
+        if (claim.count === 0) {
+          throw new Error(
+            `Recognized item ${String(item.recognizedItemId)} was already resolved; rolling back the batch`,
+          );
+        }
+      }
+      for (const item of outcome.unrecognized) {
+        const claim = await tx.recognizedItem.updateMany({
+          where: {
+            id: item.recognizedItemId,
+            importJobId: jobId,
+            status: 'pending',
+          },
+          data: { status: 'unrecognized', reason: item.reason },
+        });
+        if (claim.count === 0) {
+          throw new Error(
+            `Recognized item ${String(item.recognizedItemId)} was already resolved; rolling back the batch`,
+          );
+        }
+        await tx.unrecognizedItem.create({
+          data: {
+            importJobId: jobId,
+            rawTitle: item.rawTitle,
+            rawPlatform: item.rawPlatform,
+            reason: item.reason,
+          },
+        });
+      }
     });
   }
 

@@ -90,6 +90,8 @@ model Game {
 
   platform Platform @relation(fields: [platformId], references: [id])
 
+  recognizedItems RecognizedItem[]
+
   @@index([platformId])
   @@index([edition])
   @@index([releaseYear])
@@ -119,11 +121,42 @@ model ImportJob {
   errorMessage    String?   @map("error_message") @db.Text
   createdAt       DateTime  @default(now()) @map("created_at")
   completedAt     DateTime? @map("completed_at")
+  // Set once, inside the same transaction that persists the recognized item
+  // rows (ticket 3.5). Non-null means the single vision call already ran, so a
+  // BullMQ retry never repeats it (acceptance criterion).
+  visionCompletedAt DateTime? @map("vision_completed_at")
 
   unrecognizedItems UnrecognizedItem[]
+  recognizedItems   RecognizedItem[]
 
   @@index([status])
   @@map("import_jobs")
+}
+
+// One recognized game per photo (ticket 3.5): the per-item outcome of a job,
+// keyed `(importJobId, position)`. `status` is pending -> imported |
+// unrecognized; the pending claim is what makes each item importable exactly
+// once (idempotent retry) and lets a retry query only unresolved titles.
+model RecognizedItem {
+  id          Int      @id @default(autoincrement())
+  importJobId Int      @map("import_job_id")
+  position    Int
+  rawTitle    String   @map("raw_title") @db.VarChar(255)
+  rawEdition  String?  @map("raw_edition") @db.VarChar(255)
+  rawPlatform String?  @map("raw_platform") @db.VarChar(255)
+  confidence  Float
+  status      String   @db.VarChar(16) // pending | imported | unrecognized
+  gameId      Int?     @map("game_id")
+  reason      String?  @db.Text
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  importJob ImportJob @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+  game      Game?     @relation(fields: [gameId], references: [id], onDelete: SetNull)
+
+  @@unique([importJobId, position])
+  @@index([importJobId, status])
+  @@map("recognized_items")
 }
 
 // Trace for items the vision model could not match (decision #12).

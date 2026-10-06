@@ -2,7 +2,11 @@ import {
   VisionProviderError,
   VisionUnavailableError,
 } from '../../src/settings/vision/vision.errors';
-import { photoImportFailureReason } from '../../src/queue/photo-import.failure';
+import {
+  isRetryableImportError,
+  photoImportFailureReason,
+  RetryableImportError,
+} from '../../src/queue/photo-import.failure';
 
 describe('photoImportFailureReason (unit)', () => {
   it('uses the provider error message for a VisionProviderError', () => {
@@ -38,5 +42,36 @@ describe('photoImportFailureReason (unit)', () => {
     expect(photoImportFailureReason('nope')).toBe(
       'Photo recognition failed unexpectedly',
     );
+  });
+
+  it('uses the message of a RetryableImportError', () => {
+    expect(
+      photoImportFailureReason(new RetryableImportError('temporarily down')),
+    ).toBe('temporarily down');
+  });
+});
+
+describe('isRetryableImportError (unit)', () => {
+  it('treats a RetryableImportError as retryable', () => {
+    expect(isRetryableImportError(new RetryableImportError('x'))).toBe(true);
+  });
+
+  it.each(['rate_limited', 'timeout', 'network', 'server_error'] as const)(
+    'treats a transient VisionProviderError (%s) as retryable',
+    (code) => {
+      expect(isRetryableImportError(new VisionProviderError(code))).toBe(true);
+    },
+  );
+
+  it.each(['unauthorized', 'model_not_found', 'bad_response'] as const)(
+    'treats a permanent VisionProviderError (%s) as non-retryable',
+    (code) => {
+      expect(isRetryableImportError(new VisionProviderError(code))).toBe(false);
+    },
+  );
+
+  it('treats an unknown error as non-retryable', () => {
+    expect(isRetryableImportError(new Error('boom'))).toBe(false);
+    expect(isRetryableImportError('nope')).toBe(false);
   });
 });

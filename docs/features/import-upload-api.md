@@ -78,7 +78,9 @@ cookie is required; an unauthenticated request is `401`).
 4. **Job row.** One `import_jobs` row per photo with `status = 'queued'` and
    `photo_ref` set to the stored filename.
 5. **Enqueue.** One BullMQ job per photo on the `photo-import` queue, named
-   `photo`, with payload `{ photoRef, declaredCount }`.
+   `photo`, with payload `{ photoRef, declaredCount, importJobId }` and
+   `attempts: 3` + exponential backoff (the worker retries transient failures).
+   See [Photo Import Pipeline](/photo-import-pipeline.md).
 6. **Return** the created ids immediately (`202`).
 
 # Ephemeral storage
@@ -88,9 +90,11 @@ cookie is required; an unauthenticated request is `401`).
 - The API **never serves** files from this directory. There is no static
   mount and no gallery route — the directory is a hand-off buffer between the
   upload request and the worker, not user-facing storage.
-- The import pipeline deletes each photo after processing (ticket 3.8). Until
-  then an orphaned photo can remain if enqueueing fails (`503`): the row is
-  marked `failed` and the file is cleaned up by the later deletion pass.
+- The import pipeline deletes each photo after processing completes
+  ([Photo Import Pipeline](/photo-import-pipeline.md)); the standalone sweep
+  for photos orphaned by a crash is ticket 3.8. Until then an orphaned photo
+  can remain if enqueueing fails (`503`): the row is marked `failed` and the
+  file is cleaned up by the later deletion pass.
 
 `ImportJob.photoRef` is an opaque internal filename (e.g.
 `3f2a1c9e-....jpg`). It is present in the read models for traceability but is
@@ -110,8 +114,10 @@ photos already enqueued earlier in the same request stay queued.
 # Out of scope
 
 - **Recognition / IGDB / MobyGames matching** (ticket 3.5) — the worker does
-  it; this endpoint only queues.
-- **Photo deletion** (ticket 3.8) — the pipeline's cleanup pass.
+  it; see [Photo Import Pipeline](/photo-import-pipeline.md). This endpoint only
+  queues.
+- **Photo deletion sweep** (ticket 3.8) — the pipeline deletes a photo after its
+  job completes; the sweep cleans up orphans.
 - **Retry** (ticket 3.6) and **item resolution** — see
   [Import Jobs API](/import-jobs-api.md).
 - **Thumbnails / a photo gallery** — deliberately not built; storage is

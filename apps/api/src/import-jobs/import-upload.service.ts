@@ -10,6 +10,10 @@ import { PHOTO_IMPORT_QUEUE } from '../queue/queue.constants';
 import { LlmSettingsService } from '../settings/llm-settings.service';
 import type { StartImportUploadResponseModel } from './dto/import-upload-response.model';
 import { ImportJobsService } from './import-jobs.service';
+import {
+  IMPORT_MAX_ATTEMPTS,
+  IMPORT_RETRY_BACKOFF_MS,
+} from './import-pipeline.options';
 import { PhotoStorageService } from './photo-storage.service';
 import { MAX_DECLARED_COUNT } from './upload.options';
 
@@ -82,7 +86,17 @@ export class ImportUploadService {
       const photoRef = await this.storage.store(file);
       const row = await this.jobs.createJob({ declaredCount, photoRef });
       try {
-        const job = await this.queue.add('photo', { photoRef, declaredCount });
+        const job = await this.queue.add(
+          'photo',
+          { photoRef, declaredCount, importJobId: row.id },
+          {
+            attempts: IMPORT_MAX_ATTEMPTS,
+            backoff: {
+              type: 'exponential',
+              delay: IMPORT_RETRY_BACKOFF_MS,
+            },
+          },
+        );
         jobs.push({
           id: row.id,
           jobId: String(job.id),

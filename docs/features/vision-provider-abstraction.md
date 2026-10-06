@@ -171,7 +171,7 @@ its env fallback (`<ID>_API_KEY`) and settings enum are derived automatically.
 
 # Out of scope
 
-- The recognition pipeline itself (ticket 3.5) — `PhotoImportHandler` stays a
-  placeholder.
+- The recognition pipeline itself is ticket 3.5 and now lives in
+  [Photo Import Pipeline](/photo-import-pipeline.md).
 - Anthropic/other providers, retry/backoff, rate limiting, caching, and real
   recognition accuracy.

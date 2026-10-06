@@ -8,7 +8,19 @@ import {
   PHOTO_IMPORT_QUEUE,
 } from '../../src/queue/queue.constants';
 import type { PhotoImportJobResult } from '../../src/queue/photo-import.types';
+import { createNoopPhotoImportHandler } from '../helpers/noop-photo-handler';
 import { createTestApp } from '../helpers/test-app';
+
+/**
+ * Overrides the real handler so the queue tests observe scheduling only and
+ * never run recognition, external lookups, or catalog writes.
+ */
+const NOOP_OVERRIDE = [
+  {
+    provide: PhotoImportHandler,
+    useValue: createNoopPhotoImportHandler(),
+  },
+];
 
 /**
  * The connection and key prefix used by the test's own producer queues. The
@@ -74,7 +86,7 @@ describe('Photo import queue (e2e)', () => {
   it('survives an app stop/start: a job enqueued while the API is down is processed after it starts again', async () => {
     // 1. Boot the full app (worker runs), then stop it again — a real
     //    stop/start cycle, not just a cold start.
-    const firstBoot = await createTestApp();
+    const firstBoot = await createTestApp(NOOP_OVERRIDE);
     await firstBoot.app.close();
 
     // 2. With no app running, enqueue the job. It exists only in Redis now.
@@ -84,7 +96,7 @@ describe('Photo import queue (e2e)', () => {
       expect(await job.getState()).toBe('waiting');
 
       // 3. A freshly started app must pick up the persisted job.
-      const secondBoot = await createTestApp();
+      const secondBoot = await createTestApp(NOOP_OVERRIDE);
       openApps.push(secondBoot.app);
 
       await waitFor(async () => (await job.getState()) === 'completed', 15_000);

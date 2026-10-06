@@ -5,6 +5,11 @@
 export interface PhotoImportJobData {
   photoRef: string;
   declaredCount?: number | null;
+  /**
+   * The `import_jobs` row this unit of work belongs to (ticket 3.5). Optional
+   * so legacy/backfill jobs still resolve their row by `photoRef`.
+   */
+  importJobId?: number;
 }
 
 /**
