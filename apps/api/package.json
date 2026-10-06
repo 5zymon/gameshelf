@@ -18,7 +18,9 @@
     "db:deploy": "prisma migrate deploy",
     "db:generate": "prisma generate",
     "db:migrate:check": "prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "user:create": "ts-node -P tsconfig.json src/cli/users.ts create",
+    "user:passwd": "ts-node -P tsconfig.json src/cli/users.ts passwd"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.12",
@@ -49,6 +51,7 @@
     "prisma": "7.10.0",
     "supertest": "^7.3.1",
     "ts-jest": "^29.4.14",
+    "ts-node": "^10.9.2",
     "typescript": "^5.7.3"
   }
 }

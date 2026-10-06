@@ -63,12 +63,14 @@ from the table and matches the ticket.
 
 # Shared creation logic
 
-`POST /setup` and the (future) CLI `user:create` both funnel through
+`POST /setup` and the CLI `user:create` both funnel through
 `UsersService.prepareUser()`, the single source of truth for email
-normalization (trim + lowercase), blank/empty checks, and Argon2id hashing.
-`createFirstUser()` adds the atomic emptiness guard; `createUser()` performs a
-plain insert whose duplicate-email violation (`P2002`) maps to `409`. The
-database unique index `users.email` enforces uniqueness on both paths.
+normalization (trim + lowercase), max-length bounds, blank/empty checks, and
+Argon2id hashing. `createFirstUser()` adds the atomic emptiness guard;
+`createUser()` performs a plain insert whose duplicate-email violation
+(`P2002`) maps to `409`. The database unique index `users.email` enforces
+uniqueness on both paths. See [User CLI](/user-cli.md) for the operator
+commands that use this same path.
 
 # Logging
 
@@ -84,6 +86,7 @@ The password is never logged, and rejected attempts are not logged.
 
 - Rate limiting on the unauthenticated setup routes.
 - Web client wiring.
-- CLI `user:create` (ticket 2.7) — it reuses the same service methods.
+- CLI account provisioning — shipped as [User CLI](/user-cli.md)
+  (`user:create` / `user:passwd`); it reuses the same service methods.
 - Password policy/strength rules and multi-user roles (single permission
   level — decision #14).
