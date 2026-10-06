@@ -23,6 +23,7 @@ import {
 
 const TOKEN_URL = IGDB_TOKEN_URL_DEFAULT;
 const GAMES_URL = 'https://api.igdb.com/v4/games';
+const PLATFORMS_URL = 'https://api.igdb.com/v4/platforms';
 
 function headers(map: Record<string, string>): {
   get(name: string): string | null;
@@ -476,6 +477,71 @@ describe('IgdbClient (unit)', () => {
     expect(health.status).toBe('error');
     expect(health.token).toBe('error');
     expect(health.message).toContain('IGDB_CLIENT_ID');
+  });
+});
+
+describe('IgdbClient.fetchPlatforms (unit)', () => {
+  it('posts the exact platform query to /v4/platforms', async () => {
+    const { client, http } = clientWith(() =>
+      Promise.resolve(httpResponse(200, [{ id: 1, name: 'PC' }])),
+    );
+
+    await client.fetchPlatforms();
+
+    const request = http.requests.find((r) => r.url === PLATFORMS_URL);
+    expect(request?.body).toBe(
+      'fields name,abbreviation,alternative_name,platform_family,slug; limit 500;',
+    );
+    expect(request?.headers['Client-ID']).toBe('client-id');
+    expect(request?.headers.Authorization).toBe('Bearer token-1');
+  });
+
+  it('parses valid rows and filters malformed entries', async () => {
+    const { client } = clientWith(() =>
+      Promise.resolve(
+        httpResponse(200, [
+          { id: 1, name: 'PC', abbreviation: 'PC', platform_family: 4 },
+          { id: 2 },
+          { name: 'no id' },
+          'nope',
+        ]),
+      ),
+    );
+
+    await expect(client.fetchPlatforms()).resolves.toEqual([
+      { id: 1, name: 'PC', abbreviation: 'PC', platform_family: 4 },
+    ]);
+  });
+
+  it('throws a permanent IgdbError when the body is not an array', async () => {
+    const { client } = clientWith(() =>
+      Promise.resolve(httpResponse(200, { message: 'nope' })),
+    );
+
+    const error = await client.fetchPlatforms().catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(IgdbError);
+    expect((error as IgdbError).retryable).toBe(false);
+    expect((error as IgdbError).message).toBe(
+      'IGDB returned an unexpected response',
+    );
+  });
+
+  it('routes through the limiter (token plus one platforms request)', async () => {
+    const limiter = permissiveLimiter();
+    const scheduleSpy = jest.spyOn(limiter, 'schedule');
+    const http = new FakeHttpClient((request) =>
+      request.url === TOKEN_URL
+        ? Promise.resolve(
+            httpResponse(200, { access_token: 'token-1', expires_in: 3600 }),
+          )
+        : Promise.resolve(httpResponse(200, [])),
+    );
+    const client = new IgdbClient(http, config(), limiter);
+
+    await client.fetchPlatforms();
+
+    expect(scheduleSpy).toHaveBeenCalledTimes(2);
   });
 });
 

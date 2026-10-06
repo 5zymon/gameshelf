@@ -61,6 +61,7 @@ model Platform {
   name            String  @unique @db.VarChar(255)
   abbreviation    String? @db.VarChar(255)
   alternativeName String? @map("alternative_name") @db.VarChar(255)
+  platformFamily  Int?    @map("platform_family")
   igdbId          Int?    @map("igdb_id")
   slug            String  @unique @db.VarChar(255)
 

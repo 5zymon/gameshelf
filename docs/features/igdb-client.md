@@ -4,7 +4,7 @@ title: IGDB Client & Rate Limiter
 description: One IGDB client that authenticates via Twitch client credentials, caches/refreshes the token, funnels every call through a central 4 req/s / 8-concurrent limiter, backs off on 429, and exposes an unauthenticated health probe.
 tags: [igdb, external-api, oauth, rate-limit, health]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T15:00:00Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T14:49:32Z }
 ---
 
 # Overview
@@ -19,6 +19,8 @@ The photo import pipeline resolves every recognized title against IGDB (ticket
 - funnels **all** IGDB traffic through one central limiter (4 requests per
   rolling second, at most 8 concurrent, bounded queue);
 - retries an upstream `429` internally with bounded exponential backoff;
+- fetches the full canonical platform list in one `POST /v4/platforms` page for
+  the [Platforms API](/platforms-api.md) sync command;
 - exposes a non-throwing `GET /health/igdb` connectivity/token probe.
 
 The client is consumed by [Photo Import Pipeline](/photo-import-pipeline.md)
@@ -125,12 +127,26 @@ The endpoint returns HTTP `200` for both `ok` and `error`, unlike
 [`GET /health/queue`](/photo-import-pipeline.md), which is `503` on failure:
 IGDB being unreachable is a reportable state, not a reason to fail the probe.
 
+# Platform list fetch
+
+`fetchPlatforms()` (ticket 4.2) fetches the canonical platform list in **one**
+`POST https://api.igdb.com/v4/platforms` with the body
+`fields name,abbreviation,alternative_name,platform_family,slug; limit 500;`.
+It reuses the cached token and the central limiter and retries a `429` exactly
+like `searchGames`; a non-array body is a permanent `IgdbError`. Rows without a
+numeric `id` and string `name` are filtered out. The result is consumed by the
+[Platforms API](/platforms-api.md) sync command to populate/refresh the local
+`platforms` table (matching PS5/PlayStation 5 and storing `platform_family`);
+it is deliberately **not** called on a per-game import.
+
 # Testing
 
 All suites fake the HTTP seam (`IgdbHttpClient`) and make no external call:
 `igdb.client.spec.ts` (token cache/refresh, single-flight acquisition, bootstrap
 warm-up, token URL default/override, limiter routing, 429 backoff and
-Retry-After, exhaustion, secret non-leakage, health outcomes),
+Retry-After, exhaustion, secret non-leakage, health outcomes, and platform-list
+fetch — exact request body, malformed-row filtering, non-array error, limiter
+routing),
 `igdb-rate-limiter.spec.ts` (4/s window, 8 concurrent, slot release, bounded
 queue, `activeCount`), `igdb-health.service.spec.ts`,
 `igdb-health.controller.spec.ts`, and `igdb-health.e2e-spec.ts` (unauthenticated
@@ -142,5 +158,3 @@ queue, `activeCount`), `igdb-health.service.spec.ts`,
 - Multi-instance sharing: the limiter and token cache are per process, so the
   app assumes a single API instance (or accepts that each instance enforces its
   own limits).
-- Prisma seed script (`apps/api/prisma/igdb-platforms.mjs`) honoring
-  `IGDB_TOKEN_URL`.

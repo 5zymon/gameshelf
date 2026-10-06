@@ -1,10 +1,10 @@
 ---
 type: Feature
 title: Platforms API
-description: Platform CRUD (GET/POST/PATCH/DELETE /platforms) with per-platform game counts and the canonical IGDB platform seed.
+description: Platform CRUD (GET/POST/PATCH/DELETE /platforms) with per-platform game counts and the canonical IGDB platform list reconciled locally by an operator sync command.
 tags: [api, platforms, catalog]
 status: stable
-generated: { by: opencode/home-model, at: 2026-10-05T16:44:00Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T14:49:32Z }
 ---
 
 # Overview
@@ -13,8 +13,10 @@ The platforms API manages the catalog's platform reference list (spec §4.6):
 list, create, rename, and delete platforms. Every response carries the
 platform's `gameCount`, so the platforms view can show how many games sit on
 each platform without extra requests. The canonical IGDB platform list is
-loaded once as a committed seed data-migration and can be regenerated with a
-documented script (see [Canonical platform list](#canonical-platform-list)).
+**fetched once and stored locally** by an operator-run sync command
+(`npm run platforms:sync`), not by a committed seed migration; per-game imports
+read the local table only (see
+[Canonical platform list](#canonical-platform-list)).
 
 # Endpoint contract
 
@@ -34,15 +36,17 @@ documented script (see [Canonical platform list](#canonical-platform-list)).
   "name": "PlayStation 5",
   "abbreviation": "PS5",
   "alternativeName": "PS5",
+  "platformFamily": 1,
   "igdbId": 130,
   "slug": "playstation-5",
   "gameCount": 12
 }
 ```
 
-`abbreviation`, `alternativeName`, and `igdbId` are `null` for custom
-platforms and for canonical platforms that IGDB does not carry those fields
-for.
+`abbreviation`, `alternativeName`, `platformFamily`, and `igdbId` are `null`
+for custom platforms and for canonical platforms that IGDB does not carry those
+fields for. `platformFamily` is IGDB's platform-family reference id, stored
+faithfully and not used for matching.
 
 # Duplicate name (409)
 
@@ -78,9 +82,9 @@ maps it to the same `409`.
 # Rename semantics
 
 `PATCH /platforms/:id` takes a required `name` plus optional canonical fields
-(`abbreviation`, `alternativeName`, `igdbId`) — the IGDB integration (ticket
-4.2) writes its matching results through this endpoint. An explicit `null`
-clears a field; omitting it leaves it untouched.
+(`abbreviation`, `alternativeName`, `igdbId`). An explicit `null` clears a
+field; omitting it leaves it untouched. (The sync command writes the canonical
+link directly through `PlatformsSyncService`, not through this endpoint.)
 
 - The rename changes only the displayed name. **The slug is never rewritten**
   (spec §4.6.4), so `slug` is stable across renames and existing game rows
@@ -97,8 +101,8 @@ clears a field; omitting it leaves it untouched.
 - On collision the service appends `-2`, `-3`, … until a free slug is found.
   A concurrent create that snipes the reserved slug is retried with a fresh
   reservation (up to 3 attempts, then a `500`).
-- Slugs are **never rewritten afterwards** — neither rename nor the seed
-  migration touches them, so a stable slug survives renames and re-seeds.
+- Slugs are **never rewritten afterwards** — neither rename nor the platform
+  sync touches them, so a stable slug survives renames and re-syncs.
 
 # Game counts
 
@@ -113,36 +117,64 @@ clears a field; omitting it leaves it untouched.
 
 # Canonical platform list
 
-Decision (settles the platform-list open question in ADR-003): the canonical
-IGDB platform list is loaded by a **committed seed data-migration**, not by a
-lazy first-run load. Rationale: the list is reference data that every
-environment (dev, CI, production) must have identically, and a committed
-migration is reviewable, repeatable, and visible in `migrate deploy`.
+Decision (settles the platform-list open question in ADR-003; **supersedes** the
+earlier committed-seed-migration decision): the canonical IGDB platform list is
+**populated lazily and refreshed by an operator-run command**, not by a
+committed seed data-migration. Rationale: IGDB credentials are not present in
+every environment, matching must reconcile against whatever rows that
+environment already has (custom platforms included), and the same command
+doubles as the documented refresh path. No seed migration is committed.
 
-- Seed: `apps/api/prisma/migrations/<ts>_seed_igdb_platforms/migration.sql` —
-  one idempotent `INSERT … ON DUPLICATE KEY UPDATE` per platform, keyed on
-  the unique `name` (ci collation). The `UPDATE` clause refreshes
-  `abbreviation`, `alternative_name`, and `igdb_id` but **never `slug`**, so
-  existing custom slugs survive a re-seed. The initial seed migration is
-  generated and committed once IGDB credentials are available (the script
-  above is the single source for its content).
-- Regenerate: `npm run db:platforms:fetch`
-  (`apps/api/prisma/igdb-platforms.mjs`) fetches
-  `https://api.igdb.com/v4/platforms` (fields `name`, `abbreviation`,
-  `alternative_name`, `slug`; paginated at 500) using
-  `IGDB_CLIENT_ID` / `IGDB_CLIENT_SECRET` from the repo-root `.env`, and
-  prints the migration SQL to stdout. Commit it as a new migration:
+Refresh with:
 
-  ```sh
-  ts=$(date -u +%Y%m%d%H%M%S)
-  mkdir -p "apps/api/prisma/migrations/${ts}_seed_igdb_platforms"
-  npm run db:platforms:fetch --silent > "apps/api/prisma/migrations/${ts}_seed_igdb_platforms/migration.sql"
-  npm run db:migrate
-  ```
+```sh
+npm run platforms:sync
+```
 
-- The spec's "refresh from Settings" (§4.6.1) is a later-stage concern: the
-  refresh endpoint will re-run this same fetch-and-upsert flow, so the seed
-  migration is the canonical format it writes.
+The command (`apps/api/src/cli/platforms.ts` → `PlatformsSyncService`) fetches
+the whole list in **one** `POST https://api.igdb.com/v4/platforms` call through
+the shared [IGDB Client & Rate Limiter](/igdb-client.md) (fields `name`,
+`abbreviation`, `alternative_name`, `platform_family`, `slug`; `limit 500`),
+reconciles it against the local `platforms` table, and prints one summary line:
+
+```
+Platforms synced: fetched=<n> created=<n> updated=<n> unchanged=<n>
+```
+
+- IGDB ids are stored in `platforms.igdb_id`; the family reference id in
+  `platforms.platform_family`.
+- `name` and `slug` are **never rewritten**, so custom names and stable slugs
+  survive a sync. The run is idempotent: a second run creates nothing and
+  reports every row `unchanged`.
+- Missing credentials or any upstream failure print `Error: …` and exit
+  non-zero without touching the database.
+- The command is operator-run; concurrent runs could race on a slug/name
+  insert, but because the operation is idempotent a retry is safe.
+
+## Matching rules
+
+`findPlatformMatch` (`apps/api/src/platforms/platform-match.ts`) is the single
+matcher shared by the sync command and the per-game import:
+
+- **Anchored equality only**, applied to whole normalized
+  names/abbreviations/alternative names — no fuzzy or containment matching, so
+  `PlayStation 4` never force-matches `PlayStation 5`.
+- Normalization is case-, diacritic-, punctuation-, and whitespace-insensitive
+  (`Święta` → `swieta`, `PlayStation-5` → `playstation 5`) and expands `&` to
+  `and`.
+- The first input whose key is known wins (candidate order is respected).
+- A key shared by two distinct platform ids is treated as **ambiguous** and
+  never matched; blank keys are skipped.
+- An unknown platform is created by the sync; a per-game import never creates
+  one.
+
+Because the list is stored locally, per-game imports make **zero**
+platform-list calls: `resolvePlatformId` reads the local `platforms` table (in
+one query) and then matches — it never fetches IGDB.
+
+The spec's "refresh from Settings" (§4.6.1) is a later-stage concern; the
+documented refresh today is `npm run platforms:sync`. When the endpoint is
+built it will re-run this same reconcile flow.
 
 # 400 semantics
 
@@ -171,5 +203,6 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
   concern.
 - **The platforms view** (counts + toggle for all reference platforms) —
   frontend; this API serves the data it needs.
-- **The Settings "refresh platforms" endpoint** — later stage (see
+- **The Settings "refresh platforms" endpoint** — later stage; today's
+  documented refresh is the `npm run platforms:sync` command (see
   [Canonical platform list](#canonical-platform-list)).

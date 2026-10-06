@@ -21,6 +21,9 @@ export const IGDB_CLIENT_ID_ENV = 'IGDB_CLIENT_ID';
 export const IGDB_CLIENT_SECRET_ENV = 'IGDB_CLIENT_SECRET';
 
 const IGDB_GAMES_URL = 'https://api.igdb.com/v4/games';
+const IGDB_PLATFORMS_URL = 'https://api.igdb.com/v4/platforms';
+const IGDB_PLATFORMS_QUERY =
+  'fields name,abbreviation,alternative_name,platform_family,slug; limit 500;';
 
 /** Raw IGDB game shape (only the fields the query asks for). */
 export interface IgdbGame {
@@ -31,6 +34,19 @@ export interface IgdbGame {
   involved_companies?: { company?: { name?: string } }[];
   genres?: { name?: string }[];
   platforms?: { id?: number; name?: string; abbreviation?: string }[];
+}
+
+/**
+ * Raw IGDB platform shape (ticket 4.2). `platform_family` is IGDB's
+ * reference id for the platform family, stored faithfully but not matched on.
+ */
+export interface IgdbPlatform {
+  id: number;
+  name: string;
+  abbreviation?: string;
+  alternative_name?: string;
+  platform_family?: number;
+  slug?: string;
 }
 
 /** Connectivity/token status surfaced by `GET /health/igdb`. */
@@ -85,6 +101,25 @@ export class IgdbClient implements OnApplicationBootstrap {
       throw new IgdbError(false, 'IGDB returned an unexpected response');
     }
     return body.filter(isIgdbGame);
+  }
+
+  /**
+   * Fetches the full canonical IGDB platform list in exactly one request
+   * (ticket 4.2). Reuses the cached token and the central rate limiter, and
+   * retries a 429 internally just like `searchGames`.
+   */
+  async fetchPlatforms(): Promise<IgdbPlatform[]> {
+    const token = await this.getToken();
+    const response = await this.request(
+      IGDB_PLATFORMS_URL,
+      token,
+      IGDB_PLATFORMS_QUERY,
+    );
+    const body = await this.json(response);
+    if (!Array.isArray(body)) {
+      throw new IgdbError(false, 'IGDB returned an unexpected response');
+    }
+    return body.filter(isIgdbPlatform);
   }
 
   /**
@@ -323,6 +358,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isIgdbGame(value: unknown): value is IgdbGame {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'number' &&
+    typeof value.name === 'string'
+  );
+}
+
+function isIgdbPlatform(value: unknown): value is IgdbPlatform {
   return (
     isRecord(value) &&
     typeof value.id === 'number' &&

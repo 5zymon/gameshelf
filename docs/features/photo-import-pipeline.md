@@ -4,7 +4,7 @@ title: Photo Import Pipeline
 description: The BullMQ worker's per-photo pipeline — one vision call, external validation, per-batch MySQL transactions, retry-only-unresolved, and photo deletion after completion.
 tags: [import, worker, bullmq, igdb, vision]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T14:35:00Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T14:49:32Z }
 ---
 
 # Overview
@@ -161,19 +161,25 @@ with a single IGDB implementation, `IgdbGameCatalogResolver`:
   exhausted — becomes `transient` and is retried by the job; a 401/403 or
   malformed query becomes `unrecognized`, and no match becomes `unrecognized`.
 
-A matched candidate is mapped to a seeded `Platform` row (IGDB id first, then
-name/abbreviation/alternative name). When no seeded platform matches, the item
-is flagged **unrecognized** with the stable reason token
+A matched candidate is mapped to a local `Platform` row: the candidate's IGDB
+id first, then an anchored, equality-only match over the candidate's
+name/abbreviation and the raw platform string against every platform's
+name/abbreviation/alternative name (case-, diacritic-, punctuation-, and
+whitespace-insensitive, so `PS5` and `PlayStation 5` resolve to the same row;
+near-misses never match). Matching makes **no** IGDB platform-list call and
+never creates a platform — the list is refreshed out of band with
+`npm run platforms:sync` ([Platforms API](/platforms-api.md)). When no platform
+matches, the item is flagged **unrecognized** with the stable reason token
 `platform_not_in_catalog` (exported as `PLATFORM_NOT_IN_CATALOG_REASON`).
 
-Trade-off: the status machine has no separate "needs platform seed" state, so a
-catalog match whose platform is not seeded is treated as an unrecognized item
-and surfaces as `needs_attention` for user review. This is deliberate — the
-alternative would be silently dropping a real game — but it means an incomplete
-platform seed (e.g. the initial IGDB platform seed is still pending) shows up as
-review noise. The `reason` is a fixed, UI-translatable token rather than prose,
-so the UI can render a dedicated message and the value stays stable if wording
-changes.
+Trade-off: the status machine has no separate "needs platform sync" state, so a
+catalog match whose platform is not in the local table is treated as an
+unrecognized item and surfaces as `needs_attention` for user review. This is
+deliberate — the alternative would be silently dropping a real game — but it
+means a platform list that has not been synced yet (for example before the
+first `npm run platforms:sync`) shows up as review noise. The `reason` is a
+fixed, UI-translatable token rather than prose, so the UI can render a
+dedicated message and the value stays stable if wording changes.
 
 The MobyGames fallback (ticket 4.5) and IGDB multiquery batching (ticket 4.3)
 plug into the same port.
