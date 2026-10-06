@@ -1,3 +1,4 @@
+import { getQueueToken } from '@nestjs/bullmq';
 import type { INestApplication } from '@nestjs/common';
 import { existsSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -8,6 +9,10 @@ import type {
   CatalogResolution,
 } from '../../src/game-catalog/game-catalog.resolver';
 import { GameCatalogResolver } from '../../src/game-catalog/game-catalog.resolver';
+import {
+  ImportJobsService,
+  type ImportBatchOutcome,
+} from '../../src/import-jobs/import-jobs.service';
 import { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
 import { PhotoImportHandler } from '../../src/queue/photo-import.handler';
 import { RetryableImportError } from '../../src/queue/photo-import.failure';
@@ -34,6 +39,18 @@ function clearPhotoDir(dir: string): void {
     throw new Error(`Refusing to delete photo directory "${dir}"`);
   }
   rmSync(dir, { recursive: true, force: true });
+}
+
+async function waitFor(
+  predicate: () => Promise<boolean>,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await predicate()) return;
+    await new Promise((done) => setTimeout(done, 50));
+  }
+  throw new Error(`condition not met within ${String(timeoutMs)}ms`);
 }
 
 function recognized(title: string): RecognizedItem {
@@ -332,5 +349,179 @@ describe('Photo import pipeline (e2e)', () => {
     expect(game.title).toBe('Validated Title');
     expect(game.source).toBe('IGDB');
     expect(game.enrichedAt).not.toBeNull();
+  });
+
+  describe('ticket 3.9 retry-semantics (ADR-002 gaps)', () => {
+    it('processes an enqueued photo through the real BullMQ worker with stubbed vision and catalog', async () => {
+      const { id, photoRef } = await seedJob();
+      vision.recognize.mockResolvedValue({
+        items: [recognized('A'), recognized('B')],
+        countVisible: 2,
+      });
+      resolver.resolve.mockImplementation((item: RecognizedItem) =>
+        Promise.resolve({ kind: 'matched', candidate: candidate(item.title) }),
+      );
+
+      const appQueue = test.app.get<Queue<PhotoImportJobData>>(
+        getQueueToken(PHOTO_IMPORT_QUEUE),
+      );
+      const job = await appQueue.add('photo', { photoRef, importJobId: id });
+      await waitFor(async () => (await job.getState()) === 'completed', 15_000);
+      const finished = await appQueue.getJob(String(job.id));
+
+      expect(await test.prisma.game.count()).toBe(2);
+      expect(
+        await test.prisma.recognizedItem.count({
+          where: { status: 'imported' },
+        }),
+      ).toBe(2);
+      const row = await test.prisma.importJob.findUniqueOrThrow({
+        where: { id },
+      });
+      expect(row.status).toBe('done');
+      expect(row.recognizedCount).toBe(2);
+      expect(row.importedCount).toBe(2);
+      expect(row.unrecognizedCount).toBe(0);
+      expect(existsSync(join(photoDir, photoRef))).toBe(false);
+      expect(vision.recognize).toHaveBeenCalledTimes(1);
+      expect(resolver.resolve).toHaveBeenCalledTimes(2);
+      expect(finished?.returnvalue).toEqual({
+        recognizedCount: 2,
+        importedCount: 2,
+        unrecognizedCount: 0,
+      });
+    }, 20_000);
+
+    it('commits the first batch of 10 when a later title fails, out of 20 recognized', async () => {
+      const { id, photoRef } = await seedJob();
+      const titles = Array.from(
+        { length: 20 },
+        (_unused, index) => `G${String(index)}`,
+      );
+      vision.recognize.mockResolvedValue({
+        items: titles.map(recognized),
+        countVisible: 20,
+      });
+      resolver.resolve.mockImplementation((item: RecognizedItem) => {
+        const n = Number(item.title.slice(1));
+        if (n === 12) {
+          return Promise.reject(new Error('worker killed mid-job'));
+        }
+        return Promise.resolve({
+          kind: 'matched',
+          candidate: candidate(item.title),
+        });
+      });
+
+      await expect(
+        app.get(PhotoImportHandler).handle(makeJob(id, photoRef, 2, 3)),
+      ).rejects.toThrow('worker killed mid-job');
+
+      // The first batch (10) committed; the second never reached its commit, so
+      // its in-flight G10/G11 resolutions were rolled back with the batch.
+      expect(await test.prisma.game.count()).toBe(10);
+      expect(
+        await test.prisma.recognizedItem.count({
+          where: { status: 'imported' },
+        }),
+      ).toBe(10);
+      expect(
+        await test.prisma.recognizedItem.count({
+          where: { status: 'pending' },
+        }),
+      ).toBe(10);
+      const job = await test.prisma.importJob.findUniqueOrThrow({
+        where: { id },
+      });
+      expect(job.status).toBe('failed');
+      expect(job.recognizedCount).toBe(20);
+      expect(job.importedCount).toBe(10);
+      expect(job.unrecognizedCount).toBe(0);
+      expect(resolver.resolve).toHaveBeenCalledTimes(13);
+      expect(existsSync(join(photoDir, photoRef))).toBe(true);
+    });
+
+    it('never creates a duplicate game when the same batch is committed twice (pending claim)', async () => {
+      const { id } = await seedJob();
+      const platform = await test.prisma.platform.findFirstOrThrow({
+        where: { igdbId: PLATFORM_IGDB_ID },
+      });
+      const item = await test.prisma.recognizedItem.create({
+        data: {
+          importJobId: id,
+          position: 0,
+          rawTitle: 'A',
+          confidence: 0.9,
+          status: 'pending',
+        },
+      });
+      const importJobs = app.get(ImportJobsService);
+      const outcome: ImportBatchOutcome = {
+        resolved: [
+          {
+            recognizedItemId: item.id,
+            platformId: platform.id,
+            edition: null,
+            candidate: candidate('A'),
+          },
+        ],
+        unrecognized: [],
+        transient: [],
+      };
+
+      await importJobs.commitImportBatch(id, outcome);
+      await expect(importJobs.commitImportBatch(id, outcome)).rejects.toThrow(
+        RetryableImportError,
+      );
+
+      expect(await test.prisma.game.count()).toBe(1);
+      expect(
+        await test.prisma.recognizedItem.count({
+          where: { status: 'imported' },
+        }),
+      ).toBe(1);
+    });
+
+    it('ends needs_attention with declaredCountMismatch when the model finds fewer than declared', async () => {
+      const { id, photoRef } = await seedJob(20);
+      const titles = Array.from(
+        { length: 12 },
+        (_unused, index) => `G${String(index)}`,
+      );
+      vision.recognize.mockResolvedValue({
+        items: titles.map(recognized),
+        countVisible: 12,
+      });
+      resolver.resolve.mockImplementation((item: RecognizedItem) =>
+        Promise.resolve({ kind: 'matched', candidate: candidate(item.title) }),
+      );
+
+      const result = await app
+        .get(PhotoImportHandler)
+        .handle(makeJob(id, photoRef));
+
+      expect(result).toEqual({
+        recognizedCount: 12,
+        importedCount: 12,
+        unrecognizedCount: 0,
+      });
+      const job = await test.prisma.importJob.findUniqueOrThrow({
+        where: { id },
+      });
+      expect(job.status).toBe('needs_attention');
+      expect(job.declaredCount).toBe(20);
+      expect(job.recognizedCount).toBe(12);
+
+      await test.login();
+      const res = await test.request.get(`/import-jobs/${String(id)}`);
+      expect(res.status).toBe(200);
+      const body = res.body as {
+        declaredCountMismatch: boolean;
+        needsAttention: boolean;
+      };
+      expect(body.declaredCountMismatch).toBe(true);
+      expect(body.needsAttention).toBe(true);
+      expect(existsSync(join(photoDir, photoRef))).toBe(false);
+    });
   });
 });
