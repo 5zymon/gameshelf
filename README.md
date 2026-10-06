@@ -134,13 +134,15 @@ signup page or link either; that is enforced by the frontend ticket.
 
 The API has a two-tier Jest suite (`apps/api/jest.config.js`), run from the repository root:
 
-| Command             | What it runs                                                                        |
-| ------------------- | ----------------------------------------------------------------------------------- |
-| `npm run test`      | Both tiers (unit, then e2e)                                                         |
-| `npm run test:unit` | Unit tests only — services with a mocked `PrismaService`, **no database needed**    |
-| `npm run test:e2e`  | E2E tests only — a real Nest app (supertest) against a real MySQL **test** database |
+| Command             | What it runs                                                                                         |
+| ------------------- | ---------------------------------------------------------------------------------------------------- |
+| `npm run test`      | Both tiers (unit, then e2e)                                                                          |
+| `npm run test:unit` | Unit tests only — services with a mocked `PrismaService`, **no database needed**                     |
+| `npm run test:e2e`  | E2E tests only — a real Nest app (supertest) against a real MySQL **test** database and a real Redis |
 
 (`test:unit` / `test:e2e` are `apps/api` workspace scripts; from the root use `npm run test:unit --workspace apps/api` etc., or `task test` for the full suite.)
+
+The e2e tier boots the full `AppModule`, which creates the BullMQ photo-import worker on start (ADR-002) — so e2e requires a reachable Redis in addition to MySQL (`docker compose up -d mysql redis`). The queue spec (`photo-import-queue.e2e-spec.ts`) obliterates the queue between cases. The suite runs under its own Redis key prefix (`REDIS_QUEUE_PREFIX=bull-e2e`, set in `test/setup-env.ts`), so it shares the Redis server without sharing the queue keyspace: it can run while `npm run dev` is up, and neither side sees or wipes the other's jobs.
 
 The Jest scripts set `NODE_OPTIONS=--experimental-vm-modules` because `@nestjs/schedule` is ESM-only while ts-jest runs in CommonJS mode. This is test-only and does not affect runtime.
 
@@ -170,7 +172,7 @@ The e2e tier is **re-runnable**: before the suite it applies the committed migra
 | Apply migrations      | `npm run db:deploy`        | `prisma migrate deploy` against a throwaway MySQL service container |
 | Migration drift check | `npm run db:migrate:check` | Fail if `schema.prisma` and the deployed database have diverged     |
 
-**Pinned versions.** Node is pinned to **24.21.0** (kept in sync with `.nvmrc` and `engines.node` in `package.json`); the MySQL service container is pinned to **8.4** per ADR-001, with throwaway credentials that are discarded with the run.
+**Pinned versions.** Node is pinned to **24.21.0** (kept in sync with `.nvmrc` and `engines.node` in `package.json`); the MySQL service container is pinned to **8.4** per ADR-001, with throwaway credentials that are discarded with the run. A **redis:7.4** service (ADR-002, AOF + `noeviction`) backs the BullMQ queue for the e2e tier.
 
 **Failure semantics.** Any lint error or type error fails the run — type errors are never warnings-only (`tsc --noEmit` plus error-level typed ESLint rules). A schema change without a committed migration fails the drift check, because the deployed state no longer matches `schema.prisma`.
 
@@ -324,36 +326,54 @@ docker compose down && rm -rf data/redis
 
 ### Connection settings
 
-`REDIS_HOST` and `REDIS_PORT` from `.env` (defaults: `localhost` / `6379`). `REDIS_URL` is also available in `.env.example` for convenience.
+The BullMQ queue connects using **only** `REDIS_HOST` and `REDIS_PORT` from `.env` (defaults: `localhost` / `6379`), per ADR-002. `REDIS_URL` is present in `.env.example` for convenience but is **not read by the application** — setting it has no effect on the queue connection. An invalid `REDIS_PORT` (not a plain decimal, or outside 1–65535) fails startup.
+
+`REDIS_QUEUE_PREFIX` (default `bull`, BullMQ's own default) namespaces the queue's Redis keys (`"<prefix>:<queue>:..."`). It is a keyspace namespace, not a connection setting — host and port remain the only connection inputs. Tests use a separate prefix so they cannot touch a running dev queue.
+
+### Worker restart and shutdown
+
+Queued jobs live in Redis, so they survive an API restart: stop the API, enqueue (jobs stay `waiting`), start it again, and the worker drains them.
+
+Shutdown is deterministic even when Redis is unreachable. `PhotoImportProcessor.beforeApplicationShutdown` force-closes the BullMQ worker (`worker.close(true)`) before Nest runs `@nestjs/bullmq`'s own shutdown, which otherwise waits on the reconnecting blocking connection forever. This is what lets `SIGTERM` terminate the process promptly during a Redis outage instead of hanging until `SIGKILL`.
+
+Manual verification performed (compiled app, Redis **down** on `REDIS_PORT=6399`):
+
+```bash
+REDIS_PORT=6399 API_PORT=3999 node apps/api/dist/main.js &
+kill -TERM $!        # process exits in well under a second
+```
+
+Measured on the compiled app: **~0.1 s** to exit after the fix, versus **still running after 25 s** (then `SIGKILL`ed) on the pre-fix build.
 
 ## Environment variables
 
 All variables live in a single root `.env` file (see `.env.example`):
 
-| Variable              | Used by    | Purpose                                                           |
-| --------------------- | ---------- | ----------------------------------------------------------------- |
-| `NODE_ENV`            | both       | Runtime environment                                               |
-| `API_PORT`            | `apps/api` | API listen port (default `3001`)                                  |
-| `API_HOST`            | `apps/api` | API bind address                                                  |
-| `WEB_PORT`            | `apps/web` | Web dev server port (default `3000`)                              |
-| `NEXT_PUBLIC_API_URL` | `apps/web` | Browser-facing API base URL                                       |
-| `MYSQL_HOST`          | `apps/api` | MySQL host (default `localhost`)                                  |
-| `MYSQL_PORT`          | `apps/api` | MySQL port (default `3306`)                                       |
-| `MYSQL_DATABASE`      | `apps/api` | Database name (default `gameshelf`)                               |
-| `MYSQL_USER`          | `apps/api` | App database user (default `gameshelf`)                           |
-| `MYSQL_PASSWORD`      | `apps/api` | App database user password                                        |
-| `MYSQL_ROOT_PASSWORD` | compose    | MySQL root password (compose only)                                |
-| `DATABASE_URL`        | `apps/api` | Prisma connection string (utf8mb4)                                |
-| `DATABASE_SHADOW_URL` | `apps/api` | Prisma shadow DB (migrate dev only)                               |
-| `REDIS_HOST`          | `apps/api` | Redis host (default `localhost`)                                  |
-| `REDIS_PORT`          | `apps/api` | Redis port (default `6379`)                                       |
-| `REDIS_URL`           | `apps/api` | Redis connection string                                           |
-| `SESSION_SECRET`      | `apps/api` | HMAC-SHA256 key for session tokens (≥32 chars)                    |
-| `SESSION_TTL_MINUTES` | `apps/api` | Sliding session lifetime in minutes (default `10080`; no "never") |
-| `OPENAI_API_KEY`      | `apps/api` | LLM provider key                                                  |
-| `ANTHROPIC_API_KEY`   | `apps/api` | LLM provider key                                                  |
-| `IGDB_CLIENT_ID`      | `apps/api` | IGDB credentials                                                  |
-| `IGDB_CLIENT_SECRET`  | `apps/api` | IGDB credentials                                                  |
+| Variable              | Used by    | Purpose                                                                                                               |
+| --------------------- | ---------- | --------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`            | both       | Runtime environment                                                                                                   |
+| `API_PORT`            | `apps/api` | API listen port (default `3001`)                                                                                      |
+| `API_HOST`            | `apps/api` | API bind address                                                                                                      |
+| `WEB_PORT`            | `apps/web` | Web dev server port (default `3000`)                                                                                  |
+| `NEXT_PUBLIC_API_URL` | `apps/web` | Browser-facing API base URL                                                                                           |
+| `MYSQL_HOST`          | `apps/api` | MySQL host (default `localhost`)                                                                                      |
+| `MYSQL_PORT`          | `apps/api` | MySQL port (default `3306`)                                                                                           |
+| `MYSQL_DATABASE`      | `apps/api` | Database name (default `gameshelf`)                                                                                   |
+| `MYSQL_USER`          | `apps/api` | App database user (default `gameshelf`)                                                                               |
+| `MYSQL_PASSWORD`      | `apps/api` | App database user password                                                                                            |
+| `MYSQL_ROOT_PASSWORD` | compose    | MySQL root password (compose only)                                                                                    |
+| `DATABASE_URL`        | `apps/api` | Prisma connection string (utf8mb4)                                                                                    |
+| `DATABASE_SHADOW_URL` | `apps/api` | Prisma shadow DB (migrate dev only)                                                                                   |
+| `REDIS_HOST`          | `apps/api` | Redis host (default `localhost`)                                                                                      |
+| `REDIS_PORT`          | `apps/api` | Redis port (default `6379`)                                                                                           |
+| `REDIS_QUEUE_PREFIX`  | `apps/api` | BullMQ key namespace (default `bull`)                                                                                 |
+| `REDIS_URL`           | `apps/api` | Redis connection string (present for convenience; **not read** by the app — the queue uses `REDIS_HOST`/`REDIS_PORT`) |
+| `SESSION_SECRET`      | `apps/api` | HMAC-SHA256 key for session tokens (≥32 chars)                                                                        |
+| `SESSION_TTL_MINUTES` | `apps/api` | Sliding session lifetime in minutes (default `10080`; no "never")                                                     |
+| `OPENAI_API_KEY`      | `apps/api` | LLM provider key                                                                                                      |
+| `ANTHROPIC_API_KEY`   | `apps/api` | LLM provider key                                                                                                      |
+| `IGDB_CLIENT_ID`      | `apps/api` | IGDB credentials                                                                                                      |
+| `IGDB_CLIENT_SECRET`  | `apps/api` | IGDB credentials                                                                                                      |
 
 ## Repository layout
 

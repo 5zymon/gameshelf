@@ -1,5 +1,6 @@
+import { BullModule } from '@nestjs/bullmq';
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
@@ -10,6 +11,8 @@ import { GamesModule } from './games/games.module';
 import { ImportJobsModule } from './import-jobs/import-jobs.module';
 import { PlatformsModule } from './platforms/platforms.module';
 import { PrismaModule } from './prisma/prisma.module';
+import { QueueModule } from './queue/queue.module';
+import { loadQueuePrefix, loadRedisConnection } from './queue/redis.config';
 import { SetupModule } from './setup/setup.module';
 
 @Module({
@@ -20,6 +23,15 @@ import { SetupModule } from './setup/setup.module';
       // read the same file the web app does.
       envFilePath: ['../../.env', '.env'],
     }),
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        connection: loadRedisConnection(config),
+        // Namespace the queue's Redis keys so a test run cannot see or wipe a
+        // developer's dev queue (and vice versa).
+        prefix: loadQueuePrefix(config),
+      }),
+    }),
     ScheduleModule.forRoot(),
     PrismaModule,
     AuthModule,
@@ -27,6 +39,7 @@ import { SetupModule } from './setup/setup.module';
     ImportJobsModule,
     PlatformsModule,
     SetupModule,
+    QueueModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: SessionGuard }],
