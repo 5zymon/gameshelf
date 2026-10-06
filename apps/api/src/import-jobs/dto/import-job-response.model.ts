@@ -21,6 +21,14 @@ export class ImportJobModel {
   })
   declaredCount!: number | null;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'Ephemeral stored-photo reference (filename under IMPORT_PHOTOS_DIR); internal — never served',
+    example: '3f2a1c9e-...-b7.jpg',
+  })
+  photoRef!: string | null;
+
   @ApiProperty({ example: 11 })
   recognizedCount!: number;
 
@@ -99,6 +107,14 @@ export class ImportJobDetailModel {
 
   @ApiPropertyOptional({ nullable: true, example: 12 })
   declaredCount!: number | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'Ephemeral stored-photo reference (filename under IMPORT_PHOTOS_DIR); internal — never served',
+    example: '3f2a1c9e-...-b7.jpg',
+  })
+  photoRef!: string | null;
 
   @ApiProperty({ example: 11 })
   recognizedCount!: number;

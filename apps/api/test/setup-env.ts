@@ -1,4 +1,6 @@
 import { resolveTestDatabaseUrl } from './test-env';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 process.env.DATABASE_URL = resolveTestDatabaseUrl();
 process.env.SESSION_SECRET ??= 'test-session-secret-0123456789abcdef0123456789';
@@ -10,3 +12,7 @@ process.env.REDIS_PORT ??= '6379';
 // e2e tier uses its own keyspace on the same Redis, so no dev server needs to
 // be stopped.
 process.env.REDIS_QUEUE_PREFIX = 'bull-e2e';
+// The upload API refuses (503) without an LLM provider key, and writes to an
+// ephemeral directory — give the e2e tier both so it exercises the happy path.
+process.env.OPENAI_API_KEY ??= 'test-llm-key';
+process.env.IMPORT_PHOTOS_DIR = join(tmpdir(), 'gameshelf-import-photos-e2e');

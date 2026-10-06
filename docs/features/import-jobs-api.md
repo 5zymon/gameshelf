@@ -20,7 +20,9 @@ ADR-002), and every item the vision model could not match is one row of
 The API is read-mostly: the import pipeline (tickets 3.2/3.5) writes through
 service methods on `ImportJobsService` (`createJob`, `markProcessing`,
 `markCompleted`, `markFailed`, `addUnrecognizedItem`), and the user's only
-write path is dismissal.
+write path is dismissal. Job _creation_ over HTTP — the multi-photo upload
+that calls `createJob` — is documented separately in the
+[Import Photo Upload API](/import-upload-api.md).
 
 # Endpoint contract
 
@@ -39,6 +41,7 @@ write path is dismissal.
   "id": 1,
   "status": "needs_attention",
   "declaredCount": 12,
+  "photoRef": "3f2a1c9e-....jpg",
   "recognizedCount": 11,
   "importedCount": 9,
   "unrecognizedCount": 2,
@@ -49,8 +52,11 @@ write path is dismissal.
 ```
 
 `declaredCount` is `null` when the user did not declare an item count;
-`errorMessage` is set only for `failed` jobs (the reason shown to the UI,
-spec §4.2.7); `completedAt` is stamped when the job leaves `processing`.
+`photoRef` is the opaque ephemeral filename set by
+[Import Photo Upload API](/import-upload-api.md) (`null` for rows created
+without a photo); `errorMessage` is set only for `failed` jobs (the reason
+shown to the UI, spec §4.2.7); `completedAt` is stamped when the job leaves
+`processing`.
 
 `GET /import-jobs` returns `{ items, meta }` with `meta = { page, limit,
 total, totalPages }` (`page` default 1, `limit` default 20, max 100,
@@ -178,8 +184,9 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
 
 # Out of scope
 
-- **Photo upload / job creation via HTTP** (ticket 3.2) — `createJob` is
-  exposed as a service method for it.
+- **Photo upload / job creation via HTTP** (ticket 3.2) — documented in the
+  [Import Photo Upload API](/import-upload-api.md); `createJob` is the service
+  method it calls.
 - **Queue infrastructure** (3.1) and the **processor** (3.5) — they call
   `markProcessing` / `markCompleted` / `markFailed` / `addUnrecognizedItem`.
 - **Retry endpoint** (3.6) — a retry enqueues a new job; the old row is
