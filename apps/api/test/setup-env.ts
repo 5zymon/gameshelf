@@ -14,5 +14,8 @@ process.env.REDIS_PORT ??= '6379';
 process.env.REDIS_QUEUE_PREFIX = 'bull-e2e';
 // The upload API refuses (503) without an LLM provider key, and writes to an
 // ephemeral directory — give the e2e tier both so it exercises the happy path.
+// The active default provider is Gemini; its key is what gates uploads.
+process.env.GEMINI_API_KEY ??= 'test-llm-key';
 process.env.OPENAI_API_KEY ??= 'test-llm-key';
+process.env.LLM_SETTINGS_SECRET ??= 'test-llm-settings-secret-0123456789';
 process.env.IMPORT_PHOTOS_DIR = join(tmpdir(), 'gameshelf-import-photos-e2e');

@@ -1,6 +1,7 @@
 import type { PrismaService } from '../../src/prisma/prisma.service';
 
 const TABLES = [
+  'llm_settings',
   'unrecognized_items',
   'import_jobs',
   'games',

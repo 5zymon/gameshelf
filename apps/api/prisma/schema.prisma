@@ -143,3 +143,17 @@ model UnrecognizedItem {
   @@index([importJobId])
   @@map("unrecognized_items")
 }
+
+// Runtime LLM provider settings (ticket 3.3). A singleton row (`id = 1`) so
+// the user can switch provider/model and store a key after first run without
+// touching env. `api_key_ciphertext` is AES-256-GCM (LlmKeyCryptoService),
+// never stored or returned in plaintext.
+model LlmSetting {
+  id               Int      @id @default(autoincrement())
+  provider         String   @db.VarChar(32)
+  model            String?  @db.VarChar(128)
+  apiKeyCiphertext String?  @map("api_key_ciphertext") @db.Text
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("llm_settings")
+}

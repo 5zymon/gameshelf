@@ -7,9 +7,9 @@ import {
 import type { Queue } from 'bullmq';
 import type { PhotoImportJobData } from '../queue/photo-import.types';
 import { PHOTO_IMPORT_QUEUE } from '../queue/queue.constants';
+import { LlmSettingsService } from '../settings/llm-settings.service';
 import type { StartImportUploadResponseModel } from './dto/import-upload-response.model';
 import { ImportJobsService } from './import-jobs.service';
-import { LlmConfigService } from './llm-config.service';
 import { PhotoStorageService } from './photo-storage.service';
 import { MAX_DECLARED_COUNT } from './upload.options';
 
@@ -55,7 +55,7 @@ export class ImportUploadService {
   constructor(
     private readonly jobs: ImportJobsService,
     private readonly storage: PhotoStorageService,
-    private readonly llm: LlmConfigService,
+    private readonly settings: LlmSettingsService,
     @InjectQueue(PHOTO_IMPORT_QUEUE)
     private readonly queue: Queue<PhotoImportJobData>,
   ) {}
@@ -64,9 +64,9 @@ export class ImportUploadService {
     files: Express.Multer.File[],
     declaredCounts: string[] | undefined,
   ): Promise<StartImportUploadResponseModel> {
-    if (!this.llm.isConfigured()) {
+    if (!(await this.settings.isConfigured())) {
       throw new ServiceUnavailableException(
-        'Photo import is unavailable: no LLM provider is configured (set OPENAI_API_KEY or ANTHROPIC_API_KEY)',
+        'Photo import is unavailable: no LLM provider API key is configured (set it in Settings or GEMINI_API_KEY/OPENAI_API_KEY)',
       );
     }
     if (files.length === 0) {
