@@ -1,4 +1,8 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PasswordService } from '../../src/auth/password.service';
 import {
   MAX_SETUP_ATTEMPTS,
@@ -11,6 +15,7 @@ import type { PrismaService } from '../../src/prisma/prisma.service';
 interface UsersPrismaMock {
   user: {
     create: jest.Mock;
+    update: jest.Mock;
     findUnique: jest.Mock;
     count: jest.Mock;
   };
@@ -27,7 +32,12 @@ function createService(): {
   passwords: PasswordsMock;
 } {
   const prisma: UsersPrismaMock = {
-    user: { create: jest.fn(), findUnique: jest.fn(), count: jest.fn() },
+    user: {
+      create: jest.fn(),
+      update: jest.fn(),
+      findUnique: jest.fn(),
+      count: jest.fn(),
+    },
     $executeRaw: jest.fn(),
   };
   const passwords: PasswordsMock = { hash: jest.fn() };
@@ -307,6 +317,88 @@ describe('UsersService (unit)', () => {
       ).rejects.toThrow('connection lost');
       expect(prisma.$executeRaw).toHaveBeenCalledTimes(MAX_SETUP_ATTEMPTS);
       expect(prisma.user.findUnique).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setPassword', () => {
+    it('normalizes the email, hashes, and returns the updated user', async () => {
+      const createdAt = new Date('2026-10-05T12:00:00.000Z');
+      passwords.hash.mockResolvedValue('ARGON2HASH');
+      prisma.user.update.mockResolvedValue({
+        id: 1,
+        email: 'ash@example.com',
+        createdAt,
+      });
+
+      const result = await service.setPassword({
+        email: '  Ash@Example.COM ',
+        password: 'pikachu123',
+      });
+
+      expect(passwords.hash).toHaveBeenCalledWith('pikachu123');
+      expect(prisma.user.update).toHaveBeenCalledWith({
+        where: { email: 'ash@example.com' },
+        data: { passwordHash: 'ARGON2HASH' },
+        select: { id: true, email: true, createdAt: true },
+      });
+      expect(result).toEqual({ id: 1, email: 'ash@example.com', createdAt });
+      expect(result).not.toHaveProperty('passwordHash');
+    });
+
+    it('rejects a blank (whitespace-only) email without hashing', async () => {
+      await expect(
+        service.setPassword({ email: '   ', password: 'pikachu123' }),
+      ).rejects.toThrow(new BadRequestException('email must not be blank'));
+      expect(passwords.hash).not.toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects an empty password without hashing', async () => {
+      await expect(
+        service.setPassword({ email: 'ash@example.com', password: '' }),
+      ).rejects.toThrow(new BadRequestException('password must not be empty'));
+      expect(passwords.hash).not.toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects an email longer than 255 characters', async () => {
+      await expect(
+        service.setPassword({
+          email: `${'a'.repeat(256)}@example.com`,
+          password: 'pikachu123',
+        }),
+      ).rejects.toThrow(
+        new BadRequestException('email must be at most 255 characters'),
+      );
+      expect(passwords.hash).not.toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a password longer than 1024 characters', async () => {
+      await expect(
+        service.setPassword({
+          email: 'ash@example.com',
+          password: 'x'.repeat(1025),
+        }),
+      ).rejects.toThrow(
+        new BadRequestException('password must be at most 1024 characters'),
+      );
+      expect(passwords.hash).not.toHaveBeenCalled();
+      expect(prisma.user.update).not.toHaveBeenCalled();
+    });
+
+    it('maps P2025 (missing row) to 404', async () => {
+      passwords.hash.mockResolvedValue('ARGON2HASH');
+      prisma.user.update.mockRejectedValue(knownError('P2025'));
+
+      await expect(
+        service.setPassword({
+          email: 'ash@example.com',
+          password: 'pikachu123',
+        }),
+      ).rejects.toThrow(
+        new NotFoundException('No user with email "ash@example.com" was found'),
+      );
     });
   });
 

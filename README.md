@@ -65,6 +65,8 @@ Other useful scripts (all run from the root):
 | `npm run db:migrate:check`   | Fail if schema and deployed DB diverge                              |
 | `npm run db:generate`        | Regenerate the Prisma client                                        |
 | `npm run db:studio`          | Open Prisma Studio                                                  |
+| `npm run user:create`        | Create an account from the terminal (prompts for the password)      |
+| `npm run user:passwd`        | Reset an account's password from the terminal (prompts for it)      |
 | `npm run typecheck`          | Type-check both workspaces                                          |
 | `npm run test`               | Run the API test suite (unit + e2e)                                 |
 | `npm run lint`               | Lint both workspaces                                                |
@@ -104,8 +106,26 @@ Accounts are provisioned only by:
 - **First-run setup** — `POST /setup` creates the very first account and is
   permanently disabled (`409 Setup has already been completed`) once a user
   exists. See [`docs/features/first-run-setup.md`](./docs/features/first-run-setup.md).
-- **The CLI** — an operator-run `user:create` command (ticket 2.7). It is not
-  implemented yet; when added it reuses `UsersService`.
+- **The CLI** — operator-run commands that reuse `UsersService`, for when the
+  first account already exists (or the only account is locked out):
+  - `npm run user:create -- --email <email>` — create an account. The command
+    prompts for the password without echoing it; it is never accepted as a
+    command-line argument.
+  - `npm run user:passwd -- --email <email>` — set a new password (the
+    account-recovery path: there is no email/SMTP reset flow).
+
+  Both accept the password on stdin when run non-interactively, so they work in
+  scripts and CI:
+
+  ```bash
+  printf '%s\n' "$NEW_PASSWORD" | npm run user:passwd -- --email player@example.com
+  ```
+
+  Failures — missing `--email`, blank email, empty password, password mismatch,
+  duplicate email on create, unknown email on passwd — print a readable message
+  to stderr and exit non-zero. Validation and hashing use the same code path as
+  first-run setup (`UsersService.prepareUser`); the CLI adds no separate rules.
+  See [`docs/features/user-cli.md`](./docs/features/user-cli.md).
 
 Additional users therefore require operator action. The web client exposes no
 signup page or link either; that is enforced by the frontend ticket.

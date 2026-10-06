@@ -41,7 +41,9 @@ to `409`. The returned `CreatedUser` carries `id`, `email`, and `createdAt`
 validation, and hashing path and additionally inserts only while `users` is
 empty (atomic `INSERT … SELECT … WHERE NOT EXISTS`), backing the one-time
 bootstrap documented in [First-run Setup](/first-run-setup.md). `hasAnyUser()`
-reports whether any account exists.
+reports whether any account exists. `setPassword({ email, password })` reuses
+the same path to replace an existing account's hash, backing the operator
+`user:passwd` command in [User CLI](/user-cli.md).
 
 # Session model
 
@@ -98,12 +100,12 @@ constant, not env-driven.
 internally (scheduled). `AppModule` imports `ScheduleModule.forRoot()` and
 `AuthModule`.
 
-| Service                 | Methods                                                                                                  |
-| ----------------------- | -------------------------------------------------------------------------------------------------------- |
-| `PasswordService`       | `hash(plain)`, `verify(hash, plain)`                                                                     |
-| `UsersService`          | `createUser({ email, password })`, `createFirstUser({ email, password })`, `hasAnyUser()`                |
-| `SessionsService`       | `create(userId, { userAgent?, now? })`, `validate(token, now?)`, `revoke(token)`, `cleanupExpired(now?)` |
-| `SessionCleanupService` | `cleanup()` (`@Interval(3600000)`)                                                                       |
+| Service                 | Methods                                                                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `PasswordService`       | `hash(plain)`, `verify(hash, plain)`                                                                                          |
+| `UsersService`          | `createUser({ email, password })`, `createFirstUser({ email, password })`, `setPassword({ email, password })`, `hasAnyUser()` |
+| `SessionsService`       | `create(userId, { userAgent?, now? })`, `validate(token, now?)`, `revoke(token)`, `cleanupExpired(now?)`                      |
+| `SessionCleanupService` | `cleanup()` (`@Interval(3600000)`)                                                                                            |
 
 # Out of scope
 

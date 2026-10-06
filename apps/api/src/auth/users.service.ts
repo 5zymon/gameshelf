@@ -2,9 +2,11 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { EMAIL_MAX_LENGTH, PASSWORD_MAX_LENGTH } from './credentials';
 import { PasswordService } from './password.service';
 
 /** Returned by POST /setup once an account already exists (HTTP 409). */
@@ -19,6 +21,12 @@ export const SETUP_COMPLETED_MESSAGE = 'Setup has already been completed';
 export const MAX_SETUP_ATTEMPTS = 3;
 
 export interface CreateUserInput {
+  email: string;
+  password: string;
+}
+
+/** CLI (`user:passwd`) and any future password-reset path. */
+export interface SetPasswordInput {
   email: string;
   password: string;
 }
@@ -66,6 +74,26 @@ export class UsersService {
         throw new ConflictException(
           `A user with email "${email}" already exists`,
         );
+      }
+      throw error;
+    }
+  }
+
+  /** CLI (`user:passwd`): replaces the stored hash for an existing account. */
+  async setPassword(input: SetPasswordInput): Promise<CreatedUser> {
+    const { email, passwordHash } = await this.prepareUser(input);
+    try {
+      return await this.prisma.user.update({
+        where: { email },
+        data: { passwordHash },
+        select: { id: true, email: true, createdAt: true },
+      });
+    } catch (error) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        throw new NotFoundException(`No user with email "${email}" was found`);
       }
       throw error;
     }
@@ -160,8 +188,18 @@ export class UsersService {
     });
   }
 
-  /** Single source of truth for trimming/lowercasing, blank checks and hashing. */
+  /** Single source of truth for length/trim/lowercase, blank checks, hashing. */
   private async prepareUser(input: CreateUserInput): Promise<PreparedUser> {
+    if (input.email.length > EMAIL_MAX_LENGTH) {
+      throw new BadRequestException(
+        `email must be at most ${String(EMAIL_MAX_LENGTH)} characters`,
+      );
+    }
+    if (input.password.length > PASSWORD_MAX_LENGTH) {
+      throw new BadRequestException(
+        `password must be at most ${String(PASSWORD_MAX_LENGTH)} characters`,
+      );
+    }
     const email = input.email.trim().toLowerCase();
     if (email === '') {
       throw new BadRequestException('email must not be blank');

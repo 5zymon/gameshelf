@@ -21,6 +21,8 @@
     "db:migrate:check": "npm run db:migrate:check --workspace apps/api",
     "db:platforms:fetch": "npm run db:platforms:fetch --workspace apps/api",
     "db:studio": "npm run db:studio --workspace apps/api",
+    "user:create": "npm run user:create --workspace apps/api --",
+    "user:passwd": "npm run user:passwd --workspace apps/api --",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
