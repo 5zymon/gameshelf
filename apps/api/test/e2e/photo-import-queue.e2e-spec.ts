@@ -1,7 +1,12 @@
 import { INestApplication } from '@nestjs/common';
+import { getQueueToken } from '@nestjs/bullmq';
 import { Test } from '@nestjs/testing';
 import { Queue } from 'bullmq';
 import { AppModule } from '../../src/app.module';
+import {
+  IMPORT_MAX_ATTEMPTS,
+  IMPORT_RETRY_BACKOFF_MS,
+} from '../../src/import-jobs/import-pipeline.options';
 import { PhotoImportHandler } from '../../src/queue/photo-import.handler';
 import {
   PHOTO_IMPORT_CONCURRENCY,
@@ -200,4 +205,18 @@ describe('Photo import queue (e2e)', () => {
     expect(typeof body.counts.prioritized).toBe('number');
     expect(typeof body.counts['waiting-children']).toBe('number');
   });
+
+  it('applies the configured default job options to jobs added through the app queue', async () => {
+    const test = await createTestApp(NOOP_OVERRIDE);
+    openApps.push(test.app);
+
+    const queue = test.app.get<Queue>(getQueueToken(PHOTO_IMPORT_QUEUE));
+    const job = await queue.add('photo', { photoRef: 'opts-check' });
+
+    expect(job.opts.attempts).toBe(IMPORT_MAX_ATTEMPTS);
+    expect(job.opts.backoff).toEqual({
+      type: 'exponential',
+      delay: IMPORT_RETRY_BACKOFF_MS,
+    });
+  }, 30_000);
 });

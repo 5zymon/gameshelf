@@ -8,6 +8,7 @@ import { Prisma } from '../../src/generated/prisma/client';
 import { ImportJobsService } from '../../src/import-jobs/import-jobs.service';
 import { IMPORT_QUEUE_STATE_TIMEOUT_MS } from '../../src/import-jobs/import-pipeline.options';
 import type { PhotoImportJobData } from '../../src/queue/photo-import.types';
+import { RetryableImportError } from '../../src/queue/photo-import.failure';
 import type { PrismaService } from '../../src/prisma/prisma.service';
 
 interface ImportJobsPrismaMock {
@@ -509,7 +510,7 @@ describe('ImportJobsService (unit)', () => {
         status: 'processing',
         declaredCount: 2,
       });
-      mock.importJob.update.mockResolvedValue({ ...JOB, status: 'done' });
+      mock.importJob.updateMany.mockResolvedValue({ count: 1 });
 
       await service.markCompleted(1, {
         recognizedCount: 2,
@@ -517,8 +518,8 @@ describe('ImportJobsService (unit)', () => {
         unrecognizedCount: 0,
       });
 
-      expect(mock.importJob.update).toHaveBeenCalledWith({
-        where: { id: 1 },
+      expect(mock.importJob.updateMany).toHaveBeenCalledWith({
+        where: { id: 1, status: { in: ['queued', 'processing'] } },
         data: {
           status: 'done',
           recognizedCount: 2,
@@ -535,10 +536,7 @@ describe('ImportJobsService (unit)', () => {
         status: 'queued',
         declaredCount: null,
       });
-      mock.importJob.update.mockResolvedValue({
-        ...JOB,
-        status: 'needs_attention',
-      });
+      mock.importJob.updateMany.mockResolvedValue({ count: 1 });
 
       await service.markCompleted(1, {
         recognizedCount: 0,
@@ -546,7 +544,7 @@ describe('ImportJobsService (unit)', () => {
         unrecognizedCount: 0,
       });
 
-      expect(mock.importJob.update).toHaveBeenCalledWith(
+      expect(mock.importJob.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ status: 'needs_attention' }) as {
             status: string;
@@ -561,10 +559,7 @@ describe('ImportJobsService (unit)', () => {
         status: 'processing',
         declaredCount: 5,
       });
-      mock.importJob.update.mockResolvedValue({
-        ...JOB,
-        status: 'needs_attention',
-      });
+      mock.importJob.updateMany.mockResolvedValue({ count: 1 });
 
       await service.markCompleted(1, {
         recognizedCount: 3,
@@ -572,7 +567,7 @@ describe('ImportJobsService (unit)', () => {
         unrecognizedCount: 0,
       });
 
-      expect(mock.importJob.update).toHaveBeenCalledWith(
+      expect(mock.importJob.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ status: 'needs_attention' }) as {
             status: string;
@@ -587,10 +582,7 @@ describe('ImportJobsService (unit)', () => {
         status: 'processing',
         declaredCount: null,
       });
-      mock.importJob.update.mockResolvedValue({
-        ...JOB,
-        status: 'needs_attention',
-      });
+      mock.importJob.updateMany.mockResolvedValue({ count: 1 });
 
       await service.markCompleted(1, {
         recognizedCount: 3,
@@ -598,7 +590,7 @@ describe('ImportJobsService (unit)', () => {
         unrecognizedCount: 1,
       });
 
-      expect(mock.importJob.update).toHaveBeenCalledWith(
+      expect(mock.importJob.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ status: 'needs_attention' }) as {
             status: string;
@@ -621,7 +613,26 @@ describe('ImportJobsService (unit)', () => {
           unrecognizedCount: 0,
         }),
       ).rejects.toThrow(ConflictException);
-      expect(mock.importJob.update).not.toHaveBeenCalled();
+      expect(mock.importJob.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('409s when the row turned terminal between the read and the write (TOCTOU)', async () => {
+      mock.importJob.findUnique.mockResolvedValue({
+        id: 1,
+        status: 'processing',
+        declaredCount: null,
+      });
+      // A racing markFailed committed after our read, so the guarded write
+      // matches no row.
+      mock.importJob.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.markCompleted(1, {
+          recognizedCount: 1,
+          importedCount: 1,
+          unrecognizedCount: 0,
+        }),
+      ).rejects.toThrow(ConflictException);
     });
 
     it('throws 404 for an unknown job', async () => {
@@ -646,12 +657,12 @@ describe('ImportJobsService (unit)', () => {
         status: 'processing',
         declaredCount: null,
       });
-      mock.importJob.update.mockResolvedValue({ ...JOB, status: 'failed' });
+      mock.importJob.updateMany.mockResolvedValue({ count: 1 });
 
       await service.markFailed(1, 'LLM request timed out');
 
-      expect(mock.importJob.update).toHaveBeenCalledWith({
-        where: { id: 1 },
+      expect(mock.importJob.updateMany).toHaveBeenCalledWith({
+        where: { id: 1, status: { in: ['queued', 'processing'] } },
         data: {
           status: 'failed',
           errorMessage: 'LLM request timed out',
@@ -666,7 +677,7 @@ describe('ImportJobsService (unit)', () => {
         status: 'processing',
         declaredCount: null,
       });
-      mock.importJob.update.mockResolvedValue({ ...JOB, status: 'failed' });
+      mock.importJob.updateMany.mockResolvedValue({ count: 1 });
 
       await service.markFailed(1, 'worker killed mid-job', {
         recognizedCount: 12,
@@ -674,8 +685,8 @@ describe('ImportJobsService (unit)', () => {
         unrecognizedCount: 0,
       });
 
-      expect(mock.importJob.update).toHaveBeenCalledWith({
-        where: { id: 1 },
+      expect(mock.importJob.updateMany).toHaveBeenCalledWith({
+        where: { id: 1, status: { in: ['queued', 'processing'] } },
         data: {
           status: 'failed',
           errorMessage: 'worker killed mid-job',
@@ -697,7 +708,22 @@ describe('ImportJobsService (unit)', () => {
       await expect(service.markFailed(1, 'boom')).rejects.toThrow(
         ConflictException,
       );
-      expect(mock.importJob.update).not.toHaveBeenCalled();
+      expect(mock.importJob.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('409s when the row turned terminal between the read and the write (TOCTOU)', async () => {
+      mock.importJob.findUnique.mockResolvedValue({
+        id: 1,
+        status: 'processing',
+        declaredCount: null,
+      });
+      // A racing markCompleted committed after our read, so the guarded write
+      // matches no row and the failure marking is not clobbered.
+      mock.importJob.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.markFailed(1, 'boom')).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -1017,7 +1043,24 @@ describe('ImportJobsService (unit)', () => {
           unrecognized: [],
           transient: [],
         }),
-      ).rejects.toThrow('already resolved');
+      ).rejects.toThrow(RetryableImportError);
+    });
+
+    it('refuses to commit a batch once the job is terminal (abandoned attempt)', async () => {
+      mock.importJob.findUnique.mockResolvedValue({ status: 'failed' });
+
+      await expect(
+        service.commitImportBatch(5, {
+          resolved: [
+            { recognizedItemId: 1, platformId: 3, edition: null, candidate },
+          ],
+          unrecognized: [],
+          transient: [],
+        }),
+      ).rejects.toThrow(RetryableImportError);
+
+      expect(mock.game.create).not.toHaveBeenCalled();
+      expect(mock.recognizedItem.updateMany).not.toHaveBeenCalled();
     });
 
     it('records an unrecognized item and marks the recognized item', async () => {
@@ -1101,11 +1144,11 @@ describe('ImportJobsService (unit)', () => {
         where: { id: 1, status: 'failed' },
         data: { status: 'queued', errorMessage: null, completedAt: null },
       });
-      expect(queue.add).toHaveBeenCalledWith(
-        'photo',
-        { photoRef: 'p.png', declaredCount: 2, importJobId: 1 },
-        expect.objectContaining({ attempts: 3 }),
-      );
+      expect(queue.add).toHaveBeenCalledWith('photo', {
+        photoRef: 'p.png',
+        declaredCount: 2,
+        importJobId: 1,
+      });
       expect(mock.importJob.update).toHaveBeenCalledWith({
         where: { id: 1 },
         data: { bullJobId: '9' },
@@ -1179,12 +1222,11 @@ describe('ImportJobsService (unit)', () => {
         });
       mock.importJob.updateMany.mockResolvedValue({ count: 1 });
       queue.add.mockRejectedValue(new Error('redis down'));
-      mock.importJob.update.mockResolvedValue({ ...JOB, status: 'failed' });
 
       await expect(service.retryJob(1)).rejects.toThrow(
         ServiceUnavailableException,
       );
-      expect(mock.importJob.update).toHaveBeenCalledWith(
+      expect(mock.importJob.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             status: 'failed',

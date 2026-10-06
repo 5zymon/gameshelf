@@ -12,10 +12,6 @@ import { PHOTO_IMPORT_QUEUE } from '../queue/queue.constants';
 import { LlmSettingsService } from '../settings/llm-settings.service';
 import type { StartImportUploadResponseModel } from './dto/import-upload-response.model';
 import { ImportJobsService } from './import-jobs.service';
-import {
-  IMPORT_MAX_ATTEMPTS,
-  IMPORT_RETRY_BACKOFF_MS,
-} from './import-pipeline.options';
 import { PhotoStorageService } from './photo-storage.service';
 import { MAX_DECLARED_COUNT } from './upload.options';
 
@@ -98,17 +94,11 @@ export class ImportUploadService {
       });
       let bullId: string;
       try {
-        const job = await this.queue.add(
-          'photo',
-          { photoRef, declaredCount, importJobId: row.id },
-          {
-            attempts: IMPORT_MAX_ATTEMPTS,
-            backoff: {
-              type: 'exponential',
-              delay: IMPORT_RETRY_BACKOFF_MS,
-            },
-          },
-        );
+        const job = await this.queue.add('photo', {
+          photoRef,
+          declaredCount,
+          importJobId: row.id,
+        });
         bullId = String(job.id);
       } catch {
         await this.jobs.markFailed(row.id, 'Failed to enqueue the import job');

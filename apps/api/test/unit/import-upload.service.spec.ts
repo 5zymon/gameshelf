@@ -10,16 +10,7 @@ import {
   parseDeclaredCounts,
 } from '../../src/import-jobs/import-upload.service';
 import { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
-import {
-  IMPORT_MAX_ATTEMPTS,
-  IMPORT_RETRY_BACKOFF_MS,
-} from '../../src/import-jobs/import-pipeline.options';
 import { LlmSettingsService } from '../../src/settings/llm-settings.service';
-
-const QUEUE_OPTIONS = {
-  attempts: IMPORT_MAX_ATTEMPTS,
-  backoff: { type: 'exponential', delay: IMPORT_RETRY_BACKOFF_MS },
-};
 
 function uploadedFile(name: string): Express.Multer.File {
   return {
@@ -102,16 +93,11 @@ describe('ImportUploadService (unit)', () => {
     expect(mocks.storage.store).toHaveBeenCalledTimes(5);
     expect(mocks.jobs.createJob).toHaveBeenCalledTimes(5);
     expect(mocks.queue.add).toHaveBeenCalledTimes(5);
-    expect(mocks.queue.add).toHaveBeenNthCalledWith(
-      1,
-      'photo',
-      {
-        photoRef: 'a.png.stored',
-        declaredCount: null,
-        importJobId: 1,
-      },
-      QUEUE_OPTIONS,
-    );
+    expect(mocks.queue.add).toHaveBeenNthCalledWith(1, 'photo', {
+      photoRef: 'a.png.stored',
+      declaredCount: null,
+      importJobId: 1,
+    });
     expect(mocks.jobs.createJob).toHaveBeenNthCalledWith(1, {
       declaredCount: null,
       photoRef: 'a.png.stored',
@@ -173,15 +159,11 @@ describe('ImportUploadService (unit)', () => {
 
     await service.startUpload([uploadedFile('a.png')], ['3']);
 
-    expect(mocks.queue.add).toHaveBeenCalledWith(
-      'photo',
-      {
-        photoRef: 'a.png.stored',
-        declaredCount: 3,
-        importJobId: 1,
-      },
-      QUEUE_OPTIONS,
-    );
+    expect(mocks.queue.add).toHaveBeenCalledWith('photo', {
+      photoRef: 'a.png.stored',
+      declaredCount: 3,
+      importJobId: 1,
+    });
   });
 
   it('rejects more counts than files with 400 before storing anything', async () => {

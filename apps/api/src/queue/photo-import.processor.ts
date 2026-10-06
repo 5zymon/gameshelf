@@ -6,6 +6,7 @@ import {
   PHOTO_IMPORT_CONCURRENCY,
   PHOTO_IMPORT_QUEUE,
 } from './queue.constants';
+import { photoImportWorkerOptions } from './queue.options';
 import type {
   PhotoImportJobData,
   PhotoImportJobResult,
@@ -20,7 +21,7 @@ import type {
  * step. The worker MUST stay in this application: it shares the local photo
  * filesystem with the API (ADR-002).
  */
-@Processor(PHOTO_IMPORT_QUEUE, { concurrency: PHOTO_IMPORT_CONCURRENCY })
+@Processor(PHOTO_IMPORT_QUEUE, photoImportWorkerOptions())
 export class PhotoImportProcessor
   extends WorkerHost
   implements BeforeApplicationShutdown

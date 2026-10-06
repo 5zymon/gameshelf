@@ -14,6 +14,7 @@ import type {
   CatalogPlatform,
 } from '../game-catalog/game-catalog.resolver';
 import type { PhotoImportJobData } from '../queue/photo-import.types';
+import { RetryableImportError } from '../queue/photo-import.failure';
 import { PHOTO_IMPORT_QUEUE } from '../queue/queue.constants';
 import { ListImportJobsQueryDto } from './dto/list-import-jobs-query.dto';
 import {
@@ -27,11 +28,7 @@ import {
   isTerminalImportJobStatus,
   mergeImportJobStatus,
 } from './import-job-status';
-import {
-  IMPORT_MAX_ATTEMPTS,
-  IMPORT_QUEUE_STATE_TIMEOUT_MS,
-  IMPORT_RETRY_BACKOFF_MS,
-} from './import-pipeline.options';
+import { IMPORT_QUEUE_STATE_TIMEOUT_MS } from './import-pipeline.options';
 
 /**
  * ADR-002 job result contract: the three counts the processor reports.
@@ -386,18 +383,11 @@ export class ImportJobsService {
     }
     let bullJobId: string;
     try {
-      const bull = await this.queue.add(
-        'photo',
-        {
-          photoRef: job.photoRef,
-          declaredCount: job.declaredCount,
-          importJobId: id,
-        },
-        {
-          attempts: IMPORT_MAX_ATTEMPTS,
-          backoff: { type: 'exponential', delay: IMPORT_RETRY_BACKOFF_MS },
-        },
-      );
+      const bull = await this.queue.add('photo', {
+        photoRef: job.photoRef,
+        declaredCount: job.declaredCount,
+        importJobId: id,
+      });
       bullJobId = String(bull.id);
     } catch {
       // Secondary failure (the row may already have moved on): the intended
@@ -494,8 +484,11 @@ export class ImportJobsService {
       (job.declaredCount !== null &&
         result.recognizedCount !== job.declaredCount) ||
       result.unrecognizedCount > 0;
-    return this.prisma.importJob.update({
-      where: { id: jobId },
+    // Conditional write: a read-then-unconditional `update` would clobber a
+    // `failed` marking committed by a racing abandoned attempt (see
+    // `markFailed`). Only an active row may transition.
+    const written = await this.prisma.importJob.updateMany({
+      where: { id: jobId, status: { in: ['queued', 'processing'] } },
       data: {
         status: needsAttention ? 'needs_attention' : 'done',
         recognizedCount: result.recognizedCount,
@@ -504,6 +497,12 @@ export class ImportJobsService {
         completedAt: new Date(),
       },
     });
+    if (written.count === 0) {
+      throw new ConflictException(
+        `Import job ${String(jobId)} is no longer active; refusing to overwrite a terminal result`,
+      );
+    }
+    return this.reloadJobRow(jobId);
   }
 
   /**
@@ -521,8 +520,10 @@ export class ImportJobsService {
     counts?: JobCompletionResult,
   ): Promise<ImportJobRow> {
     await this.assertTransition(jobId, ['queued', 'processing']);
-    return this.prisma.importJob.update({
-      where: { id: jobId },
+    // Conditional write: only an active row may transition to `failed`, so a
+    // late `markCompleted` cannot clobber this failure marking and vice versa.
+    const written = await this.prisma.importJob.updateMany({
+      where: { id: jobId, status: { in: ['queued', 'processing'] } },
       data: {
         status: 'failed',
         errorMessage,
@@ -536,6 +537,12 @@ export class ImportJobsService {
           : {}),
       },
     });
+    if (written.count === 0) {
+      throw new ConflictException(
+        `Import job ${String(jobId)} is no longer active; refusing to overwrite a terminal result`,
+      );
+    }
+    return this.reloadJobRow(jobId);
   }
 
   /** Incremental trace write per flagged item (ADR-002 retry semantics). */
@@ -713,18 +720,37 @@ export class ImportJobsService {
   /**
    * Commits one batch in a single MySQL transaction (never one tx per job).
    *
+   * Before writing anything it rejects a job that is already terminal
+   * (`failed`/`done`/`needs_attention`), so an abandoned attempt cannot mutate
+   * the catalog after `markFailed`/`markCompleted`.
+   *
    * Matched titles create a `Game` and claim their recognized item via an
    * `updateMany({ status: 'pending' })`; a zero-row claim throws so the whole
    * batch rolls back — a retry can therefore never duplicate a catalog row.
    * Flagged titles use the **same** guarded claim before creating their
    * `UnrecognizedItem`, so a duplicate/late processing of an already-flagged
-   * item also rolls back instead of writing a second trace row.
+   * item also rolls back instead of writing a second trace row. Both zero-row
+   * claims are a benign race (another attempt already resolved the item) and
+   * are thrown as `RetryableImportError`, so they schedule a retry rather than
+   * permanently failing a job that is actually succeeding.
    */
   async commitImportBatch(
     jobId: number,
     outcome: ImportBatchOutcome,
   ): Promise<void> {
     await this.prisma.$transaction(async (tx) => {
+      // Terminal-status guard: a job already `failed`/`done`/`needs_attention`
+      // (e.g. marked by the timeout path while an abandoned attempt is still
+      // running) must stop mutating items and the catalog.
+      const job = await tx.importJob.findUnique({
+        where: { id: jobId },
+        select: { status: true },
+      });
+      if (job && isTerminalImportJobStatus(job.status)) {
+        throw new RetryableImportError(
+          `Import job ${String(jobId)} is already ${job.status}; refusing to commit a batch`,
+        );
+      }
       for (const item of outcome.resolved) {
         const game = await tx.game.create({
           data: {
@@ -749,7 +775,10 @@ export class ImportJobsService {
           data: { status: 'imported', gameId: game.id },
         });
         if (claim.count === 0) {
-          throw new Error(
+          // A concurrent/abandoned attempt already resolved this item: the
+          // batch rolls back, but this is a benign race, not a permanent
+          // failure — the retry re-queries only still-pending titles.
+          throw new RetryableImportError(
             `Recognized item ${String(item.recognizedItemId)} was already resolved; rolling back the batch`,
           );
         }
@@ -764,7 +793,7 @@ export class ImportJobsService {
           data: { status: 'unrecognized', reason: item.reason },
         });
         if (claim.count === 0) {
-          throw new Error(
+          throw new RetryableImportError(
             `Recognized item ${String(item.recognizedItemId)} was already resolved; rolling back the batch`,
           );
         }
@@ -987,6 +1016,23 @@ export class ImportJobsService {
     allowed: string[],
   ): Promise<void> {
     await this.getJobForTransition(jobId, allowed);
+  }
+
+  /**
+   * Re-reads a row after a guarded write. Both terminal transitions return the
+   * persisted row so callers see the final status/counters; a vanished row is a
+   * 404, matching the rest of the surface.
+   */
+  private async reloadJobRow(jobId: number): Promise<ImportJobRow> {
+    const row = await this.prisma.importJob.findUnique({
+      where: { id: jobId },
+    });
+    if (row === null) {
+      throw new NotFoundException(
+        `Import job with id ${String(jobId)} not found`,
+      );
+    }
+    return row;
   }
 
   /** P2025 — row vanished between read and write (platforms.service pattern). */
