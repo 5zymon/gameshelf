@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { extname, join } from 'node:path';
 import {
   DEFAULT_IMPORT_PHOTOS_DIR,
+  DEFAULT_IMAGE_MIME_TYPE,
+  EXTENSION_MIME,
   IMPORT_PHOTOS_DIR_ENV,
   MIME_EXTENSION,
 } from './upload.options';
@@ -34,5 +36,49 @@ export class PhotoStorageService {
     const filename = `${randomUUID()}${extension}`;
     await writeFile(join(dir, filename), file.buffer);
     return filename;
+  }
+
+  /**
+   * Reads a stored photo back for recognition. The mime type is derived from
+   * the stored extension (which `store` set from the original mimetype).
+   */
+  async read(photoRef: string): Promise<{ buffer: Buffer; mimeType: string }> {
+    const buffer = await readFile(this.resolvePath(photoRef));
+    const extension = extname(photoRef).toLowerCase();
+    return {
+      buffer,
+      mimeType: EXTENSION_MIME[extension] ?? DEFAULT_IMAGE_MIME_TYPE,
+    };
+  }
+
+  /**
+   * Deletes a stored photo. `null` is a no-op (rows without a photo). Only a
+   * missing file (ENOENT) is tolerated; any other error propagates so the
+   * caller decides whether it is fatal (the pipeline logs and continues).
+   */
+  async delete(photoRef: string | null): Promise<void> {
+    if (photoRef === null) {
+      return;
+    }
+    try {
+      await unlink(this.resolvePath(photoRef));
+    } catch (error) {
+      if (this.isEnoent(error)) {
+        return;
+      }
+      throw error;
+    }
+  }
+
+  private resolvePath(photoRef: string): string {
+    return join(this.directory, photoRef);
+  }
+
+  private isEnoent(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      (error as NodeJS.ErrnoException).code === 'ENOENT'
+    );
   }
 }

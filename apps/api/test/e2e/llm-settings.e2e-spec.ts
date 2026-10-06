@@ -8,7 +8,9 @@ import {
   type VisionHttpRequest,
   type VisionHttpResponse,
 } from '../../src/settings/vision/vision-http.client';
+import { PhotoImportHandler } from '../../src/queue/photo-import.handler';
 import { createTestApp, type TestApp } from '../helpers/test-app';
+import { createNoopPhotoImportHandler } from '../helpers/noop-photo-handler';
 import { resetDatabase } from '../helpers/reset';
 
 const BASE = '/settings/llm';
@@ -52,7 +54,12 @@ describe('LLM settings API (e2e)', () => {
   let postJson: jest.Mock<Promise<VisionHttpResponse>, [VisionHttpRequest]>;
 
   beforeAll(async () => {
-    test = await createTestApp();
+    test = await createTestApp([
+      {
+        provide: PhotoImportHandler,
+        useValue: createNoopPhotoImportHandler(),
+      },
+    ]);
     settings = test.app.get(LlmSettingsService);
     const http = test.app.get(VisionHttpClient);
     postJson = jest.spyOn(http, 'postJson') as unknown as jest.Mock<

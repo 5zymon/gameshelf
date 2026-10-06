@@ -54,4 +54,55 @@ describe('PhotoStorageService (unit)', () => {
     expect(createService(undefined).directory).toBe(DEFAULT_IMPORT_PHOTOS_DIR);
     expect(createService('   ').directory).toBe(DEFAULT_IMPORT_PHOTOS_DIR);
   });
+
+  describe('read', () => {
+    it('returns the stored bytes and the mime type derived from the extension', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'gs-photo-'));
+      const service = createService(dir);
+      const photoRef = await service.store(
+        uploadedFile({ buffer: Buffer.from('png-bytes') }),
+      );
+
+      const read = await service.read(photoRef);
+
+      expect(read.buffer).toEqual(Buffer.from('png-bytes'));
+      expect(read.mimeType).toBe('image/png');
+    });
+
+    it.each([
+      ['image/jpeg', 'image/jpeg'],
+      ['image/webp', 'image/webp'],
+    ])('round-trips %s', async (mimetype, expected) => {
+      const dir = mkdtempSync(join(tmpdir(), 'gs-photo-'));
+      const service = createService(dir);
+      const photoRef = await service.store(uploadedFile({ mimetype }));
+
+      expect((await service.read(photoRef)).mimeType).toBe(expected);
+    });
+  });
+
+  describe('delete', () => {
+    it('removes the stored file', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'gs-photo-'));
+      const service = createService(dir);
+      const photoRef = await service.store(uploadedFile({}));
+
+      await service.delete(photoRef);
+
+      expect(existsSync(join(dir, photoRef))).toBe(false);
+    });
+
+    it('tolerates a missing file (ENOENT)', async () => {
+      const dir = mkdtempSync(join(tmpdir(), 'gs-photo-'));
+      const service = createService(dir);
+
+      await expect(service.delete('missing.png')).resolves.toBeUndefined();
+    });
+
+    it('is a no-op for a null reference', async () => {
+      const service = createService(undefined);
+
+      await expect(service.delete(null)).resolves.toBeUndefined();
+    });
+  });
 });
