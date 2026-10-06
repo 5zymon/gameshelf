@@ -1,0 +1,96 @@
+---
+type: Feature
+title: Anti-hallucination Validation
+description: No `Game` row is written without an external source confirming the recognized title — an ordered IGDB → fallback → unrecognized chain with a transient short-circuit and a MANUAL-only bypass.
+tags: [import, validation, igdb, catalog]
+status: draft
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T16:35:37Z }
+---
+
+# Overview
+
+The vision model can invent a plausible-sounding title that does not exist. The
+anti-hallucination invariant is: **a recognized title is saved as a `Game` only
+after an external game database confirms it.** A title no external source
+confirms is traced as an `UnrecognizedItem` (with its raw string preserved) and
+never enters the catalog.
+
+This is the validation step of the [Photo Import Pipeline](/photo-import-pipeline.md)
+(step 3 of its algorithm) and it composes the external clients described in
+[IGDB Client & Rate Limiter](/igdb-client.md). The saved rows are read back
+through the [Catalog API](/catalog-api.md).
+
+# The ordered chain
+
+`GameCatalogResolver` is a port (an abstract class used as the Nest DI token).
+Its production binding is `ChainedGameCatalogResolver`, which iterates the
+injected ordered source list (`GAME_CATALOG_SOURCES`, array order = validation
+order) and stops at the first decisive outcome:
+
+| Source outcome | Chain behavior                                                                 |
+| -------------- | ------------------------------------------------------------------------------ |
+| `matched`      | Return the candidate immediately; later sources are never called.              |
+| `unrecognized` | This source has no candidate — **fall through** to the next source.            |
+| `transient`    | Lookup failed and a retry may succeed — **stop** and return `transient` as-is. |
+
+The sequence is therefore **IGDB → optional fallback → unrecognized**. In
+production ticket 4.4 registers exactly one source, `IgdbGameCatalogResolver`
+(`label = 'IGDB'`), so validation is IGDB-only for now. Ticket 4.5 appends a
+MobyGames source (`label = 'MobyGames'`) to the same array; the chain and the
+pipeline are unchanged.
+
+## Why `transient` short-circuits
+
+`transient` (rate limit, timeout, 5xx, network) means "unknown", not "not a
+game". Treating it as a miss would permanently drop a real title while a source
+is merely throttled or down. So the chain returns the first `transient` without
+consulting later sources, and the pipeline leaves the item `pending` and throws
+`RetryableImportError` so BullMQ retries it. Only an `unrecognized` outcome —
+every configured source answered "no candidate" — marks the title permanently
+unrecognized.
+
+## The aggregated reason
+
+When every source returns `unrecognized`, the chain emits one reason string that
+preserves each source's label and reason for diagnostics, for example:
+
+```
+No game matched the title in any source — IGDB: No IGDB game matched the title; MobyGames: No MobyGames game matched the title
+```
+
+With no source configured the reason is `No game catalog source is configured`.
+
+# Unrecognized trace
+
+An unrecognized title is never silently dropped. The pipeline records it as an
+`UnrecognizedItem` (`rawTitle`, optional `rawPlatform`, and the `reason` above)
+and flips its `RecognizedItem.status` to `unrecognized`; the job ends
+`needs_attention`. Re-processing an already-flagged item rolls back instead of
+writing a second trace row, so the trailing records are idempotent under retry
+(see [Photo Import Pipeline](/photo-import-pipeline.md)).
+
+# The MANUAL-only bypass
+
+External validation only applies to titles the vision model recognized. A user
+who adds a game by hand through `POST /games` writes a `Game` directly, with the
+`Game.source` enum defaulting to `MANUAL` (`GameSource = IGDB | MobyGames |
+MANUAL`). Manual entry is the **only** path that bypasses the chain; an
+imported, externally matched row is tagged `IGDB` (`MobyGames` reserved for
+ticket 4.5). See the [Catalog API](/catalog-api.md).
+
+# Tests
+
+- `chained-game-catalog.resolver.spec.ts` (unit): first-match-wins, ordered
+  fall-through, aggregate reason, `transient` short-circuit, later-`transient`
+  preservation, and the empty-source case.
+- `anti-hallucination.e2e-spec.ts` (e2e): an invented title
+  (`Zorblax Chronicles 9000`) missing from both sources yields zero `Game` rows,
+  one `UnrecognizedItem` with the raw title and the aggregated reason, and a
+  `needs_attention` job; a transient IGDB leaves the item `pending`, writes no
+  `Game`/`UnrecognizedItem`, and never calls the fallback.
+
+# Out of scope
+
+- The concrete MobyGames HTTP client, API-key gate, and 1 req/s limiter (4.5).
+- Persisting `source = MobyGames` provenance on a fallback match (4.5).
+- Wiring the batched `resolveBatch()` into the pipeline (deferred; not 4.4).
