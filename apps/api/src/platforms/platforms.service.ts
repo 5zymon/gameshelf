@@ -9,6 +9,16 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { PlatformModel } from './dto/platform-response.model';
 import { UpdatePlatformDto } from './dto/update-platform.dto';
+import type { PlatformMatchCandidate } from './platform-match';
+
+/** Canonical fields the platform sync writes (ticket 4.2). */
+export interface CanonicalPlatformInput {
+  name: string;
+  abbreviation: string | null;
+  alternativeName: string | null;
+  platformFamily: number | null;
+  igdbId: number;
+}
 
 @Injectable()
 export class PlatformsService {
@@ -42,6 +52,91 @@ export class PlatformsService {
       throw new NotFoundException(`Platform with id ${String(id)} not found`);
     }
     return { ...platform, gameCount };
+  }
+
+  /**
+   * Every platform as a matcher candidate, oldest id first (ticket 4.2). One
+   * query; the sync service builds its index from this single read.
+   */
+  async listMatchCandidates(): Promise<PlatformMatchCandidate[]> {
+    return this.prisma.platform.findMany({
+      orderBy: { id: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        abbreviation: true,
+        alternativeName: true,
+      },
+    });
+  }
+
+  /**
+   * Creates a canonical platform for the sync path: reserves a slug from the
+   * name (never rewriting existing slugs) and stores the IGDB link. Unlike the
+   * public `create`, this is not for arbitrary user input and does not map
+   * unique violations to HTTP errors.
+   */
+  async createCanonical(
+    input: CanonicalPlatformInput,
+  ): Promise<PlatformMatchCandidate> {
+    const slug = await this.reserveSlug(input.name);
+    return this.prisma.platform.create({
+      data: {
+        name: input.name,
+        slug,
+        abbreviation: input.abbreviation,
+        alternativeName: input.alternativeName,
+        platformFamily: input.platformFamily,
+        igdbId: input.igdbId,
+      },
+      select: {
+        id: true,
+        name: true,
+        abbreviation: true,
+        alternativeName: true,
+      },
+    });
+  }
+
+  /**
+   * Refreshes the canonical fields of an existing platform. Returns `true`
+   * only when a write happened (some field changed), `false` when the row is
+   * missing or already up to date. Never touches `name` or `slug`.
+   */
+  async updateCanonical(
+    id: number,
+    input: CanonicalPlatformInput,
+  ): Promise<boolean> {
+    const existing = await this.prisma.platform.findUnique({
+      where: { id },
+      select: {
+        abbreviation: true,
+        alternativeName: true,
+        platformFamily: true,
+        igdbId: true,
+      },
+    });
+    if (!existing) {
+      return false;
+    }
+    if (
+      existing.abbreviation === input.abbreviation &&
+      existing.alternativeName === input.alternativeName &&
+      existing.platformFamily === input.platformFamily &&
+      existing.igdbId === input.igdbId
+    ) {
+      return false;
+    }
+    await this.prisma.platform.update({
+      where: { id },
+      data: {
+        abbreviation: input.abbreviation,
+        alternativeName: input.alternativeName,
+        platformFamily: input.platformFamily,
+        igdbId: input.igdbId,
+      },
+    });
+    return true;
   }
 
   async create(dto: CreatePlatformDto): Promise<PlatformModel> {

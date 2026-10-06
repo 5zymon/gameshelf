@@ -7,6 +7,7 @@ interface PlatformBody {
   name: string;
   abbreviation: string | null;
   alternativeName: string | null;
+  platformFamily: number | null;
   igdbId: number | null;
   slug: string;
   gameCount: number;
@@ -74,6 +75,7 @@ describe('Platforms API (e2e)', () => {
         name: 'PlayStation 5',
         abbreviation: 'PS5',
         alternativeName: null,
+        platformFamily: null,
         igdbId: 130,
         slug: 'ps5',
         gameCount: 1,

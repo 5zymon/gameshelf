@@ -14,6 +14,13 @@ export class PlatformModel {
   @ApiPropertyOptional({ nullable: true, example: 'PS5' })
   alternativeName!: string | null;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'IGDB platform family reference id',
+    example: 1,
+  })
+  platformFamily!: number | null;
+
   @ApiPropertyOptional({ nullable: true, example: 130 })
   igdbId!: number | null;
 

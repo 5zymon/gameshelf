@@ -7,11 +7,18 @@ export function seedPlatform(
     slug: string;
     abbreviation?: string | null;
     alternativeName?: string | null;
+    platformFamily?: number | null;
     igdbId?: number | null;
   },
 ) {
   return prisma.platform.create({
-    data: { abbreviation: null, alternativeName: null, igdbId: null, ...data },
+    data: {
+      abbreviation: null,
+      alternativeName: null,
+      platformFamily: null,
+      igdbId: null,
+      ...data,
+    },
   });
 }
 

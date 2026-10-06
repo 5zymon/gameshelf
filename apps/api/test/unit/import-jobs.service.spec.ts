@@ -36,7 +36,7 @@ interface ImportJobsPrismaMock {
     groupBy: jest.Mock;
   };
   platform: {
-    findFirst: jest.Mock;
+    findMany: jest.Mock;
   };
   game: {
     create: jest.Mock;
@@ -74,7 +74,7 @@ function createService(): {
       groupBy: jest.fn(),
     },
     platform: {
-      findFirst: jest.fn(),
+      findMany: jest.fn(),
     },
     game: {
       create: jest.fn(),
@@ -1040,8 +1040,30 @@ describe('ImportJobsService (unit)', () => {
   });
 
   describe('resolvePlatformId', () => {
-    it('prefers an IGDB-id match', async () => {
-      mock.platform.findFirst.mockResolvedValueOnce({ id: 5 });
+    interface PlatformRow {
+      id: number;
+      name: string;
+      abbreviation: string | null;
+      alternativeName: string | null;
+      igdbId: number | null;
+    }
+
+    function row(
+      overrides: Partial<PlatformRow> & { id: number },
+    ): PlatformRow {
+      return {
+        name: '',
+        abbreviation: null,
+        alternativeName: null,
+        igdbId: null,
+        ...overrides,
+      };
+    }
+
+    it('prefers an IGDB-id match with a single platform query', async () => {
+      mock.platform.findMany.mockResolvedValue([
+        row({ id: 5, name: 'Xbox', abbreviation: 'XBOX', igdbId: 11 }),
+      ]);
 
       await expect(
         service.resolvePlatformId(
@@ -1049,43 +1071,79 @@ describe('ImportJobsService (unit)', () => {
           'Xbox',
         ),
       ).resolves.toBe(5);
-      expect(mock.platform.findFirst).toHaveBeenCalledTimes(1);
-      expect(mock.platform.findFirst).toHaveBeenCalledWith({
-        where: { igdbId: { in: [11] } },
+      expect(mock.platform.findMany).toHaveBeenCalledTimes(1);
+      expect(mock.platform.findMany).toHaveBeenCalledWith({
         orderBy: { id: 'asc' },
-        select: { id: true },
+        select: {
+          id: true,
+          name: true,
+          abbreviation: true,
+          alternativeName: true,
+          igdbId: true,
+        },
       });
     });
 
-    it('falls back to a name match when the IGDB id does not match', async () => {
-      mock.platform.findFirst
-        .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({ id: 8 });
+    it("matches rawPlatform 'PS5' against a platform abbreviation", async () => {
+      mock.platform.findMany.mockResolvedValue([
+        row({ id: 9, name: 'PlayStation 5', abbreviation: 'PS5' }),
+      ]);
+
+      await expect(service.resolvePlatformId([], 'PS5')).resolves.toBe(9);
+      expect(mock.platform.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it('matches candidate abbreviations', async () => {
+      mock.platform.findMany.mockResolvedValue([
+        row({ id: 9, name: 'PlayStation 5', abbreviation: 'PS5' }),
+      ]);
 
       await expect(
         service.resolvePlatformId(
-          [{ igdbId: 99, name: 'PS5', abbreviation: 'PS5' }],
-          'PlayStation 5',
+          [{ igdbId: 99, name: 'Sony PlayStation 5', abbreviation: 'PS5' }],
+          null,
         ),
-      ).resolves.toBe(8);
-      expect(mock.platform.findFirst).toHaveBeenNthCalledWith(2, {
-        where: {
-          OR: [
-            { name: 'PS5' },
-            { abbreviation: 'PS5' },
-            { alternativeName: 'PS5' },
-          ],
-        },
-        orderBy: { id: 'asc' },
-        select: { id: true },
-      });
+      ).resolves.toBe(9);
     });
 
-    it('returns null when nothing matches', async () => {
-      mock.platform.findFirst.mockResolvedValue(null);
+    it('is case- and punctuation-insensitive', async () => {
+      mock.platform.findMany.mockResolvedValue([
+        row({ id: 9, name: 'PlayStation 5', abbreviation: 'PS5' }),
+      ]);
 
-      await expect(service.resolvePlatformId([], null)).resolves.toBeNull();
-      expect(mock.platform.findFirst).not.toHaveBeenCalled();
+      await expect(
+        service.resolvePlatformId([], 'playstation-5'),
+      ).resolves.toBe(9);
+    });
+
+    it('returns null for an unknown platform', async () => {
+      mock.platform.findMany.mockResolvedValue([row({ id: 1, name: 'PC' })]);
+
+      await expect(
+        service.resolvePlatformId([], 'Atari Jaguar'),
+      ).resolves.toBeNull();
+    });
+
+    it('returns null for a near-miss rather than guessing', async () => {
+      mock.platform.findMany.mockResolvedValue([
+        row({ id: 9, name: 'PlayStation 5', abbreviation: 'PS5' }),
+      ]);
+
+      await expect(
+        service.resolvePlatformId(
+          [{ igdbId: 99, name: 'PlayStation 4', abbreviation: 'PS4' }],
+          'PS4',
+        ),
+      ).resolves.toBeNull();
+    });
+
+    it('returns null when a key is shared by two distinct platforms', async () => {
+      mock.platform.findMany.mockResolvedValue([
+        row({ id: 1, name: 'PS5' }),
+        row({ id: 2, name: 'PlayStation 5', abbreviation: 'PS5' }),
+      ]);
+
+      await expect(service.resolvePlatformId([], 'PS5')).resolves.toBeNull();
     });
   });
 

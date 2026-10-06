@@ -123,6 +123,119 @@ describe('PlatformsService (unit)', () => {
     });
   });
 
+  describe('listMatchCandidates', () => {
+    it('selects only matcher fields, oldest id first', async () => {
+      const candidates = [
+        { id: 1, name: 'PC', abbreviation: null, alternativeName: null },
+      ];
+      mock.platform.findMany.mockResolvedValue(candidates);
+
+      await expect(service.listMatchCandidates()).resolves.toEqual(candidates);
+      expect(mock.platform.findMany).toHaveBeenCalledWith({
+        orderBy: { id: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          abbreviation: true,
+          alternativeName: true,
+        },
+      });
+    });
+  });
+
+  describe('createCanonical', () => {
+    it('reserves a slug and stores the canonical fields', async () => {
+      mock.platform.findUnique.mockResolvedValue(null);
+      const created = {
+        id: 1,
+        name: 'PlayStation 5',
+        abbreviation: 'PS5',
+        alternativeName: null,
+      };
+      mock.platform.create.mockResolvedValue(created);
+
+      const result = await service.createCanonical({
+        name: 'PlayStation 5',
+        abbreviation: 'PS5',
+        alternativeName: null,
+        platformFamily: 1,
+        igdbId: 130,
+      });
+
+      expect(mock.platform.findUnique).toHaveBeenCalledWith({
+        where: { slug: 'playstation-5' },
+        select: { id: true },
+      });
+      expect(mock.platform.create).toHaveBeenCalledWith({
+        data: {
+          name: 'PlayStation 5',
+          slug: 'playstation-5',
+          abbreviation: 'PS5',
+          alternativeName: null,
+          platformFamily: 1,
+          igdbId: 130,
+        },
+        select: {
+          id: true,
+          name: true,
+          abbreviation: true,
+          alternativeName: true,
+        },
+      });
+      expect(result).toEqual(created);
+    });
+  });
+
+  describe('updateCanonical', () => {
+    const input = {
+      name: 'PlayStation 5',
+      abbreviation: 'PS5',
+      alternativeName: null,
+      platformFamily: 1,
+      igdbId: 130,
+    };
+
+    it('returns false without writing when the platform is missing', async () => {
+      mock.platform.findUnique.mockResolvedValue(null);
+
+      await expect(service.updateCanonical(1, input)).resolves.toBe(false);
+      expect(mock.platform.update).not.toHaveBeenCalled();
+    });
+
+    it('returns false without writing when every field already matches', async () => {
+      mock.platform.findUnique.mockResolvedValue({
+        abbreviation: 'PS5',
+        alternativeName: null,
+        platformFamily: 1,
+        igdbId: 130,
+      });
+
+      await expect(service.updateCanonical(1, input)).resolves.toBe(false);
+      expect(mock.platform.update).not.toHaveBeenCalled();
+    });
+
+    it('updates only the canonical fields and returns true when changed', async () => {
+      mock.platform.findUnique.mockResolvedValue({
+        abbreviation: null,
+        alternativeName: null,
+        platformFamily: null,
+        igdbId: null,
+      });
+      mock.platform.update.mockResolvedValue({});
+
+      await expect(service.updateCanonical(1, input)).resolves.toBe(true);
+      expect(mock.platform.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: {
+          abbreviation: 'PS5',
+          alternativeName: null,
+          platformFamily: 1,
+          igdbId: 130,
+        },
+      });
+    });
+  });
+
   describe('create', () => {
     it('rejects a blank (whitespace-only) name with 400', async () => {
       await expect(service.create({ name: '   ' })).rejects.toThrow(

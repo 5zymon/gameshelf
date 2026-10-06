@@ -13,6 +13,7 @@ import type {
   CatalogCandidate,
   CatalogPlatform,
 } from '../game-catalog/game-catalog.resolver';
+import { findPlatformMatch } from '../platforms/platform-match';
 import type { PhotoImportJobData } from '../queue/photo-import.types';
 import { RetryableImportError } from '../queue/photo-import.failure';
 import { PHOTO_IMPORT_QUEUE } from '../queue/queue.constants';
@@ -757,47 +758,49 @@ export class ImportJobsService {
   }
 
   /**
-   * Maps a resolved candidate onto a seeded `Platform` row. IGDB id first
-   * (the canonical link), then name/abbreviation/alternative-name (case
-   * handled by the DB collation). Returns `null` when nothing matches — the
-   * caller flags the item rather than guessing.
+   * Maps a resolved candidate onto a `Platform` row. IGDB id first (the
+   * canonical link), then anchored equality matching over the candidate's
+   * name/abbreviation and the raw platform string against every platform's
+   * name/abbreviation/alternative name (case-, diacritic-, punctuation-, and
+   * whitespace-insensitive). One DB query per call and **zero** IGDB
+   * platform-list requests: per-game imports never create platforms or fetch
+   * the list. Returns `null` when nothing matches — the caller flags the item
+   * rather than guessing.
    */
   async resolvePlatformId(
     candidatePlatforms: CatalogPlatform[],
     rawPlatform: string | null,
   ): Promise<number | null> {
+    const platforms = await this.prisma.platform.findMany({
+      orderBy: { id: 'asc' },
+      select: {
+        id: true,
+        name: true,
+        abbreviation: true,
+        alternativeName: true,
+        igdbId: true,
+      },
+    });
     const igdbIds = candidatePlatforms
       .map((platform) => platform.igdbId)
       .filter((id): id is number => id !== null);
     if (igdbIds.length > 0) {
-      const byIgdbId = await this.prisma.platform.findFirst({
-        where: { igdbId: { in: igdbIds } },
-        orderBy: { id: 'asc' },
-        select: { id: true },
-      });
+      const byIgdbId = platforms.find(
+        (platform) =>
+          platform.igdbId !== null && igdbIds.includes(platform.igdbId),
+      );
       if (byIgdbId) {
         return byIgdbId.id;
       }
     }
-    const names = [
-      ...candidatePlatforms.map((platform) => platform.name),
+    const match = findPlatformMatch(platforms, [
+      ...candidatePlatforms.flatMap((platform) => [
+        platform.name,
+        platform.abbreviation,
+      ]),
       rawPlatform ?? '',
-    ]
-      .map((name) => name.trim())
-      .filter((name) => name !== '');
-    for (const name of names) {
-      const match = await this.prisma.platform.findFirst({
-        where: {
-          OR: [{ name }, { abbreviation: name }, { alternativeName: name }],
-        },
-        orderBy: { id: 'asc' },
-        select: { id: true },
-      });
-      if (match) {
-        return match.id;
-      }
-    }
-    return null;
+    ]);
+    return match?.id ?? null;
   }
 
   /**

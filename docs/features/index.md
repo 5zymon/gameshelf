@@ -15,6 +15,6 @@ okf_version: '0.2'
 - [Photo Lifecycle & Retention](/photo-lifecycle.md) - ephemeral photo lifecycle: kept while queued/retryable, deleted on completion, swept when orphaned or past the failed-retry window.
 - [Vision Provider Abstraction](/vision-provider-abstraction.md) - one `VisionProvider` interface with swappable Gemini/OpenAI backends behind a registry and `VisionService` seam, and a list-based (never count-based) recognition contract.
 - [LLM Settings API](/llm-settings-api.md) - `GET`/`PUT /settings/llm` and `POST /settings/llm/test`: runtime provider/model/key config, encrypted-at-rest key, and the import gate.
-- [Platforms API](/platforms-api.md) - platform CRUD with game counts, 409 duplicate/delete rules, and the canonical IGDB platform seed.
+- [Platforms API](/platforms-api.md) - platform CRUD with game counts, 409 duplicate/delete rules, and the canonical IGDB platform list synced locally by `npm run platforms:sync`.
 - [Web Auth UI](/web-auth-ui.md) - browser login/setup flows, the authenticated navigation shell (catalog/platforms/import/settings), layered server-side route protection, the same-origin `/api` rewrite, and the cookie-only (no token) auth guarantee, with a manual acceptance script.
 - [User CLI](/user-cli.md) - operator-run `user:create`/`user:passwd` commands that reuse `UsersService`, prompt for the password without echoing it, and need no email infrastructure.
