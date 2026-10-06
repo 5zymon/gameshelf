@@ -13,6 +13,7 @@ import { PlatformsModule } from './platforms/platforms.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { QueueModule } from './queue/queue.module';
 import { loadQueuePrefix, loadRedisConnection } from './queue/redis.config';
+import { SettingsModule } from './settings/settings.module';
 import { SetupModule } from './setup/setup.module';
 
 @Module({
@@ -39,6 +40,7 @@ import { SetupModule } from './setup/setup.module';
     ImportJobsModule,
     PlatformsModule,
     SetupModule,
+    SettingsModule,
     QueueModule,
   ],
   controllers: [AppController],

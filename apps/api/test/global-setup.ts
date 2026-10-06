@@ -4,6 +4,7 @@ import mysql from 'mysql2/promise';
 import { resolveTestDatabaseUrl } from './test-env';
 
 const TABLES = [
+  'llm_settings',
   'unrecognized_items',
   'import_jobs',
   'games',

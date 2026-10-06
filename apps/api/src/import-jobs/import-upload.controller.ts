@@ -52,7 +52,7 @@ export class ImportUploadController {
   })
   @ApiUnauthorizedResponse({ description: 'Authentication required' })
   @ApiServiceUnavailableResponse({
-    description: 'No LLM provider is configured',
+    description: 'No LLM provider API key is configured',
   })
   @UseInterceptors(
     UploadErrorInterceptor,

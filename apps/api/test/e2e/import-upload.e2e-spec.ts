@@ -3,7 +3,7 @@ import { existsSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Queue } from 'bullmq';
 import request from 'supertest';
-import { LlmConfigService } from '../../src/import-jobs/llm-config.service';
+import { LlmSettingsService } from '../../src/settings/llm-settings.service';
 import { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
 import { MAX_UPLOAD_FILE_SIZE_BYTES } from '../../src/import-jobs/upload.options';
 import { PhotoImportHandler } from '../../src/queue/photo-import.handler';
@@ -90,12 +90,12 @@ function uploadRequest(
 describe('Import photo upload API (e2e)', () => {
   let test: TestApp;
   let queue: Queue;
-  let llm: LlmConfigService;
+  let llm: LlmSettingsService;
   let photoDir: string;
 
   beforeAll(async () => {
     test = await createTestApp();
-    llm = test.app.get(LlmConfigService);
+    llm = test.app.get(LlmSettingsService);
     photoDir = test.app.get(PhotoStorageService).directory;
     queue = new Queue(PHOTO_IMPORT_QUEUE, { connection, prefix: queuePrefix });
   });
@@ -222,7 +222,7 @@ describe('Import photo upload API (e2e)', () => {
   });
 
   it('returns 503 before storing or enqueuing when no LLM is configured', async () => {
-    const spy = jest.spyOn(llm, 'isConfigured').mockReturnValue(false);
+    const spy = jest.spyOn(llm, 'isConfigured').mockResolvedValue(false);
 
     try {
       await uploadRequest(test, [photo(0)]).expect(503);

@@ -370,8 +370,12 @@ All variables live in a single root `.env` file (see `.env.example`):
 | `REDIS_URL`           | `apps/api` | Redis connection string (present for convenience; **not read** by the app — the queue uses `REDIS_HOST`/`REDIS_PORT`) |
 | `SESSION_SECRET`      | `apps/api` | HMAC-SHA256 key for session tokens (≥32 chars)                                                                        |
 | `SESSION_TTL_MINUTES` | `apps/api` | Sliding session lifetime in minutes (default `10080`; no "never")                                                     |
-| `OPENAI_API_KEY`      | `apps/api` | LLM provider key                                                                                                      |
-| `ANTHROPIC_API_KEY`   | `apps/api` | LLM provider key                                                                                                      |
+| `GEMINI_API_KEY`      | `apps/api` | Gemini API key (fallback when no encrypted DB key is stored)                                                          |
+| `OPENAI_API_KEY`      | `apps/api` | OpenAI API key (fallback when no encrypted DB key is stored)                                                          |
+| `LLM_PROVIDER`        | `apps/api` | Active provider when no DB row exists: `gemini`/`openai` (default `gemini`)                                           |
+| `LLM_MODEL`           | `apps/api` | Model override for the active provider (blank = provider default)                                                     |
+| `LLM_SETTINGS_SECRET` | `apps/api` | Key-derivation secret for the stored API key's AES-256-GCM key (falls back to `SESSION_SECRET`)                       |
+| `ANTHROPIC_API_KEY`   | `apps/api` | Reserved for a future provider; **not read** by the current code                                                      |
 | `IMPORT_PHOTOS_DIR`   | `apps/api` | Ephemeral upload directory (default `<OS temp>/gameshelf-import-photos`)                                              |
 | `IGDB_CLIENT_ID`      | `apps/api` | IGDB credentials                                                                                                      |
 | `IGDB_CLIENT_SECRET`  | `apps/api` | IGDB credentials                                                                                                      |

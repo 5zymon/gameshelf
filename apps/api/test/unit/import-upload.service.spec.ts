@@ -9,8 +9,8 @@ import {
   ImportUploadService,
   parseDeclaredCounts,
 } from '../../src/import-jobs/import-upload.service';
-import { LlmConfigService } from '../../src/import-jobs/llm-config.service';
 import { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
+import { LlmSettingsService } from '../../src/settings/llm-settings.service';
 
 function uploadedFile(name: string): Express.Multer.File {
   return {
@@ -31,13 +31,13 @@ function createService(): { service: ImportUploadService; mocks: Mocks } {
   const mocks: Mocks = {
     jobs: { createJob: jest.fn(), markFailed: jest.fn() },
     storage: { store: jest.fn() },
-    llm: { isConfigured: jest.fn().mockReturnValue(true) },
+    llm: { isConfigured: jest.fn().mockResolvedValue(true) },
     queue: { add: jest.fn() },
   };
   const service = new ImportUploadService(
     mocks.jobs as unknown as ImportJobsService,
     mocks.storage as unknown as PhotoStorageService,
-    mocks.llm as unknown as LlmConfigService,
+    mocks.llm as unknown as LlmSettingsService,
     mocks.queue as unknown as Queue<PhotoImportJobData>,
   );
   return { service, mocks };
@@ -161,7 +161,7 @@ describe('ImportUploadService (unit)', () => {
   );
 
   it('refuses with 503 and touches nothing when no LLM is configured', async () => {
-    mocks.llm.isConfigured.mockReturnValue(false);
+    mocks.llm.isConfigured.mockResolvedValue(false);
 
     await expect(
       service.startUpload([uploadedFile('a.png')], undefined),
