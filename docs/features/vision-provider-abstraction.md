@@ -4,7 +4,7 @@ title: Vision Provider Abstraction
 description: One VisionProvider interface with swappable Gemini/OpenAI backends behind a registry and a VisionService seam.
 tags: [import, llm, architecture]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T00:00:00Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T09:30:31Z }
 ---
 
 # Overview
@@ -18,7 +18,9 @@ the pipeline.
 
 Two backends ship: **Gemini** (default, `gemini-3.8-flash`) and **OpenAI**
 (`gpt-4o-mini`). Both use the same instruction prompt and item shape; only the
-request/response envelope differs.
+request/response envelope differs. The prompt requires a JSON **list** of the
+games it can read and explicitly forbids estimating a count — the model is the
+source of the list, never of the number of games.
 
 # Interface
 
@@ -33,6 +35,12 @@ export interface RecognizedItem {
   edition: string | null;
   platform: string | null;
   confidence: number; // 0..1
+}
+
+export interface VisionRecognitionResult {
+  items: RecognizedItem[];
+  // ADVISORY ONLY: the authoritative count is always `items.length`.
+  countVisible: number | null;
 }
 
 export interface VisionRecognitionInput {
@@ -52,7 +60,7 @@ export interface VisionProvider {
   recognize(
     input: VisionRecognitionInput,
     config: VisionProviderConfig,
-  ): Promise<RecognizedItem[]>;
+  ): Promise<VisionRecognitionResult>;
 }
 ```
 
@@ -62,41 +70,70 @@ stored setting overrides them.
 
 # Item JSON schema
 
-The shared `VISION_INSTRUCTION_PROMPT` asks for a JSON array of items. The
-canonical strict JSON Schema (`VISION_RESPONSE_SCHEMA`) is:
+The shared `VISION_INSTRUCTION_PROMPT` asks for a JSON **object** with an
+`items` array and an advisory `count_visible` — never a bare count. The
+canonical strict JSON Schema (`VISION_RECOGNITION_SCHEMA`, which wraps
+`VISION_RESPONSE_SCHEMA` as its `items`) is:
 
 ```json
 {
-  "type": "array",
-  "items": {
-    "type": "object",
-    "properties": {
-      "title": { "type": "string" },
-      "edition": { "type": ["string", "null"] },
-      "platform": { "type": ["string", "null"] },
-      "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+  "type": "object",
+  "properties": {
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "title": { "type": "string" },
+          "edition": { "type": ["string", "null"] },
+          "platform": { "type": ["string", "null"] },
+          "confidence": { "type": "number", "minimum": 0, "maximum": 1 }
+        },
+        "required": ["title", "edition", "platform", "confidence"],
+        "additionalProperties": false
+      }
     },
-    "required": ["title", "edition", "platform", "confidence"],
-    "additionalProperties": false
-  }
+    "count_visible": { "type": ["number", "null"] }
+  },
+  "required": ["items", "count_visible"],
+  "additionalProperties": false
 }
 ```
 
+`count_visible` is **advisory only**: the number of recognized games is always
+`items.length`. The parser (`parseAdvisoryCount`) never throws on a missing,
+non-numeric, negative or non-finite value — it becomes `null` — so a bad count
+can never abort recognition.
+
 Each provider adapts it to its API:
 
-- **OpenAI** Structured Outputs requires a JSON-_object_ root, so it wraps the
-  array under an `items` property and sends
-  `{ "type": "object", "properties": { "items": <schema above> }, "required": ["items"], "additionalProperties": false }`
-  as the strict `json_schema` response format. `parseRecognizedItems` accepts
-  both the bare array and the `{ "items": [...] }` wrapper.
-- **Gemini** passes the array schema directly as `responseSchema`, using the
-  OpenAPI subset: uppercase types and `nullable: true` in place of
-  `type: ["string", "null"]`, plus `propertyOrdering`.
+- **OpenAI** Structured Outputs requires a JSON-_object_ root, so it sends
+  `VISION_RECOGNITION_SCHEMA` directly as the strict `json_schema` response
+  format.
+- **Gemini** passes an OpenAPI-subset object schema as `responseSchema` (built
+  from `GEMINI_ITEM_SCHEMA` / `GEMINI_RESPONSE_SCHEMA`): uppercase types,
+  `nullable: true` in place of `type: ["string", "null"]`, and
+  `propertyOrdering`.
 
 Both providers decode their envelope (Gemini `candidates[0].content.parts[0].text`,
 OpenAI `choices[0].message.content`) and pass the parsed JSON through the shared
-`parseRecognizedItems`, which validates each item and throws a safe
-`bad_response` error otherwise.
+`parseVisionRecognition`, which validates each item (a missing/invalid item list
+throws a safe `bad_response` error) and attaches the advisory count. The legacy
+bare-array shape is still accepted, with `countVisible: null`.
+
+# Prompt and raw output
+
+The prompt requires a list of every distinct game (title, edition, platform,
+confidence) and tells the model not to estimate how many games are in the photo.
+Each provider logs its raw model text once at `Logger.debug` level, truncated by
+`truncateForLog` (cap `RAW_VISION_LOG_LIMIT = 2000` chars); the raw text is
+**never persisted** — no DB write and no addition to the BullMQ job result.
+
+Malformed output is a boundary concern: the parsers throw only
+`VisionProviderError('bad_response', …)`. Ticket 3.5 catches any error from
+`VisionService.recognize`, maps it with `photoImportFailureReason` (in
+`apps/api/src/queue/photo-import.failure.ts`), and passes that safe string to
+`ImportJobsService.markFailed`.
 
 # Registry and facade
 

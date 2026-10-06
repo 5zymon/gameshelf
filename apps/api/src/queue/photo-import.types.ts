@@ -12,6 +12,7 @@ export interface PhotoImportJobData {
  * `ImportJobsService.markCompleted(jobId, result)`.
  */
 export interface PhotoImportJobResult {
+  /** `VisionRecognitionResult.items.length` — never the model's advisory count. */
   recognizedCount: number;
   importedCount: number;
   unrecognizedCount: number;

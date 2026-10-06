@@ -10,7 +10,7 @@ okf_version: '0.2'
 - [Catalog API](/catalog-api.md) - `GET /games`: paginated, filterable, searchable, sortable game listing with available filter values.
 - [Import Jobs API](/import-jobs-api.md) - persisted import runs (status, counts, flagged items), dismissal, and the indefinite retention policy.
 - [Import Photo Upload API](/import-upload-api.md) - `POST /import/upload`: multi-photo upload, optional per-photo declared counts, ephemeral storage, and background queuing.
-- [Vision Provider Abstraction](/vision-provider-abstraction.md) - one `VisionProvider` interface with swappable Gemini/OpenAI backends behind a registry and `VisionService` seam.
+- [Vision Provider Abstraction](/vision-provider-abstraction.md) - one `VisionProvider` interface with swappable Gemini/OpenAI backends behind a registry and `VisionService` seam, and a list-based (never count-based) recognition contract.
 - [LLM Settings API](/llm-settings-api.md) - `GET`/`PUT /settings/llm` and `POST /settings/llm/test`: runtime provider/model/key config, encrypted-at-rest key, and the import gate.
 - [Platforms API](/platforms-api.md) - platform CRUD with game counts, 409 duplicate/delete rules, and the canonical IGDB platform seed.
 - [Web Auth UI](/web-auth-ui.md) - browser login/setup flows, the authenticated navigation shell (catalog/platforms/import/settings), layered server-side route protection, the same-origin `/api` rewrite, and the cookie-only (no token) auth guarantee, with a manual acceptance script.

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import {
   VisionHttpClient,
   type VisionHttpResponse,
@@ -11,30 +11,38 @@ import {
   asUnknownArray,
   isJsonRecord,
   parseJsonResponse,
-  parseRecognizedItems,
-  type RecognizedItem,
+  parseVisionRecognition,
+  truncateForLog,
   type VisionProvider,
   type VisionProviderConfig,
   type VisionRecognitionInput,
+  type VisionRecognitionResult,
 } from './vision-provider';
 
 /**
  * Gemini's `responseSchema` is the OpenAPI subset: uppercase types and a
  * `nullable` flag instead of a JSON-Schema `type` union.
  */
-const GEMINI_RESPONSE_SCHEMA = {
-  type: 'ARRAY',
-  items: {
-    type: 'OBJECT',
-    properties: {
-      title: { type: 'STRING' },
-      edition: { type: 'STRING', nullable: true },
-      platform: { type: 'STRING', nullable: true },
-      confidence: { type: 'NUMBER' },
-    },
-    required: ['title', 'edition', 'platform', 'confidence'],
-    propertyOrdering: ['title', 'edition', 'platform', 'confidence'],
+const GEMINI_ITEM_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    title: { type: 'STRING' },
+    edition: { type: 'STRING', nullable: true },
+    platform: { type: 'STRING', nullable: true },
+    confidence: { type: 'NUMBER' },
   },
+  required: ['title', 'edition', 'platform', 'confidence'],
+  propertyOrdering: ['title', 'edition', 'platform', 'confidence'],
+} as const;
+
+const GEMINI_RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    items: { type: 'ARRAY', items: GEMINI_ITEM_SCHEMA },
+    count_visible: { type: 'NUMBER', nullable: true },
+  },
+  required: ['items', 'count_visible'],
+  propertyOrdering: ['items', 'count_visible'],
 } as const;
 
 const GEMINI_ENDPOINT =
@@ -83,12 +91,14 @@ export class GeminiVisionProvider implements VisionProvider {
   readonly label = 'Google Gemini';
   readonly defaultModel = DEFAULT_GEMINI_MODEL;
 
+  private readonly logger = new Logger(GeminiVisionProvider.name);
+
   constructor(private readonly http: VisionHttpClient) {}
 
   async recognize(
     input: VisionRecognitionInput,
     config: VisionProviderConfig,
-  ): Promise<RecognizedItem[]> {
+  ): Promise<VisionRecognitionResult> {
     const response = await this.http.postJson({
       url: `${GEMINI_ENDPOINT}/${encodeURIComponent(config.model)}:generateContent`,
       headers: { 'x-goog-api-key': config.apiKey },
@@ -117,6 +127,10 @@ export class GeminiVisionProvider implements VisionProvider {
       throw visionErrorFromStatus(response.status);
     }
     const payload = await readJson(response);
-    return parseRecognizedItems(parseJsonResponse(extractText(payload)));
+    const text = extractText(payload);
+    this.logger.debug(
+      `Gemini raw recognition response: ${truncateForLog(text)}`,
+    );
+    return parseVisionRecognition(parseJsonResponse(text));
   }
 }

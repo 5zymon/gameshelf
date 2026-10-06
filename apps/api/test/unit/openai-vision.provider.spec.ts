@@ -19,8 +19,8 @@ function httpResponse(status: number, body: unknown): VisionHttpResponse {
   };
 }
 
-function openAiBody(items: unknown[]): unknown {
-  return { choices: [{ message: { content: JSON.stringify(items) } }] };
+function openAiBody(content: unknown): unknown {
+  return { choices: [{ message: { content: JSON.stringify(content) } }] };
 }
 
 function createProvider(result: VisionHttpResponse | Error): {
@@ -48,7 +48,9 @@ const config: VisionProviderConfig = {
 
 describe('OpenAiVisionProvider (unit)', () => {
   it('exposes its id, label and default model', () => {
-    const { provider } = createProvider(httpResponse(200, openAiBody([])));
+    const { provider } = createProvider(
+      httpResponse(200, openAiBody({ items: [], count_visible: 0 })),
+    );
 
     expect(provider.id).toBe('openai');
     expect(provider.defaultModel).toBe('gpt-4o-mini');
@@ -56,7 +58,7 @@ describe('OpenAiVisionProvider (unit)', () => {
 
   it('posts a chat completion with a bearer key and a data URL image', async () => {
     const { provider, postJson } = createProvider(
-      httpResponse(200, openAiBody([])),
+      httpResponse(200, openAiBody({ items: [], count_visible: 0 })),
     );
 
     await provider.recognize(input, config);
@@ -88,6 +90,7 @@ describe('OpenAiVisionProvider (unit)', () => {
                   properties: Record<string, unknown>;
                 };
               };
+              count_visible: { type: string[] };
             };
           };
         };
@@ -99,13 +102,16 @@ describe('OpenAiVisionProvider (unit)', () => {
     );
     expect(body.response_format.type).toBe('json_schema');
     expect(body.response_format.json_schema.strict).toBe(true);
-    // Structured Outputs rejects an array root, so the schema must be an
-    // object wrapping the item array.
+    // Structured Outputs requires an object root; the item array plus the
+    // advisory count share that root.
     const schema = body.response_format.json_schema.schema;
     expect(schema.type).toBe('object');
     expect(schema.additionalProperties).toBe(false);
-    expect(schema.required).toEqual(['items']);
+    expect(schema.required).toEqual(['items', 'count_visible']);
     expect(schema.properties.items.type).toBe('array');
+    expect(schema.properties.count_visible).toEqual({
+      type: ['number', 'null'],
+    });
     const item = schema.properties.items.items;
     expect(item.type).toBe('object');
     expect(item.additionalProperties).toBe(false);
@@ -123,29 +129,35 @@ describe('OpenAiVisionProvider (unit)', () => {
     ]);
   });
 
-  it('parses recognized items from the message content', async () => {
+  it('parses recognized items and the advisory count from the message content', async () => {
     const { provider } = createProvider(
       httpResponse(
         200,
-        openAiBody([
-          {
-            title: 'Hades',
-            edition: null,
-            platform: 'Nintendo Switch',
-            confidence: 0.8,
-          },
-        ]),
+        openAiBody({
+          items: [
+            {
+              title: 'Hades',
+              edition: null,
+              platform: 'Nintendo Switch',
+              confidence: 0.8,
+            },
+          ],
+          count_visible: 1,
+        }),
       ),
     );
 
-    await expect(provider.recognize(input, config)).resolves.toEqual([
-      {
-        title: 'Hades',
-        edition: null,
-        platform: 'Nintendo Switch',
-        confidence: 0.8,
-      },
-    ]);
+    await expect(provider.recognize(input, config)).resolves.toEqual({
+      items: [
+        {
+          title: 'Hades',
+          edition: null,
+          platform: 'Nintendo Switch',
+          confidence: 0.8,
+        },
+      ],
+      countVisible: 1,
+    });
   });
 
   it.each([

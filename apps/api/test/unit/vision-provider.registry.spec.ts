@@ -1,10 +1,10 @@
 import { VisionProviderRegistry } from '../../src/settings/vision/vision-provider.registry';
 import { VisionProviderError } from '../../src/settings/vision/vision.errors';
 import type {
-  RecognizedItem,
   VisionProvider,
   VisionProviderConfig,
   VisionRecognitionInput,
+  VisionRecognitionResult,
 } from '../../src/settings/vision/vision-provider';
 import type { GeminiVisionProvider } from '../../src/settings/vision/gemini-vision.provider';
 import type { OpenAiVisionProvider } from '../../src/settings/vision/openai-vision.provider';
@@ -17,7 +17,8 @@ function fakeProvider(id: 'gemini' | 'openai'): VisionProvider {
     recognize: (
       _input: VisionRecognitionInput,
       _config: VisionProviderConfig,
-    ): Promise<RecognizedItem[]> => Promise.resolve([]),
+    ): Promise<VisionRecognitionResult> =>
+      Promise.resolve({ items: [], countVisible: null }),
   };
 }
 
