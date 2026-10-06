@@ -1,21 +1,37 @@
+import { InjectQueue } from '@nestjs/bullmq';
 import {
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
+import type { Queue } from 'bullmq';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   CatalogCandidate,
   CatalogPlatform,
 } from '../game-catalog/game-catalog.resolver';
+import type { PhotoImportJobData } from '../queue/photo-import.types';
+import { PHOTO_IMPORT_QUEUE } from '../queue/queue.constants';
 import { ListImportJobsQueryDto } from './dto/list-import-jobs-query.dto';
 import {
+  ImportBatchProgressModel,
   ImportJobDetailModel,
   ImportJobModel,
   ListImportJobsResponseModel,
   UnrecognizedItemModel,
 } from './dto/import-job-response.model';
+import {
+  isTerminalImportJobStatus,
+  mergeImportJobStatus,
+} from './import-job-status';
+import {
+  IMPORT_MAX_ATTEMPTS,
+  IMPORT_QUEUE_STATE_TIMEOUT_MS,
+  IMPORT_RETRY_BACKOFF_MS,
+} from './import-pipeline.options';
 
 /**
  * ADR-002 job result contract: the three counts the processor reports.
@@ -92,9 +108,39 @@ export interface ImportBatchOutcome {
   transient: TransientImport[];
 }
 
+/** The persisted job columns the read API needs to build a response model. */
+interface ImportJobRow {
+  id: number;
+  status: string;
+  declaredCount: number | null;
+  photoRef: string | null;
+  batchId: string | null;
+  bullJobId: string | null;
+  recognizedCount: number;
+  importedCount: number;
+  unrecognizedCount: number;
+  errorMessage: string | null;
+  createdAt: Date;
+  completedAt: Date | null;
+}
+
+/** The four counts the read API exposes per job (ticket 3.6). */
+export interface JobProgressCounts {
+  recognizedCount: number;
+  importedCount: number;
+  unrecognizedCount: number;
+  pendingCount: number;
+}
+
 @Injectable()
 export class ImportJobsService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ImportJobsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @InjectQueue(PHOTO_IMPORT_QUEUE)
+    private readonly queue: Queue<PhotoImportJobData>,
+  ) {}
 
   // ---------- read API ----------
 
@@ -108,6 +154,9 @@ export class ImportJobsService {
     if (query.status !== undefined) {
       where.status = query.status;
     }
+    if (query.batchId !== undefined) {
+      where.batchId = query.batchId;
+    }
     const [items, total] = await Promise.all([
       this.prisma.importJob.findMany({
         where,
@@ -117,8 +166,23 @@ export class ImportJobsService {
       }),
       this.prisma.importJob.count({ where }),
     ]);
+    const counts = await this.progressCountsFor(items);
+    // Terminal rows are never fetched from Redis (decision D4): their durable
+    // status is the record and `queueState` stays null.
+    const queueStates = await this.readQueueStates(
+      items
+        .filter((row) => !isTerminalImportJobStatus(row.status))
+        .map((row) => row.bullJobId),
+    );
+    const mapped = items.map((row) =>
+      this.toJobModel(
+        row,
+        counts.get(row.id) ?? emptyCounts(),
+        queueStates.get(row.bullJobId ?? '') ?? null,
+      ),
+    );
     return {
-      items,
+      items: mapped,
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -132,7 +196,18 @@ export class ImportJobsService {
     if (!job) {
       throw new NotFoundException(`Import job with id ${String(id)} not found`);
     }
-    return job;
+    const counts = await this.progressCountsFor([job]);
+    const queueStates = isTerminalImportJobStatus(job.status)
+      ? new Map<string, string>()
+      : await this.readQueueStates([job.bullJobId]);
+    return Object.assign(
+      this.toJobModel(
+        job,
+        counts.get(job.id) ?? emptyCounts(),
+        queueStates.get(job.bullJobId ?? '') ?? null,
+      ),
+      { unrecognizedItems: job.unrecognizedItems },
+    );
   }
 
   /**
@@ -145,6 +220,44 @@ export class ImportJobsService {
       where: { importJobId: jobId, dismissedAt: null },
       orderBy: { id: 'asc' },
     });
+  }
+
+  /**
+   * Aggregate progress for one upload batch (ticket 3.6): the X-of-Y view.
+   * One `groupBy(status)` over the durable rows; 404 when the batch has no
+   * rows at all (a typo/unknown id, not an empty-but-valid batch).
+   */
+  async getBatchProgress(batchId: string): Promise<ImportBatchProgressModel> {
+    const groups = await this.prisma.importJob.groupBy({
+      by: ['status'],
+      where: { batchId },
+      _count: { _all: true },
+    });
+    const byStatus: Record<string, number> = {};
+    let total = 0;
+    for (const group of groups) {
+      byStatus[group.status] = group._count._all;
+      total += group._count._all;
+    }
+    if (total === 0) {
+      throw new NotFoundException(`Import batch ${batchId} not found`);
+    }
+    const queued = byStatus.queued ?? 0;
+    const processing = byStatus.processing ?? 0;
+    const pendingCount = queued + processing;
+    return {
+      batchId,
+      total,
+      queued,
+      processing,
+      done: byStatus.done ?? 0,
+      needsAttention: byStatus.needs_attention ?? 0,
+      failed: byStatus.failed ?? 0,
+      dismissed: byStatus.dismissed ?? 0,
+      completedCount: total - pendingCount,
+      pendingCount,
+      allCompleted: pendingCount === 0,
+    };
   }
 
   // ---------- user actions ----------
@@ -231,19 +344,123 @@ export class ImportJobsService {
     return updated;
   }
 
+  /**
+   * Retry a failed run **in place** (ticket 3.6): the same `import_jobs` row
+   * is reset to `queued` and a NEW BullMQ unit re-enters the pipeline.
+   *
+   * Idempotency comes from the pipeline itself: `visionCompletedAt` prevents a
+   * second vision call, `listPendingRecognizedItems` re-runs only `pending`
+   * titles, and the `updateMany({ status: 'pending' })` claim in
+   * `commitImportBatch` rolls a batch back instead of duplicating a `Game`.
+   * The counters are intentionally left intact — the pipeline recomputes them.
+   *
+   * Only `failed` jobs with a stored photo are retryable: `queued`/`processing`
+   * are already in flight, and `done`/`needs_attention`/`dismissed` have
+   * nothing pending. The guarded `updateMany` closes the race between two
+   * concurrent retries.
+   */
+  async retryJob(id: number): Promise<ImportJobDetailModel> {
+    const job = await this.prisma.importJob.findUnique({
+      where: { id },
+      select: { id: true, status: true, photoRef: true, declaredCount: true },
+    });
+    if (!job) {
+      throw new NotFoundException(`Import job with id ${String(id)} not found`);
+    }
+    if (job.status !== 'failed') {
+      throw new ConflictException(
+        `Only failed jobs can be retried (current status: ${job.status})`,
+      );
+    }
+    if (job.photoRef === null) {
+      throw new ConflictException('This import has no photo to re-process');
+    }
+    const reset = await this.prisma.importJob.updateMany({
+      where: { id, status: 'failed' },
+      data: { status: 'queued', errorMessage: null, completedAt: null },
+    });
+    if (reset.count !== 1) {
+      throw new ConflictException(
+        `Import job ${String(id)} is no longer failed`,
+      );
+    }
+    let bullJobId: string;
+    try {
+      const bull = await this.queue.add(
+        'photo',
+        {
+          photoRef: job.photoRef,
+          declaredCount: job.declaredCount,
+          importJobId: id,
+        },
+        {
+          attempts: IMPORT_MAX_ATTEMPTS,
+          backoff: { type: 'exponential', delay: IMPORT_RETRY_BACKOFF_MS },
+        },
+      );
+      bullJobId = String(bull.id);
+    } catch {
+      // Secondary failure (the row may already have moved on): the intended
+      // outcome is still the 503 below, so a failed markFailed must not turn
+      // this into a 500.
+      try {
+        await this.markFailed(id, 'Failed to enqueue the import job');
+      } catch (error) {
+        this.logger.warn(
+          `Failed to mark import job ${String(id)} failed after an enqueue error: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+      throw new ServiceUnavailableException(
+        'Could not enqueue the import retry; please retry',
+      );
+    }
+    // Best-effort, separate from the fatal enqueue above: the BullMQ unit is
+    // already committed, so a failed id write only loses the live-state link
+    // and must not force the row back to `failed` or return a 503.
+    try {
+      await this.prisma.importJob.update({
+        where: { id },
+        data: { bullJobId },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to store BullMQ id for import job ${String(id)}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    return this.findOne(id);
+  }
+
   // ---------- pipeline surface (called by tickets 3.2 / 3.5) ----------
 
-  /** One row per uploaded photo (ticket 3.2). */
+  /** One row per uploaded photo (ticket 3.2); grouped by `batchId` (3.6). */
   async createJob(data: {
     declaredCount?: number | null;
     photoRef?: string | null;
-  }): Promise<ImportJobModel> {
+    batchId?: string | null;
+  }): Promise<ImportJobRow> {
     return this.prisma.importJob.create({
       data: {
         status: 'queued',
         declaredCount: data.declaredCount ?? null,
         photoRef: data.photoRef ?? null,
+        batchId: data.batchId ?? null,
       },
+    });
+  }
+
+  /**
+   * Stores the BullMQ job id currently backing this run (ticket 3.6), so the
+   * read API can fetch its live queue state. Best-effort: the caller treats a
+   * failure here as non-fatal (the durable row is already the record).
+   */
+  async setBullJobId(jobId: number, bullJobId: string): Promise<void> {
+    await this.prisma.importJob.update({
+      where: { id: jobId },
+      data: { bullJobId },
     });
   }
 
@@ -270,7 +487,7 @@ export class ImportJobsService {
   async markCompleted(
     jobId: number,
     result: JobCompletionResult,
-  ): Promise<ImportJobModel> {
+  ): Promise<ImportJobRow> {
     const job = await this.getJobForTransition(jobId, ['queued', 'processing']);
     const needsAttention =
       result.recognizedCount === 0 ||
@@ -302,7 +519,7 @@ export class ImportJobsService {
     jobId: number,
     errorMessage: string,
     counts?: JobCompletionResult,
-  ): Promise<ImportJobModel> {
+  ): Promise<ImportJobRow> {
     await this.assertTransition(jobId, ['queued', 'processing']);
     return this.prisma.importJob.update({
       where: { id: jobId },
@@ -565,6 +782,175 @@ export class ImportJobsService {
 
   // ---------- helpers ----------
 
+  /**
+   * Best-effort live BullMQ states for the given ids (ticket 3.6). A Redis
+   * error or a slow response yields an empty map: the durable MySQL status is
+   * the record, the queue state is only a supplementary signal.
+   */
+  async readQueueStates(
+    bullJobIds: (string | null)[],
+  ): Promise<Map<string, string>> {
+    const ids = [
+      ...new Set(bullJobIds.filter((v): v is string => typeof v === 'string')),
+    ];
+    if (ids.length === 0) {
+      return new Map();
+    }
+    try {
+      const results = await this.withTimeout(
+        Promise.allSettled(
+          ids.map(async (bullId) => {
+            const job = await this.queue.getJob(bullId);
+            if (!job) return null;
+            return [bullId, await job.getState()] as const;
+          }),
+        ),
+        IMPORT_QUEUE_STATE_TIMEOUT_MS,
+      );
+      const states = new Map<string, string>();
+      for (const result of results) {
+        if (result.status === 'fulfilled' && result.value !== null) {
+          states.set(result.value[0], result.value[1]);
+        }
+      }
+      return states;
+    } catch {
+      return new Map();
+    }
+  }
+
+  /**
+   * Live counts from `recognized_items` for a set of jobs, in one query.
+   * `pending` is tracked separately so the read API can report unresolved
+   * titles even before the job is terminal.
+   */
+  private async deriveCounts(
+    ids: number[],
+  ): Promise<Map<number, JobProgressCounts>> {
+    const counts = new Map<number, JobProgressCounts>();
+    for (const id of ids) {
+      counts.set(id, emptyCounts());
+    }
+    if (ids.length === 0) {
+      return counts;
+    }
+    const groups = await this.prisma.recognizedItem.groupBy({
+      by: ['importJobId', 'status'],
+      where: { importJobId: { in: ids } },
+      _count: { _all: true },
+    });
+    for (const group of groups) {
+      const entry = counts.get(group.importJobId) ?? emptyCounts();
+      const count = group._count._all;
+      entry.recognizedCount += count;
+      if (group.status === 'imported') {
+        entry.importedCount += count;
+      } else if (group.status === 'unrecognized') {
+        entry.unrecognizedCount += count;
+      } else if (group.status === 'pending') {
+        entry.pendingCount += count;
+      }
+      counts.set(group.importJobId, entry);
+    }
+    return counts;
+  }
+
+  /**
+   * Counts per job: terminal rows use the persisted counters (the pipeline's
+   * source of truth); non-terminal rows are computed live so a poller sees
+   * progress while the run is still in flight. `pendingCount` is always
+   * `max(0, recognized − imported − unrecognized)`.
+   */
+  private async progressCountsFor(
+    rows: Pick<
+      ImportJobRow,
+      | 'id'
+      | 'status'
+      | 'recognizedCount'
+      | 'importedCount'
+      | 'unrecognizedCount'
+    >[],
+  ): Promise<Map<number, JobProgressCounts>> {
+    const counts = new Map<number, JobProgressCounts>();
+    const liveIds: number[] = [];
+    for (const row of rows) {
+      if (isTerminalImportJobStatus(row.status)) {
+        counts.set(row.id, {
+          recognizedCount: row.recognizedCount,
+          importedCount: row.importedCount,
+          unrecognizedCount: row.unrecognizedCount,
+          pendingCount: Math.max(
+            0,
+            row.recognizedCount - row.importedCount - row.unrecognizedCount,
+          ),
+        });
+      } else {
+        liveIds.push(row.id);
+      }
+    }
+    if (liveIds.length > 0) {
+      const live = await this.deriveCounts(liveIds);
+      for (const [id, entry] of live) {
+        counts.set(id, entry);
+      }
+    }
+    return counts;
+  }
+
+  /**
+   * Builds the read model for one row: merges the durable status with the live
+   * queue state, and derives the review flags from the counts.
+   */
+  private toJobModel(
+    row: ImportJobRow,
+    counts: JobProgressCounts,
+    queueState: string | null,
+  ): ImportJobModel {
+    const status = mergeImportJobStatus(row.status, queueState);
+    return {
+      id: row.id,
+      status,
+      declaredCount: row.declaredCount,
+      photoRef: row.photoRef,
+      recognizedCount: counts.recognizedCount,
+      importedCount: counts.importedCount,
+      unrecognizedCount: counts.unrecognizedCount,
+      errorMessage: row.errorMessage,
+      createdAt: row.createdAt,
+      completedAt: row.completedAt,
+      batchId: row.batchId,
+      bullJobId: row.bullJobId,
+      pendingCount: counts.pendingCount,
+      needsAttention: status === 'needs_attention',
+      declaredCountMismatch:
+        isTerminalImportJobStatus(row.status) &&
+        row.declaredCount !== null &&
+        counts.recognizedCount !== row.declaredCount,
+      // Redis is never authoritative for a terminal outcome (decision D4).
+      queueState: isTerminalImportJobStatus(row.status) ? null : queueState,
+    };
+  }
+
+  /** Rejects after `timeoutMs`; clears the timer on settle (no dangling handle). */
+  private async withTimeout<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+  ): Promise<T> {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            reject(new Error('Redis did not respond in time'));
+          }, timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }
+
   private async assertJobExists(jobId: number): Promise<void> {
     const job = await this.prisma.importJob.findUnique({
       where: { id: jobId },
@@ -610,4 +996,14 @@ export class ImportJobsService {
       error.code === 'P2025'
     );
   }
+}
+
+/** A zeroed count set; used as the base for live aggregation. */
+function emptyCounts(): JobProgressCounts {
+  return {
+    recognizedCount: 0,
+    importedCount: 0,
+    unrecognizedCount: 0,
+    pendingCount: 0,
+  };
 }

@@ -1,6 +1,14 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, Max, Min } from 'class-validator';
+import {
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export const IMPORT_JOB_STATUSES = [
   'queued',
@@ -45,4 +53,13 @@ export class ListImportJobsQueryDto {
   @IsOptional()
   @IsIn([...IMPORT_JOB_STATUSES])
   status?: ImportJobStatus;
+
+  @ApiPropertyOptional({
+    description: 'Only jobs from this upload batch',
+    example: 'c1f0a4e2-...-9b3d',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  batchId?: string;
 }

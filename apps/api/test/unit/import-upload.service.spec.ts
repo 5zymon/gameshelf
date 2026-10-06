@@ -30,7 +30,11 @@ function uploadedFile(name: string): Express.Multer.File {
 }
 
 interface Mocks {
-  jobs: { createJob: jest.Mock; markFailed: jest.Mock };
+  jobs: {
+    createJob: jest.Mock;
+    markFailed: jest.Mock;
+    setBullJobId: jest.Mock;
+  };
   storage: { store: jest.Mock };
   llm: { isConfigured: jest.Mock };
   queue: { add: jest.Mock };
@@ -38,7 +42,11 @@ interface Mocks {
 
 function createService(): { service: ImportUploadService; mocks: Mocks } {
   const mocks: Mocks = {
-    jobs: { createJob: jest.fn(), markFailed: jest.fn() },
+    jobs: {
+      createJob: jest.fn(),
+      markFailed: jest.fn(),
+      setBullJobId: jest.fn(),
+    },
     storage: { store: jest.fn() },
     llm: { isConfigured: jest.fn().mockResolvedValue(true) },
     queue: { add: jest.fn() },
@@ -72,6 +80,7 @@ function stubHappyPath(mocks: Mocks): void {
     jobId += 1;
     return Promise.resolve({ id: String(jobId) });
   });
+  mocks.jobs.setBullJobId.mockResolvedValue(undefined);
 }
 
 describe('ImportUploadService (unit)', () => {
@@ -106,10 +115,22 @@ describe('ImportUploadService (unit)', () => {
     expect(mocks.jobs.createJob).toHaveBeenNthCalledWith(1, {
       declaredCount: null,
       photoRef: 'a.png.stored',
+      batchId: expect.any(String) as string,
     });
     expect(result.jobs).toHaveLength(5);
     expect(result.jobs.every((job) => job.status === 'queued')).toBe(true);
     expect(new Set(result.jobs.map((job) => job.jobId)).size).toBe(5);
+    expect(result.batchId).toEqual(expect.any(String));
+    expect(result.batchId).not.toBe('');
+    // Every photo shares the one batch id from this request.
+    const createCalls = mocks.jobs.createJob.mock.calls as [
+      { batchId: string },
+    ][];
+    expect(
+      createCalls.every((call) => call[0].batchId === result.batchId),
+    ).toBe(true);
+    expect(mocks.jobs.setBullJobId).toHaveBeenCalledTimes(5);
+    expect(mocks.jobs.setBullJobId).toHaveBeenNthCalledWith(1, 1, '1');
   });
 
   it('treats an omitted declared count as all-null', async () => {
@@ -120,6 +141,7 @@ describe('ImportUploadService (unit)', () => {
     expect(mocks.jobs.createJob).toHaveBeenCalledWith({
       declaredCount: null,
       photoRef: 'a.png.stored',
+      batchId: expect.any(String) as string,
     });
   });
 
@@ -132,14 +154,17 @@ describe('ImportUploadService (unit)', () => {
     expect(mocks.jobs.createJob).toHaveBeenNthCalledWith(1, {
       declaredCount: 7,
       photoRef: 'a.png.stored',
+      batchId: expect.any(String) as string,
     });
     expect(mocks.jobs.createJob).toHaveBeenNthCalledWith(2, {
       declaredCount: null,
       photoRef: 'b.png.stored',
+      batchId: expect.any(String) as string,
     });
     expect(mocks.jobs.createJob).toHaveBeenNthCalledWith(3, {
       declaredCount: null,
       photoRef: 'c.png.stored',
+      batchId: expect.any(String) as string,
     });
   });
 
@@ -209,6 +234,20 @@ describe('ImportUploadService (unit)', () => {
       1,
       'Failed to enqueue the import job',
     );
+  });
+
+  it('still succeeds when storing the BullMQ id fails (best-effort)', async () => {
+    stubHappyPath(mocks);
+    mocks.jobs.setBullJobId.mockRejectedValue(new Error('db blip'));
+
+    const result = await service.startUpload(
+      [uploadedFile('a.png')],
+      undefined,
+    );
+
+    expect(result.jobs).toHaveLength(1);
+    expect(mocks.queue.add).toHaveBeenCalledTimes(1);
+    expect(mocks.jobs.markFailed).not.toHaveBeenCalled();
   });
 });
 

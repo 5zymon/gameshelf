@@ -4,7 +4,7 @@ title: Photo Import Pipeline
 description: The BullMQ worker's per-photo pipeline — one vision call, external validation, per-batch MySQL transactions, retry-only-unresolved, and photo deletion after completion.
 tags: [import, worker, bullmq, igdb, vision]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T12:30:00Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T13:30:00Z }
 ---
 
 # Overview
@@ -142,9 +142,17 @@ stops immediately; a `RetryableImportError` is re-thrown unchanged so the
 remaining attempts run. Either way the failure path persists the counters
 reached so far.
 
+A **user-initiated retry** (`POST /import-jobs/:id/retry`, ticket 3.6) resets
+the same failed row to `queued` and enqueues a fresh BullMQ unit with the same
+`importJobId`, so it re-enters exactly this pipeline. It reuses the
+retry-only-unresolved path unchanged: the `vision_completed_at` marker skips a
+second vision call and only `pending` titles are re-resolved, which is why a
+retry never duplicates an already-saved game. See
+[Import Jobs API](/import-jobs-api.md) for the endpoint contract.
+
 # Out of scope
 
 - MobyGames fallback (4.5) and IGDB multiquery batching (4.3).
-- The retry endpoint (3.6) and manual item resolution (3.6).
+- Manual item resolution (pick candidate / manual add).
 - The orphaned-photo sweep (3.8).
 - Frontend progress/flagged-item views.

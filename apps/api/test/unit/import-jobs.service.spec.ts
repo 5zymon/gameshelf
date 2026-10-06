@@ -1,6 +1,13 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import type { Queue } from 'bullmq';
 import { Prisma } from '../../src/generated/prisma/client';
 import { ImportJobsService } from '../../src/import-jobs/import-jobs.service';
+import { IMPORT_QUEUE_STATE_TIMEOUT_MS } from '../../src/import-jobs/import-pipeline.options';
+import type { PhotoImportJobData } from '../../src/queue/photo-import.types';
 import type { PrismaService } from '../../src/prisma/prisma.service';
 
 interface ImportJobsPrismaMock {
@@ -12,6 +19,7 @@ interface ImportJobsPrismaMock {
     create: jest.Mock;
     update: jest.Mock;
     updateMany: jest.Mock;
+    groupBy: jest.Mock;
   };
   unrecognizedItem: {
     findMany: jest.Mock;
@@ -38,6 +46,7 @@ interface ImportJobsPrismaMock {
 function createService(): {
   service: ImportJobsService;
   mock: ImportJobsPrismaMock;
+  queue: { getJob: jest.Mock; add: jest.Mock };
 } {
   const mock: ImportJobsPrismaMock = {
     importJob: {
@@ -48,6 +57,7 @@ function createService(): {
       create: jest.fn(),
       update: jest.fn(),
       updateMany: jest.fn(),
+      groupBy: jest.fn(),
     },
     unrecognizedItem: {
       findMany: jest.fn(),
@@ -74,9 +84,17 @@ function createService(): {
   mock.$transaction.mockImplementation(
     (callback: (tx: ImportJobsPrismaMock) => unknown) => callback(mock),
   );
+  // No batch/aggregate by default; tests that need it override the result.
+  mock.importJob.groupBy.mockResolvedValue([]);
+  mock.recognizedItem.groupBy.mockResolvedValue([]);
+  const queue = { getJob: jest.fn(), add: jest.fn() };
   return {
-    service: new ImportJobsService(mock as unknown as PrismaService),
+    service: new ImportJobsService(
+      mock as unknown as PrismaService,
+      queue as unknown as Queue<PhotoImportJobData>,
+    ),
     mock,
+    queue,
   };
 }
 
@@ -96,12 +114,16 @@ const JOB = {
   id: 1,
   status: 'needs_attention',
   declaredCount: 2,
+  photoRef: null,
+  batchId: null,
+  bullJobId: null,
   recognizedCount: 1,
   importedCount: 1,
   unrecognizedCount: 1,
   errorMessage: null,
   createdAt: new Date('2026-01-01T00:00:00.000Z'),
   completedAt: new Date('2026-01-01T01:00:00.000Z'),
+  unrecognizedItems: [] as unknown[],
 };
 
 const ITEM = {
@@ -117,9 +139,10 @@ const ITEM = {
 describe('ImportJobsService (unit)', () => {
   let service: ImportJobsService;
   let mock: ImportJobsPrismaMock;
+  let queue: { getJob: jest.Mock; add: jest.Mock };
 
   beforeEach(() => {
-    ({ service, mock } = createService());
+    ({ service, mock, queue } = createService());
   });
 
   describe('list', () => {
@@ -186,7 +209,7 @@ describe('ImportJobsService (unit)', () => {
         where: { id: 1 },
         include: { unrecognizedItems: { orderBy: { id: 'asc' } } },
       });
-      expect(result).toBe(JOB);
+      expect(result).toMatchObject(JOB);
     });
 
     it('throws 404 for an unknown job', async () => {
@@ -240,7 +263,7 @@ describe('ImportJobsService (unit)', () => {
       const result = await service.dismissJob(1);
 
       expect(mock.importJob.update).not.toHaveBeenCalled();
-      expect(result).toBe(fullJob);
+      expect(result).toMatchObject(fullJob);
     });
 
     it.each(['queued', 'processing', 'done'] as const)(
@@ -266,7 +289,7 @@ describe('ImportJobsService (unit)', () => {
         where: { id: 1 },
         data: { status: 'dismissed' },
       });
-      expect(result).toBe(fullJob);
+      expect(result).toMatchObject(fullJob);
     });
 
     it('dismisses a needs_attention job and returns the detail', async () => {
@@ -282,7 +305,7 @@ describe('ImportJobsService (unit)', () => {
         where: { id: 1 },
         data: { status: 'dismissed' },
       });
-      expect(result).toBe(fullJob);
+      expect(result).toMatchObject(fullJob);
     });
 
     it('maps P2025 (deleted mid-flight) to 404', async () => {
@@ -375,7 +398,12 @@ describe('ImportJobsService (unit)', () => {
       const result = await service.createJob({});
 
       expect(mock.importJob.create).toHaveBeenCalledWith({
-        data: { status: 'queued', declaredCount: null, photoRef: null },
+        data: {
+          status: 'queued',
+          declaredCount: null,
+          photoRef: null,
+          batchId: null,
+        },
       });
       expect(result).toEqual({ ...JOB, status: 'queued' });
     });
@@ -390,7 +418,12 @@ describe('ImportJobsService (unit)', () => {
       await service.createJob({ declaredCount: 12 });
 
       expect(mock.importJob.create).toHaveBeenCalledWith({
-        data: { status: 'queued', declaredCount: 12, photoRef: null },
+        data: {
+          status: 'queued',
+          declaredCount: 12,
+          photoRef: null,
+          batchId: null,
+        },
       });
     });
 
@@ -404,7 +437,12 @@ describe('ImportJobsService (unit)', () => {
       await service.createJob({ photoRef: 'abc.png' });
 
       expect(mock.importJob.create).toHaveBeenCalledWith({
-        data: { status: 'queued', declaredCount: null, photoRef: 'abc.png' },
+        data: {
+          status: 'queued',
+          declaredCount: null,
+          photoRef: 'abc.png',
+          batchId: null,
+        },
       });
     });
   });
@@ -1033,6 +1071,315 @@ describe('ImportJobsService (unit)', () => {
       ).rejects.toThrow('already resolved');
 
       expect(mock.unrecognizedItem.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('retryJob', () => {
+    it('resets the failed row and enqueues a new BullMQ unit', async () => {
+      const resetJob = {
+        ...JOB,
+        status: 'queued',
+        photoRef: 'p.png',
+        declaredCount: 2,
+        completedAt: null,
+      };
+      mock.importJob.findUnique
+        .mockResolvedValueOnce({
+          id: 1,
+          status: 'failed',
+          photoRef: 'p.png',
+          declaredCount: 2,
+        })
+        .mockResolvedValueOnce(resetJob);
+      mock.importJob.updateMany.mockResolvedValue({ count: 1 });
+      queue.add.mockResolvedValue({ id: '9' });
+      mock.importJob.update.mockResolvedValue(resetJob);
+
+      const result = await service.retryJob(1);
+
+      expect(mock.importJob.updateMany).toHaveBeenCalledWith({
+        where: { id: 1, status: 'failed' },
+        data: { status: 'queued', errorMessage: null, completedAt: null },
+      });
+      expect(queue.add).toHaveBeenCalledWith(
+        'photo',
+        { photoRef: 'p.png', declaredCount: 2, importJobId: 1 },
+        expect.objectContaining({ attempts: 3 }),
+      );
+      expect(mock.importJob.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { bullJobId: '9' },
+      });
+      expect(result).toMatchObject({ id: 1, status: 'queued' });
+    });
+
+    it('409s when the guarded reset matches no row, without enqueueing', async () => {
+      mock.importJob.findUnique.mockResolvedValueOnce({
+        id: 1,
+        status: 'failed',
+        photoRef: 'p.png',
+        declaredCount: null,
+      });
+      mock.importJob.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.retryJob(1)).rejects.toThrow(ConflictException);
+      expect(queue.add).not.toHaveBeenCalled();
+    });
+
+    it.each(['queued', 'processing', 'done', 'needs_attention', 'dismissed'])(
+      '409s for a %s job without enqueueing',
+      async (status) => {
+        mock.importJob.findUnique.mockResolvedValueOnce({
+          id: 1,
+          status,
+          photoRef: 'p.png',
+          declaredCount: null,
+        });
+
+        await expect(service.retryJob(1)).rejects.toThrow(ConflictException);
+        expect(mock.importJob.updateMany).not.toHaveBeenCalled();
+        expect(queue.add).not.toHaveBeenCalled();
+      },
+    );
+
+    it('409s for a failed job with no stored photo', async () => {
+      mock.importJob.findUnique.mockResolvedValueOnce({
+        id: 1,
+        status: 'failed',
+        photoRef: null,
+        declaredCount: null,
+      });
+
+      await expect(service.retryJob(1)).rejects.toThrow(ConflictException);
+      expect(queue.add).not.toHaveBeenCalled();
+    });
+
+    it('404s for an unknown job', async () => {
+      mock.importJob.findUnique.mockResolvedValueOnce(null);
+
+      await expect(service.retryJob(9)).rejects.toThrow(
+        new NotFoundException('Import job with id 9 not found'),
+      );
+      expect(queue.add).not.toHaveBeenCalled();
+    });
+
+    it('marks the row failed and 503s when enqueueing fails after the reset', async () => {
+      mock.importJob.findUnique
+        .mockResolvedValueOnce({
+          id: 1,
+          status: 'failed',
+          photoRef: 'p.png',
+          declaredCount: null,
+        })
+        // markFailed -> assertTransition reloads the (now queued) row.
+        .mockResolvedValueOnce({
+          id: 1,
+          status: 'queued',
+          declaredCount: null,
+        });
+      mock.importJob.updateMany.mockResolvedValue({ count: 1 });
+      queue.add.mockRejectedValue(new Error('redis down'));
+      mock.importJob.update.mockResolvedValue({ ...JOB, status: 'failed' });
+
+      await expect(service.retryJob(1)).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+      expect(mock.importJob.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            status: 'failed',
+            errorMessage: 'Failed to enqueue the import job',
+          }) as Record<string, unknown>,
+        }),
+      );
+    });
+
+    it('still returns the detail when the bullJobId write fails after enqueue', async () => {
+      const resetJob = {
+        ...JOB,
+        status: 'queued',
+        photoRef: 'p.png',
+        declaredCount: 2,
+        completedAt: null,
+      };
+      mock.importJob.findUnique
+        .mockResolvedValueOnce({
+          id: 1,
+          status: 'failed',
+          photoRef: 'p.png',
+          declaredCount: 2,
+        })
+        .mockResolvedValueOnce(resetJob);
+      mock.importJob.updateMany.mockResolvedValue({ count: 1 });
+      queue.add.mockResolvedValue({ id: '9' });
+      mock.importJob.update.mockRejectedValue(new Error('db down'));
+
+      const result = await service.retryJob(1);
+
+      expect(queue.add).toHaveBeenCalled();
+      // The bullJobId write is the only update: markFailed never ran, so the
+      // row was not forced back to failed.
+      expect(mock.importJob.update).toHaveBeenCalledTimes(1);
+      expect(mock.importJob.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: { bullJobId: '9' },
+      });
+      expect(result).toMatchObject({ id: 1, status: 'queued' });
+    });
+  });
+
+  describe('getBatchProgress', () => {
+    it('aggregates statuses into the X-of-Y model', async () => {
+      mock.importJob.groupBy.mockResolvedValue([
+        { status: 'queued', _count: { _all: 2 } },
+        { status: 'processing', _count: { _all: 1 } },
+        { status: 'done', _count: { _all: 3 } },
+        { status: 'needs_attention', _count: { _all: 1 } },
+        { status: 'failed', _count: { _all: 1 } },
+        { status: 'dismissed', _count: { _all: 2 } },
+      ]);
+
+      const result = await service.getBatchProgress('b1');
+
+      expect(mock.importJob.groupBy).toHaveBeenCalledWith({
+        by: ['status'],
+        where: { batchId: 'b1' },
+        _count: { _all: true },
+      });
+      expect(result).toEqual({
+        batchId: 'b1',
+        total: 10,
+        queued: 2,
+        processing: 1,
+        done: 3,
+        needsAttention: 1,
+        failed: 1,
+        dismissed: 2,
+        completedCount: 7,
+        pendingCount: 3,
+        allCompleted: false,
+      });
+    });
+
+    it('404s for a batch with no rows', async () => {
+      mock.importJob.groupBy.mockResolvedValue([]);
+
+      await expect(service.getBatchProgress('nope')).rejects.toThrow(
+        new NotFoundException('Import batch nope not found'),
+      );
+    });
+  });
+
+  describe('live state merge (list/findOne)', () => {
+    const queuedRow = {
+      ...JOB,
+      status: 'queued',
+      declaredCount: null,
+      recognizedCount: 0,
+      importedCount: 0,
+      unrecognizedCount: 0,
+      completedAt: null,
+      bullJobId: '42',
+    };
+
+    it('merges an active BullMQ state into processing for a queued row', async () => {
+      mock.importJob.findMany.mockResolvedValue([queuedRow]);
+      mock.importJob.count.mockResolvedValue(1);
+      queue.getJob.mockResolvedValue({
+        getState: jest.fn().mockResolvedValue('active'),
+      });
+
+      const result = await service.list({});
+
+      expect(queue.getJob).toHaveBeenCalledWith('42');
+      expect(result.items[0]).toMatchObject({
+        status: 'processing',
+        queueState: 'active',
+      });
+    });
+
+    it('keeps the durable status and a null queueState when Redis fails', async () => {
+      mock.importJob.findMany.mockResolvedValue([queuedRow]);
+      mock.importJob.count.mockResolvedValue(1);
+      queue.getJob.mockRejectedValue(new Error('redis down'));
+
+      const result = await service.list({});
+
+      expect(result.items[0]).toMatchObject({
+        status: 'queued',
+        queueState: null,
+      });
+    });
+
+    it('keeps the durable status and a null queueState when Redis is slow', async () => {
+      jest.useFakeTimers();
+      try {
+        mock.importJob.findMany.mockResolvedValue([queuedRow]);
+        mock.importJob.count.mockResolvedValue(1);
+        // Never settles: only the read timeout can release the request.
+        queue.getJob.mockReturnValue(
+          new Promise(() => {
+            /* deliberately never resolves */
+          }),
+        );
+
+        const pending = service.list({});
+        await jest.advanceTimersByTimeAsync(IMPORT_QUEUE_STATE_TIMEOUT_MS + 1);
+        const result = await pending;
+
+        expect(result.items[0]).toMatchObject({
+          status: 'queued',
+          queueState: null,
+        });
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
+    it('never reads Redis for a terminal row and reports a null queueState', async () => {
+      const terminalRow = {
+        ...JOB,
+        status: 'done',
+        bullJobId: '99',
+      };
+      mock.importJob.findMany.mockResolvedValue([terminalRow]);
+      mock.importJob.count.mockResolvedValue(1);
+
+      const result = await service.list({});
+
+      expect(queue.getJob).not.toHaveBeenCalled();
+      expect(result.items[0]).toMatchObject({
+        status: 'done',
+        queueState: null,
+      });
+    });
+
+    it('computes live counts for a non-terminal job', async () => {
+      mock.importJob.findUnique.mockResolvedValue(queuedRow);
+      mock.recognizedItem.groupBy.mockResolvedValue([
+        { importJobId: 1, status: 'imported', _count: { _all: 2 } },
+        { importJobId: 1, status: 'pending', _count: { _all: 3 } },
+      ]);
+      queue.getJob.mockResolvedValue({
+        getState: jest.fn().mockResolvedValue('waiting'),
+      });
+
+      const result = await service.findOne(1);
+
+      expect(result).toMatchObject({
+        status: 'queued',
+        queueState: 'waiting',
+        recognizedCount: 5,
+        importedCount: 2,
+        unrecognizedCount: 0,
+        pendingCount: 3,
+        needsAttention: false,
+      });
+      expect(mock.recognizedItem.groupBy).toHaveBeenCalledWith({
+        by: ['importJobId', 'status'],
+        where: { importJobId: { in: [1] } },
+        _count: { _all: true },
+      });
     });
   });
 });

@@ -18,6 +18,12 @@ export class ImportUploadJobModel {
 }
 
 export class StartImportUploadResponseModel {
+  @ApiProperty({
+    example: 'c1f0a4e2-...-9b3d',
+    description: 'Batch id grouping every photo in this upload',
+  })
+  batchId!: string;
+
   @ApiProperty({ type: [ImportUploadJobModel] })
   jobs!: ImportUploadJobModel[];
 }

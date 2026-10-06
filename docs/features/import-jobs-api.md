@@ -1,10 +1,10 @@
 ---
 type: Feature
 title: Import Jobs API
-description: GET/PATCH /import-jobs — persisted import runs, flagged-item review, dismissal, and the retention policy.
+description: GET/PATCH/POST /import-jobs — persisted import runs with live status/counts, batch progress, retry, flagged-item review, dismissal, and the retention policy.
 tags: [api, import]
 status: draft
-generated: { by: opencode/home-model, at: 2026-10-05T18:07:16Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T13:30:00Z }
 ---
 
 # Overview
@@ -28,13 +28,15 @@ the multi-photo upload that calls `createJob` — is documented separately in th
 
 # Endpoint contract
 
-| Method  | Path                                    | Purpose                                                         | Success                         | Errors              |
-| ------- | --------------------------------------- | --------------------------------------------------------------- | ------------------------------- | ------------------- |
-| `GET`   | `/import-jobs`                          | List import runs with status and counts, newest first           | `200` `ListImportJobsResponse`  | `400`               |
-| `GET`   | `/import-jobs/:id`                      | One run with ALL its unrecognized items (full trace)            | `200` `ImportJobDetailModel`    | `400`, `404`        |
-| `GET`   | `/import-jobs/:id/unrecognized`         | Flagged items awaiting review (non-dismissed only)              | `200` `UnrecognizedItemModel[]` | `400`, `404`        |
-| `PATCH` | `/import-jobs/:id`                      | Dismiss a needs-attention/failed job (`{"status":"dismissed"}`) | `200` `ImportJobDetailModel`    | `400`, `404`, `409` |
-| `PATCH` | `/import-jobs/:id/unrecognized/:itemId` | Dismiss/acknowledge a flagged item (`{"dismissed":true}`)       | `200` `UnrecognizedItemModel`   | `400`, `404`        |
+| Method  | Path                                    | Purpose                                                         | Success                          | Errors                     |
+| ------- | --------------------------------------- | --------------------------------------------------------------- | -------------------------------- | -------------------------- |
+| `GET`   | `/import-jobs`                          | List import runs with status and counts, newest first           | `200` `ListImportJobsResponse`   | `400`                      |
+| `GET`   | `/import-jobs/batches/:batchId`         | Aggregate progress for one upload batch (X of Y photos)         | `200` `ImportBatchProgressModel` | `400`, `404`               |
+| `GET`   | `/import-jobs/:id`                      | One run with ALL its unrecognized items (full trace)            | `200` `ImportJobDetailModel`     | `400`, `404`               |
+| `POST`  | `/import-jobs/:id/retry`                | Retry a failed run in place (re-runs only unresolved titles)    | `202` `ImportJobDetailModel`     | `400`, `404`, `409`, `503` |
+| `GET`   | `/import-jobs/:id/unrecognized`         | Flagged items awaiting review (non-dismissed only)              | `200` `UnrecognizedItemModel[]`  | `400`, `404`               |
+| `PATCH` | `/import-jobs/:id`                      | Dismiss a needs-attention/failed job (`{"status":"dismissed"}`) | `200` `ImportJobDetailModel`     | `400`, `404`, `409`        |
+| `PATCH` | `/import-jobs/:id/unrecognized/:itemId` | Dismiss/acknowledge a flagged item (`{"dismissed":true}`)       | `200` `UnrecognizedItemModel`    | `400`, `404`               |
 
 `ImportJobModel` response shape:
 
@@ -47,6 +49,12 @@ the multi-photo upload that calls `createJob` — is documented separately in th
   "recognizedCount": 11,
   "importedCount": 9,
   "unrecognizedCount": 2,
+  "pendingCount": 0,
+  "needsAttention": true,
+  "declaredCountMismatch": true,
+  "batchId": "c1f0a4e2-...-9b3d",
+  "bullJobId": "17",
+  "queueState": null,
   "errorMessage": null,
   "createdAt": "2026-10-05T10:00:00.000Z",
   "completedAt": "2026-10-05T10:05:00.000Z"
@@ -60,11 +68,29 @@ without a photo); `errorMessage` is set only for `failed` jobs (the reason
 shown to the UI, spec §4.2.7); `completedAt` is stamped when the job leaves
 `processing`.
 
+Ticket 3.6 adds the computed progress fields:
+
+- `pendingCount` — unresolved titles: recognized but neither imported nor
+  flagged. For a terminal job it is `max(0, recognized − imported −
+unrecognized)`; for a running job it is the live count of `pending`
+  recognized items.
+- `needsAttention` — `status === 'needs_attention'` (the status-derived flag
+  for the review UI).
+- `declaredCountMismatch` — terminal job whose `declaredCount` is set and
+  differs from `recognizedCount` (ticket 4.8 will consume it).
+- `batchId` — the upload batch this run belongs to
+  ([Import Photo Upload API](/import-upload-api.md)); `null` for rows created
+  without one.
+- `bullJobId` — the BullMQ job currently backing the run (refreshed on retry).
+- `queueState` — the raw BullMQ state, or `null` when the job is terminal,
+  unknown, or Redis is unavailable (see _Live vs durable state_).
+
 `GET /import-jobs` returns `{ items, meta }` with `meta = { page, limit,
 total, totalPages }` (`page` default 1, `limit` default 20, max 100,
-`?status=` filter). Ordering is newest first: `createdAt DESC` with an `id
-DESC` tiebreaker so bulk-created rows sharing a timestamp stay
-deterministic (same pattern as the [Catalog API](/catalog-api.md) sorting).
+`?status=` filter, `?batchId=` filter). Ordering is newest first: `createdAt
+DESC` with an `id DESC` tiebreaker so bulk-created rows sharing a timestamp
+stay deterministic (same pattern as the [Catalog API](/catalog-api.md)
+sorting).
 
 # Status lifecycle
 
@@ -83,6 +109,7 @@ Allowed transitions (anything else is a `409`):
 | --------------------------- | ------------------------------------------- |
 | `queued`, `processing`      | `processing` (idempotent re-entry on retry) |
 | `queued`, `processing`      | `done`, `needs_attention`, `failed`         |
+| `failed`                    | `queued` (user-initiated retry)             |
 | `needs_attention`, `failed` | `dismissed`                                 |
 | `dismissed`                 | (none)                                      |
 
@@ -90,12 +117,23 @@ Allowed transitions (anything else is a `409`):
 (`markProcessing`, `markCompleted`, `markFailed`) refuse to touch any job
 that is not `queued`/`processing` — a late or duplicate processor callback
 can never clobber a user dismissal. Dismissal itself is idempotent:
-re-dismissing a dismissed job is a `200` no-op. A **user-initiated retry**
-(ticket 3.6) enqueues a **new** `import_jobs` row, never re-runs the old one
-(ADR-002: the queue's unit of work is the photo; a retry enqueues a fresh
-unit). This is distinct from BullMQ's **automatic** retry of a transient
-failure, which re-runs the **same** row with `attempts: 3` and leaves it
-`processing` between attempts.
+re-dismissing a dismissed job is a `200` no-op.
+
+**User retry is in-place.** A **user-initiated retry** (`POST
+/import-jobs/:id/retry`, ticket 3.6) re-runs the **same** `import_jobs` row:
+it resets `failed → queued` (clearing `errorMessage`/`completedAt`) and
+enqueues a **new** BullMQ unit for the same `importJobId`. The pipeline's own
+idempotency then guarantees correctness — `visionCompletedAt` prevents a
+second vision call, `listPendingRecognizedItems` re-runs only `pending`
+titles, and the `updateMany({ status: 'pending' })` claim in
+`commitImportBatch` rolls a batch back instead of duplicating a `Game`. The
+counters are left intact and recomputed by the pipeline. Only `failed` jobs
+with a stored `photoRef` are retryable (`409` otherwise: `queued`/`processing`
+are already in flight, `done`/`needs_attention`/`dismissed` have nothing
+pending). The guarded `updateMany({ where: { id, status: 'failed' } })` makes
+two concurrent retries safe. This is distinct from BullMQ's **automatic**
+retry of a transient failure, which also re-runs the **same** row with
+`attempts: 3` and leaves it `processing` between attempts (no user action).
 
 # Completion counts
 
@@ -141,6 +179,66 @@ and then failed permanently persists the counters it reached (pending items
 count as recognized) instead of leaving every column at 0. When omitted, the
 counter columns are left untouched.
 
+# Live vs durable state
+
+The durable record is `import_jobs.status` (MySQL); the BullMQ state (Redis)
+is a **supplementary** signal that lets a poller see a job move without
+waiting for the pipeline to persist each step. ADR-002 is explicit that Redis
+is not an audit log, so the merge is one-directional:
+
+| Durable status                                              | Queue state                                             | Reported `status` |
+| ----------------------------------------------------------- | ------------------------------------------------------- | ----------------- |
+| terminal (`done`, `needs_attention`, `failed`, `dismissed`) | (not fetched)                                           | durable status    |
+| `queued`/`processing`                                       | `active`                                                | `processing`      |
+| `queued`/`processing`                                       | `waiting`, `delayed`, `prioritized`, `waiting-children` | `queued`          |
+| `queued`/`processing`                                       | anything else / unavailable                             | durable status    |
+
+`queueState` carries the raw BullMQ value whenever it was fetched, and is
+`null` for terminal jobs, unknown ids, or when Redis is slow/unreachable. The
+read API fetches state for **non-terminal rows only**, best-effort, with a
+2 s timeout (`IMPORT_QUEUE_STATE_TIMEOUT_MS`); a Redis error returns an empty
+map and leaves the durable status untouched. A terminal outcome is therefore
+**never fabricated from Redis**.
+
+Counts follow the same split (ticket 3.6, decision D5): a terminal job reports
+its **persisted** counters (the pipeline's source of truth); a non-terminal
+job reports **live** counts aggregated from `recognized_items`
+(`groupBy(['importJobId', 'status'])`), so a running import shows progress
+before the counters are written. `pendingCount` is always derived
+(`max(0, recognized − imported − unrecognized)` for terminal rows; the live
+`pending` group otherwise).
+
+# Batch progress
+
+Every photo in one upload request shares a `batchId` (one `randomUUID()` per
+request, stored on `import_jobs.batch_id`), so the multi-photo progress view
+can report aggregate progress without polling each job:
+
+- `GET /import-jobs?batchId=` filters the list to one batch.
+- `GET /import-jobs/batches/:batchId` returns `ImportBatchProgressModel`:
+
+```json
+{
+  "batchId": "c1f0a4e2-...-9b3d",
+  "total": 5,
+  "queued": 1,
+  "processing": 1,
+  "done": 2,
+  "needsAttention": 1,
+  "failed": 0,
+  "dismissed": 0,
+  "completedCount": 3,
+  "pendingCount": 2,
+  "allCompleted": false
+}
+```
+
+The aggregate is one `groupBy(status)` over the durable rows:
+`completedCount` is every photo that reached a terminal status and
+`pendingCount` is `queued + processing` (the "X of Y" view); `allCompleted` is
+`pendingCount === 0`. An unknown/empty batch is a `404` (not an empty-but-valid
+batch). `batchId` is at most 64 chars (`400` otherwise).
+
 # Dismissal semantics
 
 - **Job dismissal** — `PATCH /import-jobs/:id` with `{"status":"dismissed"}`
@@ -158,8 +256,8 @@ counter columns are left untouched.
   `GET /import-jobs/:id` returns **all** items including dismissed — the
   full trace, which must outlive dismissal (spec §4.2.5).
 - Dismissal is a **state change, not a deletion**: rows remain queryable
-  (see Retention policy). "Resolution" (pick a candidate / manual add) is
-  ticket 3.6 and will extend the item model if needed.
+  (see Retention policy). "Resolution" (pick a candidate / manual add) is a
+  future ticket and will extend the item model if needed.
 
 # Retention policy
 
@@ -186,8 +284,10 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
 - `:id` / `:itemId` are transformed with `class-transformer` and must be
   integers ≥ 1; `abc`, `0`, or `1.5` → `400`.
 - `GET /import-jobs` query params: `page`/`limit` integers ≥ 1 (`limit` ≤
-  100); `status` must be one of the six lifecycle values; any unknown query
-  param → `400`.
+  100); `status` must be one of the six lifecycle values; `batchId` a string
+  of at most 64 chars; any unknown query param → `400`.
+- `GET /import-jobs/batches/:batchId`: `batchId` is a string of at most 64
+  chars (`400` otherwise), `404` when no job carries it.
 - `PATCH /import-jobs/:id` body must be exactly `{"status":"dismissed"}` —
   any other value, missing field, or unknown property → `400`.
 - `PATCH /import-jobs/:id/unrecognized/:itemId` body must be
@@ -202,9 +302,8 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
   [Photo Import Pipeline](/photo-import-pipeline.md); it calls
   `markProcessing` / `saveRecognition` / `commitImportBatch` /
   `markCompleted` / `markFailed`.
-- **Retry endpoint** (3.6) — a retry enqueues a new job; the old row is
-  never mutated.
-- **Item resolution** (pick candidate / manual add, 3.6) — dismissal is the
-  only item state change for now.
+- **Item resolution** (pick candidate / manual add) — dismissal is the only
+  item state change for now. (User retry and batch progress are implemented;
+  see _Status lifecycle_, _Live vs durable state_, and _Batch progress_.)
 - **Auth guards** (2.x) and the **frontend views** — the API serves the
   data; the progress view and flagged-item review are frontend tickets.
