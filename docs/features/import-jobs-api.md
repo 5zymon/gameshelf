@@ -271,6 +271,13 @@ batch). `batchId` is at most 64 chars (`400` otherwise).
   trace must outlive the image" — the `unrecognized_items` rows (raw title,
   raw platform, reason) are what the user reviews later, so they cannot be
   tied to the photo's lifetime.
+- **The rows are kept; the photos are not.** The
+  [Photo Lifecycle & Retention](/photo-lifecycle.md) sweep removes the files
+  behind terminal (`done`/`needs_attention`), `dismissed`,
+  `failed`-past-retention, and abandoned `queued`/`processing` jobs (and any
+  file with no owning row); when the sweep deletes a file it clears that job's
+  `photoRef`, and a `failed` job whose 7-day retry window has passed is no
+  longer retryable (`409`).
 - Dismissal changes state, not existence: a dismissed job and its items
   stay in the list and detail views (filtered out of the review queue only).
 - Any future pruning (e.g. archiving old runs) requires a spec change plus

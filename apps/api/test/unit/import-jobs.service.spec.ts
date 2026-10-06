@@ -404,6 +404,7 @@ describe('ImportJobsService (unit)', () => {
           declaredCount: null,
           photoRef: null,
           batchId: null,
+          enqueuedAt: expect.any(Date) as Date,
         },
       });
       expect(result).toEqual({ ...JOB, status: 'queued' });
@@ -424,6 +425,7 @@ describe('ImportJobsService (unit)', () => {
           declaredCount: 12,
           photoRef: null,
           batchId: null,
+          enqueuedAt: expect.any(Date) as Date,
         },
       });
     });
@@ -443,6 +445,7 @@ describe('ImportJobsService (unit)', () => {
           declaredCount: null,
           photoRef: 'abc.png',
           batchId: null,
+          enqueuedAt: expect.any(Date) as Date,
         },
       });
     });
@@ -461,7 +464,7 @@ describe('ImportJobsService (unit)', () => {
 
       expect(mock.importJob.update).toHaveBeenCalledWith({
         where: { id: 1 },
-        data: { status: 'processing' },
+        data: { status: 'processing', enqueuedAt: expect.any(Date) as Date },
       });
     });
 
@@ -477,7 +480,7 @@ describe('ImportJobsService (unit)', () => {
 
       expect(mock.importJob.update).toHaveBeenCalledWith({
         where: { id: 1 },
-        data: { status: 'processing' },
+        data: { status: 'processing', enqueuedAt: expect.any(Date) as Date },
       });
     });
 
@@ -837,6 +840,106 @@ describe('ImportJobsService (unit)', () => {
     });
   });
 
+  describe('findPhotoOwners', () => {
+    it('returns an empty map without querying for no refs', async () => {
+      await expect(service.findPhotoOwners([])).resolves.toEqual(new Map());
+      expect(mock.importJob.findMany).not.toHaveBeenCalled();
+    });
+
+    it('maps the newest row per photoRef and skips null refs', async () => {
+      const createdAt = new Date('2026-01-01T00:00:00.000Z');
+      const enqueuedAt = new Date('2026-01-01T01:00:00.000Z');
+      const completedAt = new Date('2026-01-02T00:00:00.000Z');
+      mock.importJob.findMany.mockResolvedValue([
+        {
+          id: 1,
+          photoRef: 'p.png',
+          status: 'failed',
+          createdAt,
+          enqueuedAt,
+          completedAt: null,
+        },
+        {
+          id: 2,
+          photoRef: 'p.png',
+          status: 'done',
+          createdAt,
+          enqueuedAt,
+          completedAt,
+        },
+        {
+          id: 3,
+          photoRef: null,
+          status: 'queued',
+          createdAt,
+          enqueuedAt: null,
+          completedAt: null,
+        },
+      ]);
+
+      const owners = await service.findPhotoOwners(['p.png']);
+
+      expect(mock.importJob.findMany).toHaveBeenCalledWith({
+        where: { photoRef: { in: ['p.png'] } },
+        orderBy: { id: 'asc' },
+        select: {
+          id: true,
+          photoRef: true,
+          status: true,
+          createdAt: true,
+          enqueuedAt: true,
+          completedAt: true,
+        },
+      });
+      expect(owners.get('p.png')).toEqual({
+        id: 2,
+        status: 'done',
+        createdAt,
+        enqueuedAt,
+        completedAt,
+      });
+      expect(owners.size).toBe(1);
+    });
+  });
+
+  describe('releaseSweptPhoto', () => {
+    it('clears photoRef behind the id/ref/status guard', async () => {
+      mock.importJob.updateMany.mockResolvedValue({ count: 1 });
+
+      const claimed = await service.releaseSweptPhoto(7, 'p.png', 'dismissed');
+
+      expect(claimed).toBe(true);
+      expect(mock.importJob.updateMany).toHaveBeenCalledWith({
+        where: { id: 7, photoRef: 'p.png', status: 'dismissed' },
+        data: { photoRef: null },
+      });
+    });
+
+    it('marks an abandoned job failed as well when a reason is given', async () => {
+      mock.importJob.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.releaseSweptPhoto(7, 'p.png', 'queued', 'abandoned');
+
+      expect(mock.importJob.updateMany).toHaveBeenCalledWith({
+        where: { id: 7, photoRef: 'p.png', status: 'queued' },
+        data: {
+          photoRef: null,
+          status: 'failed',
+          errorMessage: 'abandoned',
+          completedAt: expect.any(Date) as Date,
+        },
+      });
+    });
+
+    it('reports false when the guarded write matched no row', async () => {
+      mock.importJob.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.releaseSweptPhoto(7, 'p.png', 'done')).resolves.toBe(
+        false,
+      );
+    });
+  });
+
   describe('saveRecognition', () => {
     it('stamps the marker and inserts the items in one transaction', async () => {
       mock.importJob.updateMany.mockResolvedValue({ count: 1 });
@@ -1141,8 +1244,13 @@ describe('ImportJobsService (unit)', () => {
       const result = await service.retryJob(1);
 
       expect(mock.importJob.updateMany).toHaveBeenCalledWith({
-        where: { id: 1, status: 'failed' },
-        data: { status: 'queued', errorMessage: null, completedAt: null },
+        where: { id: 1, status: 'failed', photoRef: { not: null } },
+        data: {
+          status: 'queued',
+          errorMessage: null,
+          completedAt: null,
+          enqueuedAt: expect.any(Date) as Date,
+        },
       });
       expect(queue.add).toHaveBeenCalledWith('photo', {
         photoRef: 'p.png',
@@ -1157,15 +1265,37 @@ describe('ImportJobsService (unit)', () => {
     });
 
     it('409s when the guarded reset matches no row, without enqueueing', async () => {
-      mock.importJob.findUnique.mockResolvedValueOnce({
-        id: 1,
-        status: 'failed',
-        photoRef: 'p.png',
-        declaredCount: null,
-      });
+      mock.importJob.findUnique
+        .mockResolvedValueOnce({
+          id: 1,
+          status: 'failed',
+          photoRef: 'p.png',
+          declaredCount: null,
+        })
+        // The follow-up read distinguishes a lost race from a swept photo.
+        .mockResolvedValueOnce({ status: 'queued', photoRef: 'p.png' });
       mock.importJob.updateMany.mockResolvedValue({ count: 0 });
 
-      await expect(service.retryJob(1)).rejects.toThrow(ConflictException);
+      await expect(service.retryJob(1)).rejects.toThrow(
+        new ConflictException('Import job 1 is no longer failed'),
+      );
+      expect(queue.add).not.toHaveBeenCalled();
+    });
+
+    it('409s when the race lost because the sweep cleared the photoRef', async () => {
+      mock.importJob.findUnique
+        .mockResolvedValueOnce({
+          id: 1,
+          status: 'failed',
+          photoRef: 'p.png',
+          declaredCount: null,
+        })
+        .mockResolvedValueOnce({ status: 'failed', photoRef: null });
+      mock.importJob.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.retryJob(1)).rejects.toThrow(
+        new ConflictException('This import has no photo to re-process'),
+      );
       expect(queue.add).not.toHaveBeenCalled();
     });
 

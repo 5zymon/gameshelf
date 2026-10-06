@@ -29,6 +29,7 @@ import {
   mergeImportJobStatus,
 } from './import-job-status';
 import { IMPORT_QUEUE_STATE_TIMEOUT_MS } from './import-pipeline.options';
+import type { PhotoSweepOwner } from './photo-sweep.options';
 
 /**
  * ADR-002 job result contract: the three counts the processor reports.
@@ -373,10 +374,26 @@ export class ImportJobsService {
       throw new ConflictException('This import has no photo to re-process');
     }
     const reset = await this.prisma.importJob.updateMany({
-      where: { id, status: 'failed' },
-      data: { status: 'queued', errorMessage: null, completedAt: null },
+      where: { id, status: 'failed', photoRef: { not: null } },
+      data: {
+        status: 'queued',
+        errorMessage: null,
+        completedAt: null,
+        // Re-anchor the sweep: this run is active again, so it must not be
+        // treated as an abandonment merely because `createdAt` is old.
+        enqueuedAt: new Date(),
+      },
     });
     if (reset.count !== 1) {
+      // Distinguish "photo swept" from "another writer moved the row" so the UI
+      // can tell the user why a once-retryable job is no longer retryable.
+      const current = await this.prisma.importJob.findUnique({
+        where: { id },
+        select: { status: true, photoRef: true },
+      });
+      if (current?.status === 'failed' && current.photoRef === null) {
+        throw new ConflictException('This import has no photo to re-process');
+      }
       throw new ConflictException(
         `Import job ${String(id)} is no longer failed`,
       );
@@ -438,6 +455,8 @@ export class ImportJobsService {
         declaredCount: data.declaredCount ?? null,
         photoRef: data.photoRef ?? null,
         batchId: data.batchId ?? null,
+        // The sweep's abandonment anchor (ticket 3.8): a fresh run is active.
+        enqueuedAt: new Date(),
       },
     });
   }
@@ -462,7 +481,7 @@ export class ImportJobsService {
     await this.assertTransition(jobId, ['queued', 'processing']);
     await this.prisma.importJob.update({
       where: { id: jobId },
-      data: { status: 'processing' },
+      data: { status: 'processing', enqueuedAt: new Date() },
     });
   }
 
@@ -592,6 +611,70 @@ export class ImportJobsService {
       select: { id: true },
     });
     return job?.id ?? null;
+  }
+
+  /**
+   * Newest import_jobs row per photoRef, for the photo sweep (ticket 3.8).
+   * One query per sweep batch (no N+1). photoRef is a UUID set by
+   * PhotoStorageService.store, so at most one live row owns a file; the `id asc`
+   * order lets the newest id win.
+   */
+  async findPhotoOwners(
+    photoRefs: string[],
+  ): Promise<Map<string, PhotoSweepOwner>> {
+    const owners = new Map<string, PhotoSweepOwner>();
+    if (photoRefs.length === 0) return owners;
+    const rows = await this.prisma.importJob.findMany({
+      where: { photoRef: { in: photoRefs } },
+      orderBy: { id: 'asc' },
+      select: {
+        id: true,
+        photoRef: true,
+        status: true,
+        createdAt: true,
+        enqueuedAt: true,
+        completedAt: true,
+      },
+    });
+    for (const row of rows) {
+      if (row.photoRef === null) continue;
+      owners.set(row.photoRef, {
+        id: row.id,
+        status: row.status,
+        createdAt: row.createdAt,
+        enqueuedAt: row.enqueuedAt,
+        completedAt: row.completedAt,
+      });
+    }
+    return owners;
+  }
+
+  /**
+   * Atomically releases one swept photo (ticket 3.8): clears `photoRef` and,
+   * for an abandoned non-terminal job, marks it `failed` with a reason. The
+   * guarded `updateMany` (id + photoRef + the status the sweep saw) closes the
+   * race with `retryJob`: whichever write lands first wins, and the loser skips
+   * the file delete. Returns true when this call claimed the row.
+   */
+  async releaseSweptPhoto(
+    jobId: number,
+    photoRef: string,
+    expectedStatus: string,
+    markFailedReason?: string,
+  ): Promise<boolean> {
+    const written = await this.prisma.importJob.updateMany({
+      where: { id: jobId, photoRef, status: expectedStatus },
+      data:
+        markFailedReason === undefined
+          ? { photoRef: null }
+          : {
+              photoRef: null,
+              status: 'failed',
+              errorMessage: markFailedReason,
+              completedAt: new Date(),
+            },
+    });
+    return written.count === 1;
   }
 
   /**

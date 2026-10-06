@@ -351,7 +351,7 @@ Each photo job inherits `attempts: 3` and exponential backoff (`IMPORT_RETRY_BAC
 
 Job defaults are applied once through `registerQueue`'s `defaultJobOptions` (`photoImportDefaultJobOptions()`); worker options (`photoImportWorkerOptions()`) are applied to the `@Processor`. A job that exceeds the per-job timeout fails with a retryable error and is retried per the backoff above, and is marked `failed` on the last attempt. The timeout **aborts** the attempt (`AbortController`): the in-flight pipeline stops at the next batch boundary and commits no further batch, and `commitImportBatch` refuses to write once the job is terminal — so an abandoned attempt cannot collide with the retry or mutate the DB after `markFailed`. `markCompleted`/`markFailed` write conditionally (`WHERE status IN ('queued','processing')`), so a late writer can never clobber a newer terminal status. **Timeout headroom:** the 300 s budget is sized for a shelf of up to ~50 titles (one vision call at `VISION_REQUEST_TIMEOUT_MS = 30 s`, plus ~50 sequential IGDB lookups at `IGDB_REQUEST_INTERVAL_MS = 300 ms` and up to `IGDB_REQUEST_TIMEOUT_MS = 5 s` each ≈ 30 s + 50 × 5.3 s ≈ 295 s); a photo recognized with substantially more titles can hit the timeout and be retried. The BullMQ lock deliberately outlives the whole permitted job (`lockDuration > jobTimeout`), so a live worker cannot lose its lock mid-job and a second worker can never process the same job concurrently. If a worker is killed mid-job, its lock stops being renewed and expires after at most `lockDuration`; the next stalled check (`stalledInterval`) moves the job back to `waiting` and re-runs it — recovery within roughly `lockDuration + stalledInterval`. Because the pipeline is idempotent, the re-run never duplicates a saved game or a second vision call. Every attempt emits exactly one structured JSON outcome line (`event: "photo_import_job"`) with the job id, photo, counts, duration, attempt, and outcome.
 
-The uploaded photo is deleted only after the job reaches a completed state; a failed or still-retrying job keeps its photo. (The sweep that cleans up photos orphaned by a hard crash is ticket 3.8.)
+The uploaded photo is kept while its job is `queued`/`processing` or `failed`-retryable, deleted by the pipeline once the job completes, and cleaned up by an hourly backstop sweep otherwise. The sweep removes a leftover file from a failed pipeline delete, `dismissed` job photos, a `failed` job's photo after a 7-day retry window, an abandoned `queued`/`processing` job's photo after 48 h, and files with no owning job; a `failed` job is retryable only while its photo exists. See `docs/features/photo-lifecycle.md`.
 
 Shutdown is deterministic even when Redis is unreachable. `PhotoImportProcessor.beforeApplicationShutdown` force-closes the BullMQ worker (`worker.close(true)`) before Nest runs `@nestjs/bullmq`'s own shutdown, which otherwise waits on the reconnecting blocking connection forever. This is what lets `SIGTERM` terminate the process promptly during a Redis outage instead of hanging until `SIGKILL`.
 
@@ -368,36 +368,36 @@ Measured on the compiled app: **~0.1 s** to exit after the fix, versus **still r
 
 All variables live in a single root `.env` file (see `.env.example`):
 
-| Variable              | Used by    | Purpose                                                                                                                        |
-| --------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `NODE_ENV`            | both       | Runtime environment                                                                                                            |
-| `API_PORT`            | `apps/api` | API listen port (default `3001`)                                                                                               |
-| `API_HOST`            | `apps/api` | API bind address                                                                                                               |
-| `WEB_PORT`            | `apps/web` | Web dev server port (default `3000`)                                                                                           |
-| `NEXT_PUBLIC_API_URL` | `apps/web` | Browser-facing API base URL                                                                                                    |
-| `MYSQL_HOST`          | `apps/api` | MySQL host (default `localhost`)                                                                                               |
-| `MYSQL_PORT`          | `apps/api` | MySQL port (default `3306`)                                                                                                    |
-| `MYSQL_DATABASE`      | `apps/api` | Database name (default `gameshelf`)                                                                                            |
-| `MYSQL_USER`          | `apps/api` | App database user (default `gameshelf`)                                                                                        |
-| `MYSQL_PASSWORD`      | `apps/api` | App database user password                                                                                                     |
-| `MYSQL_ROOT_PASSWORD` | compose    | MySQL root password (compose only)                                                                                             |
-| `DATABASE_URL`        | `apps/api` | Prisma connection string (utf8mb4)                                                                                             |
-| `DATABASE_SHADOW_URL` | `apps/api` | Prisma shadow DB (migrate dev only)                                                                                            |
-| `REDIS_HOST`          | `apps/api` | Redis host (default `localhost`)                                                                                               |
-| `REDIS_PORT`          | `apps/api` | Redis port (default `6379`)                                                                                                    |
-| `REDIS_QUEUE_PREFIX`  | `apps/api` | BullMQ key namespace (default `bull`)                                                                                          |
-| `REDIS_URL`           | `apps/api` | Redis connection string (present for convenience; **not read** by the app — the queue uses `REDIS_HOST`/`REDIS_PORT`)          |
-| `SESSION_SECRET`      | `apps/api` | HMAC-SHA256 key for session tokens (≥32 chars)                                                                                 |
-| `SESSION_TTL_MINUTES` | `apps/api` | Sliding session lifetime in minutes (default `10080`; no "never")                                                              |
-| `GEMINI_API_KEY`      | `apps/api` | Gemini API key (fallback when no encrypted DB key is stored)                                                                   |
-| `OPENAI_API_KEY`      | `apps/api` | OpenAI API key (fallback when no encrypted DB key is stored)                                                                   |
-| `LLM_PROVIDER`        | `apps/api` | Active provider when no DB row exists: `gemini`/`openai` (default `gemini`)                                                    |
-| `LLM_MODEL`           | `apps/api` | Model override for the active provider (blank = provider default)                                                              |
-| `LLM_SETTINGS_SECRET` | `apps/api` | Key-derivation secret for the stored API key's AES-256-GCM key (falls back to `SESSION_SECRET`)                                |
-| `ANTHROPIC_API_KEY`   | `apps/api` | Reserved for a future provider; **not read** by the current code                                                               |
-| `IMPORT_PHOTOS_DIR`   | `apps/api` | Ephemeral upload directory (default `<OS temp>/gameshelf-import-photos`); the pipeline deletes a photo after its job completes |
-| `IGDB_CLIENT_ID`      | `apps/api` | IGDB credentials                                                                                                               |
-| `IGDB_CLIENT_SECRET`  | `apps/api` | IGDB credentials                                                                                                               |
+| Variable              | Used by    | Purpose                                                                                                                                                                            |
+| --------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`            | both       | Runtime environment                                                                                                                                                                |
+| `API_PORT`            | `apps/api` | API listen port (default `3001`)                                                                                                                                                   |
+| `API_HOST`            | `apps/api` | API bind address                                                                                                                                                                   |
+| `WEB_PORT`            | `apps/web` | Web dev server port (default `3000`)                                                                                                                                               |
+| `NEXT_PUBLIC_API_URL` | `apps/web` | Browser-facing API base URL                                                                                                                                                        |
+| `MYSQL_HOST`          | `apps/api` | MySQL host (default `localhost`)                                                                                                                                                   |
+| `MYSQL_PORT`          | `apps/api` | MySQL port (default `3306`)                                                                                                                                                        |
+| `MYSQL_DATABASE`      | `apps/api` | Database name (default `gameshelf`)                                                                                                                                                |
+| `MYSQL_USER`          | `apps/api` | App database user (default `gameshelf`)                                                                                                                                            |
+| `MYSQL_PASSWORD`      | `apps/api` | App database user password                                                                                                                                                         |
+| `MYSQL_ROOT_PASSWORD` | compose    | MySQL root password (compose only)                                                                                                                                                 |
+| `DATABASE_URL`        | `apps/api` | Prisma connection string (utf8mb4)                                                                                                                                                 |
+| `DATABASE_SHADOW_URL` | `apps/api` | Prisma shadow DB (migrate dev only)                                                                                                                                                |
+| `REDIS_HOST`          | `apps/api` | Redis host (default `localhost`)                                                                                                                                                   |
+| `REDIS_PORT`          | `apps/api` | Redis port (default `6379`)                                                                                                                                                        |
+| `REDIS_QUEUE_PREFIX`  | `apps/api` | BullMQ key namespace (default `bull`)                                                                                                                                              |
+| `REDIS_URL`           | `apps/api` | Redis connection string (present for convenience; **not read** by the app — the queue uses `REDIS_HOST`/`REDIS_PORT`)                                                              |
+| `SESSION_SECRET`      | `apps/api` | HMAC-SHA256 key for session tokens (≥32 chars)                                                                                                                                     |
+| `SESSION_TTL_MINUTES` | `apps/api` | Sliding session lifetime in minutes (default `10080`; no "never")                                                                                                                  |
+| `GEMINI_API_KEY`      | `apps/api` | Gemini API key (fallback when no encrypted DB key is stored)                                                                                                                       |
+| `OPENAI_API_KEY`      | `apps/api` | OpenAI API key (fallback when no encrypted DB key is stored)                                                                                                                       |
+| `LLM_PROVIDER`        | `apps/api` | Active provider when no DB row exists: `gemini`/`openai` (default `gemini`)                                                                                                        |
+| `LLM_MODEL`           | `apps/api` | Model override for the active provider (blank = provider default)                                                                                                                  |
+| `LLM_SETTINGS_SECRET` | `apps/api` | Key-derivation secret for the stored API key's AES-256-GCM key (falls back to `SESSION_SECRET`)                                                                                    |
+| `ANTHROPIC_API_KEY`   | `apps/api` | Reserved for a future provider; **not read** by the current code                                                                                                                   |
+| `IMPORT_PHOTOS_DIR`   | `apps/api` | Ephemeral upload directory (default `<OS temp>/gameshelf-import-photos`); the pipeline deletes a photo after its job completes and a sweep removes leftovers (see Photo Lifecycle) |
+| `IGDB_CLIENT_ID`      | `apps/api` | IGDB credentials                                                                                                                                                                   |
+| `IGDB_CLIENT_SECRET`  | `apps/api` | IGDB credentials                                                                                                                                                                   |
 
 ## Repository layout
 

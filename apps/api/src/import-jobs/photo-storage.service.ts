@@ -1,7 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
+import {
+  mkdir,
+  readdir,
+  readFile,
+  stat,
+  unlink,
+  writeFile,
+} from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import {
   DEFAULT_IMPORT_PHOTOS_DIR,
@@ -68,6 +76,33 @@ export class PhotoStorageService {
       }
       throw error;
     }
+  }
+
+  /**
+   * Existing bare filenames with their mtime, oldest first. The directory may
+   * not exist yet (no upload since boot) — that is an empty list, not an error.
+   * Vanished files and subdirectories are skipped.
+   */
+  async list(): Promise<{ name: string; mtimeMs: number }[]> {
+    let entries: Dirent[];
+    try {
+      entries = await readdir(this.directory, { withFileTypes: true });
+    } catch (error) {
+      if (this.isEnoent(error)) return [];
+      throw error;
+    }
+    const files: { name: string; mtimeMs: number }[] = [];
+    for (const entry of entries) {
+      if (!entry.isFile()) continue;
+      try {
+        const stats = await stat(join(this.directory, entry.name));
+        files.push({ name: entry.name, mtimeMs: stats.mtimeMs });
+      } catch (error) {
+        if (this.isEnoent(error)) continue;
+        throw error;
+      }
+    }
+    return files.sort((a, b) => a.mtimeMs - b.mtimeMs);
   }
 
   private resolvePath(photoRef: string): string {
