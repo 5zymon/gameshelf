@@ -4,6 +4,7 @@ import { ImportJobsModule } from '../import-jobs/import-jobs.module';
 import { PhotoImportHandler } from './photo-import.handler';
 import { PhotoImportProcessor } from './photo-import.processor';
 import { PHOTO_IMPORT_QUEUE } from './queue.constants';
+import { photoImportDefaultJobOptions } from './queue.options';
 import { QueueHealthController } from './queue-health.controller';
 import { QueueHealthService } from './queue-health.service';
 
@@ -17,7 +18,10 @@ import { QueueHealthService } from './queue-health.service';
 @Global()
 @Module({
   imports: [
-    BullModule.registerQueue({ name: PHOTO_IMPORT_QUEUE }),
+    BullModule.registerQueue({
+      name: PHOTO_IMPORT_QUEUE,
+      defaultJobOptions: photoImportDefaultJobOptions(),
+    }),
     ImportJobsModule,
   ],
   controllers: [QueueHealthController],

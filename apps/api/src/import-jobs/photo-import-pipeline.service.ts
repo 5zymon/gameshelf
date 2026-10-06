@@ -11,6 +11,7 @@ import {
 import { VisionService } from '../settings/vision/vision.service';
 import {
   IMPORT_BATCH_SIZE,
+  IMPORT_JOB_TIMEOUT_MS,
   IMPORT_MIN_CONFIDENCE,
 } from './import-pipeline.options';
 import {
@@ -31,6 +32,40 @@ import { PhotoStorageService } from './photo-storage.service';
  * `UnrecognizedItem` — it is surfaced for review, never silently dropped.
  */
 export const PLATFORM_NOT_IN_CATALOG_REASON = 'platform_not_in_catalog';
+
+/** Outcome of one pipeline invocation, used only for the structured log line. */
+export type PhotoImportOutcome =
+  | 'done'
+  | 'needs_attention'
+  | 'already_terminal'
+  | 'retry_scheduled'
+  | 'failed';
+
+/** A single structured per-job log entry (ticket 3.7). */
+export interface PhotoImportOutcomeLog {
+  jobId: string | number | undefined;
+  importJobId: number | null;
+  photoRef: string;
+  outcome: PhotoImportOutcome;
+  recognizedCount: number;
+  importedCount: number;
+  unrecognizedCount: number;
+  durationMs: number;
+  attempt: number;
+  maxAttempts: number;
+  error?: string;
+}
+
+/** Serializes the per-job outcome to one JSON log line (pure; unit-tested). */
+export function formatImportJobOutcome(entry: PhotoImportOutcomeLog): string {
+  return JSON.stringify({ event: 'photo_import_job', ...entry });
+}
+
+const EMPTY_COUNTS: JobCompletionResult = {
+  recognizedCount: 0,
+  importedCount: 0,
+  unrecognizedCount: 0,
+};
 
 /** Job statuses at which nothing more should be processed. */
 const TERMINAL_STATUSES: ReadonlySet<string> = new Set([
@@ -69,53 +104,72 @@ export class PhotoImportPipelineService {
   ) {}
 
   async run(job: Job<PhotoImportJobData>): Promise<PhotoImportJobResult> {
-    const jobId =
-      job.data.importJobId ??
-      (await this.jobs.findJobIdByPhotoRef(job.data.photoRef));
-    if (jobId === null) {
-      throw new RetryableImportError('Import job not found for this photo');
-    }
-    const state = await this.jobs.getPipelineJob(jobId);
-    if (state === null) {
-      throw new RetryableImportError(`Import job ${String(jobId)} not found`);
-    }
-    if (TERMINAL_STATUSES.has(state.status)) {
-      return toResult(state);
-    }
-
-    await this.jobs.markProcessing(jobId);
+    const startedAt = Date.now();
+    let importJobId: number | null = job.data.importJobId ?? null;
+    let outcome: PhotoImportOutcome = 'failed';
+    let counts: JobCompletionResult = EMPTY_COUNTS;
+    let errorMessage: string | undefined;
     try {
-      if (state.visionCompletedAt === null) {
-        await this.recognizeOnce(jobId, state);
+      const jobId =
+        importJobId ?? (await this.jobs.findJobIdByPhotoRef(job.data.photoRef));
+      if (jobId === null) {
+        throw new RetryableImportError('Import job not found for this photo');
+      }
+      importJobId = jobId;
+      const state = await this.jobs.getPipelineJob(jobId);
+      if (state === null) {
+        throw new RetryableImportError(`Import job ${String(jobId)} not found`);
+      }
+      if (TERMINAL_STATUSES.has(state.status)) {
+        counts = toResult(state);
+        outcome = 'already_terminal';
+        return counts;
       }
 
-      const transient = await this.processBatches(jobId);
-      if (transient) {
-        throw new RetryableImportError(
-          'Some titles could not be validated; retrying',
+      await this.jobs.markProcessing(jobId);
+      const controller = new AbortController();
+      try {
+        const completed = await this.withJobTimeout(controller, () =>
+          this.processJob(jobId, state, controller.signal),
         );
+        counts = completed.result;
+        outcome = completed.status === 'done' ? 'done' : 'needs_attention';
+        return completed.result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const isLastAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+        const retryable = isRetryableImportError(error);
+        counts = (await this.summarizeSafely(jobId)) ?? counts;
+        if (!retryable || isLastAttempt) {
+          outcome = 'failed';
+          await this.markFailedSafely(jobId, error, counts);
+        } else {
+          outcome = 'retry_scheduled';
+        }
+        if (!retryable) {
+          // A permanent error must stop BullMQ immediately. Re-throwing the
+          // ordinary error would schedule the remaining attempts; each would
+          // re-enter, hit the `failed` short-circuit and report `completed`,
+          // leaving BullMQ's job completed while the DB row is failed.
+          throw new UnrecoverableError(message);
+        }
+        throw error;
       }
-
-      const result = await this.jobs.summarizeRecognizedItems(jobId);
-      await this.jobs.markCompleted(jobId, result);
-      await this.deletePhotoSafely(state.photoRef);
-      return result;
     } catch (error) {
-      const isLastAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
-      const retryable = isRetryableImportError(error);
-      if (!retryable || isLastAttempt) {
-        await this.markFailedSafely(jobId, error);
-      }
-      if (!retryable) {
-        // A permanent error must stop BullMQ immediately. Re-throwing the
-        // ordinary error would schedule the remaining attempts; each would
-        // re-enter, hit the `failed` short-circuit and report `completed`,
-        // leaving BullMQ's job completed while the DB row is failed.
-        throw new UnrecoverableError(
-          error instanceof Error ? error.message : String(error),
-        );
-      }
+      errorMessage = error instanceof Error ? error.message : String(error);
       throw error;
+    } finally {
+      this.logJobOutcome({
+        jobId: job.id,
+        importJobId,
+        photoRef: job.data.photoRef,
+        outcome,
+        ...counts,
+        durationMs: Date.now() - startedAt,
+        attempt: job.attemptsMade + 1,
+        maxAttempts: job.opts.attempts ?? 1,
+        error: errorMessage,
+      });
     }
   }
 
@@ -144,14 +198,21 @@ export class PhotoImportPipelineService {
    * `true` when a batch hit a transient failure (the remaining items stay
    * pending for the retry).
    */
-  private async processBatches(jobId: number): Promise<boolean> {
+  private async processBatches(
+    jobId: number,
+    signal: AbortSignal,
+  ): Promise<boolean> {
     for (;;) {
+      this.throwIfAborted(signal);
       const pending = await this.jobs.listPendingRecognizedItems(jobId);
       if (pending.length === 0) {
         return false;
       }
       const batch = pending.slice(0, IMPORT_BATCH_SIZE);
-      const outcome = await this.resolveBatch(batch);
+      const outcome = await this.resolveBatch(batch, signal);
+      // The timeout may have fired while the batch was resolving: skip the
+      // commit so an abandoned attempt cannot write after the boundary.
+      this.throwIfAborted(signal);
       await this.jobs.commitImportBatch(jobId, outcome);
       if (outcome.transient.length > 0) {
         return true;
@@ -161,6 +222,7 @@ export class PhotoImportPipelineService {
 
   private async resolveBatch(
     batch: PipelineRecognizedItem[],
+    signal: AbortSignal,
   ): Promise<ImportBatchOutcome> {
     const outcome: ImportBatchOutcome = {
       resolved: [],
@@ -168,6 +230,9 @@ export class PhotoImportPipelineService {
       transient: [],
     };
     for (const item of batch) {
+      // One external lookup at a time: stop before starting another once the
+      // attempt was cancelled.
+      this.throwIfAborted(signal);
       const resolution = await this.resolver.resolve({
         title: item.rawTitle,
         edition: item.rawEdition,
@@ -213,6 +278,102 @@ export class PhotoImportPipelineService {
     return outcome;
   }
 
+  /** The bounded unit of work: vision (once) + batched resolution + completion. */
+  private async processJob(
+    jobId: number,
+    state: PipelineJobState,
+    signal: AbortSignal,
+  ): Promise<{ result: PhotoImportJobResult; status: string }> {
+    this.throwIfAborted(signal);
+    if (state.visionCompletedAt === null) {
+      await this.recognizeOnce(jobId, state);
+    }
+    const transient = await this.processBatches(jobId, signal);
+    if (transient) {
+      throw new RetryableImportError(
+        'Some titles could not be validated; retrying',
+      );
+    }
+    // A cancelled attempt must not report completion either.
+    this.throwIfAborted(signal);
+    const result = await this.jobs.summarizeRecognizedItems(jobId);
+    const completed = await this.jobs.markCompleted(jobId, result);
+    await this.deletePhotoSafely(state.photoRef);
+    return { result, status: completed.status };
+  }
+
+  /**
+   * Fails the job with a retryable timeout once `jobTimeoutMs()` elapses and
+   * aborts the controller so the abandoned work stops at the boundary. Without
+   * the abort the in-flight pipeline would keep resolving and committing
+   * batches while a retry (or the terminal `failed` marking) races it.
+   */
+  private async withJobTimeout<T>(
+    controller: AbortController,
+    work: () => Promise<T>,
+  ): Promise<T> {
+    const timeoutMs = this.jobTimeoutMs();
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        work(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            controller.abort();
+            reject(
+              new RetryableImportError(
+                `Photo import exceeded the ${String(timeoutMs)} ms job timeout`,
+              ),
+            );
+          }, timeoutMs);
+        }),
+      ]);
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Cancellation checkpoint: throws the same retryable error as the timeout so
+   * the abandoned loop unwinds without committing another batch.
+   */
+  private throwIfAborted(signal: AbortSignal): void {
+    if (signal.aborted) {
+      throw new RetryableImportError(
+        'Photo import was cancelled after exceeding the job timeout',
+      );
+    }
+  }
+
+  /** Test seam; production always returns IMPORT_JOB_TIMEOUT_MS. */
+  protected jobTimeoutMs(): number {
+    return IMPORT_JOB_TIMEOUT_MS;
+  }
+
+  private logJobOutcome(entry: PhotoImportOutcomeLog): void {
+    const line = formatImportJobOutcome(entry);
+    if (entry.outcome === 'failed' || entry.outcome === 'retry_scheduled') {
+      this.logger.warn(line);
+    } else {
+      this.logger.log(line);
+    }
+  }
+
+  private async summarizeSafely(
+    jobId: number,
+  ): Promise<JobCompletionResult | undefined> {
+    try {
+      return await this.jobs.summarizeRecognizedItems(jobId);
+    } catch (error) {
+      this.logger.warn(
+        `Failed to summarise import job ${String(jobId)} counters: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return undefined;
+    }
+  }
+
   private async deletePhotoSafely(photoRef: string | null): Promise<void> {
     try {
       await this.storage.delete(photoRef);
@@ -226,20 +387,11 @@ export class PhotoImportPipelineService {
     }
   }
 
-  private async markFailedSafely(jobId: number, error: unknown): Promise<void> {
-    let counts: JobCompletionResult | undefined;
-    try {
-      counts = await this.jobs.summarizeRecognizedItems(jobId);
-    } catch (summaryError) {
-      // Counters are best-effort; the failure itself must still be recorded.
-      this.logger.warn(
-        `Failed to summarise import job ${String(jobId)} counters: ${
-          summaryError instanceof Error
-            ? summaryError.message
-            : String(summaryError)
-        }`,
-      );
-    }
+  private async markFailedSafely(
+    jobId: number,
+    error: unknown,
+    counts?: JobCompletionResult,
+  ): Promise<void> {
     try {
       await this.jobs.markFailed(
         jobId,

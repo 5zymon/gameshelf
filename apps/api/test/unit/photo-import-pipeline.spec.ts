@@ -1,5 +1,6 @@
 import type { Job } from 'bullmq';
 import { UnrecoverableError } from 'bullmq';
+import { Logger } from '@nestjs/common';
 import type {
   CatalogCandidate,
   CatalogResolution,
@@ -13,6 +14,7 @@ import type {
   RecognitionItemInput,
 } from '../../src/import-jobs/import-jobs.service';
 import {
+  formatImportJobOutcome,
   PhotoImportPipelineService,
   PLATFORM_NOT_IN_CATALOG_REASON,
 } from '../../src/import-jobs/photo-import-pipeline.service';
@@ -81,6 +83,19 @@ function candidate(title: string): CatalogCandidate {
     platforms: [],
     raw: {},
   };
+}
+
+/** Extracts a parsed `photo_import_job` structured log line, if present. */
+function parseOutcomeLine(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== 'string' || !value.startsWith('{')) {
+    return undefined;
+  }
+  try {
+    const parsed = JSON.parse(value) as Record<string, unknown>;
+    return parsed.event === 'photo_import_job' ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function createHarness(): Harness {
@@ -170,11 +185,12 @@ function createHarness(): Harness {
       state.recognizedCount = result.recognizedCount;
       state.importedCount = result.importedCount;
       state.unrecognizedCount = result.unrecognizedCount;
-      state.status =
+      const status =
         result.recognizedCount === 0 || result.unrecognizedCount > 0
           ? 'needs_attention'
           : 'done';
-      return Promise.resolve();
+      state.status = status;
+      return Promise.resolve({ status });
     }),
     markFailed: jest.fn(() => {
       state.status = 'failed';
@@ -477,5 +493,204 @@ describe('PhotoImportPipelineService (unit)', () => {
       unrecognizedCount: 0,
     });
     expect(h.jobs.markCompleted).toHaveBeenCalled();
+  });
+
+  it('timeout aborts the job and marks it failed on the last attempt', async () => {
+    const h = createHarness();
+    jest
+      .spyOn(
+        h.pipeline as unknown as { jobTimeoutMs(): number },
+        'jobTimeoutMs',
+      )
+      .mockReturnValue(20);
+    // A hung vision call: never resolves, so only the timeout can settle it.
+    h.vision.recognize.mockImplementation(
+      () => new Promise<never>(() => undefined),
+    );
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+
+    await expect(h.pipeline.run(makeJob(2, 3))).rejects.toThrow(
+      RetryableImportError,
+    );
+
+    expect(h.jobs.markFailed).toHaveBeenCalledWith(1, expect.any(String), {
+      recognizedCount: 0,
+      importedCount: 0,
+      unrecognizedCount: 0,
+    });
+    const structured = warn.mock.calls
+      .map((call) => parseOutcomeLine(call[0]))
+      .find((entry) => entry !== undefined);
+    expect(structured).toMatchObject({
+      event: 'photo_import_job',
+      outcome: 'failed',
+    });
+    warn.mockRestore();
+  });
+
+  it('schedules a retry (and does not mark failed) when a non-last attempt times out', async () => {
+    const h = createHarness();
+    jest
+      .spyOn(
+        h.pipeline as unknown as { jobTimeoutMs(): number },
+        'jobTimeoutMs',
+      )
+      .mockReturnValue(20);
+    // A hung vision call: only the timeout can settle the attempt.
+    h.vision.recognize.mockImplementation(
+      () => new Promise<never>(() => undefined),
+    );
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+
+    await expect(h.pipeline.run(makeJob(0, 3))).rejects.toThrow(
+      RetryableImportError,
+    );
+
+    expect(h.jobs.markFailed).not.toHaveBeenCalled();
+    const structured = warn.mock.calls
+      .map((call) => parseOutcomeLine(call[0]))
+      .find((entry) => entry !== undefined);
+    expect(structured).toMatchObject({
+      event: 'photo_import_job',
+      outcome: 'retry_scheduled',
+    });
+    warn.mockRestore();
+  });
+
+  it('stops a timed-out attempt at the boundary so it cannot collide with the retry', async () => {
+    const h = createHarness();
+    jest
+      .spyOn(
+        h.pipeline as unknown as { jobTimeoutMs(): number },
+        'jobTimeoutMs',
+      )
+      .mockReturnValue(20);
+    h.vision.recognize.mockResolvedValue({
+      items: [recognized('A')],
+      countVisible: 1,
+    });
+    let release!: (resolution: CatalogResolution) => void;
+    const gate = new Promise<CatalogResolution>((resolve) => {
+      release = resolve;
+    });
+    h.resolver.resolve.mockReturnValue(gate);
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+
+    // Attempt 1 times out while its only external lookup is still in flight.
+    await expect(h.pipeline.run(makeJob(0, 3))).rejects.toThrow(
+      RetryableImportError,
+    );
+    expect(h.jobs.markFailed).not.toHaveBeenCalled();
+
+    // Attempt 2 (the retry) runs to completion while attempt 1 is parked in
+    // its lookup — exactly the overlap the cancellation must survive.
+    h.resolver.resolve.mockImplementation((item: RecognizedItem) =>
+      Promise.resolve({ kind: 'matched', candidate: candidate(item.title) }),
+    );
+    await expect(h.pipeline.run(makeJob(1, 3))).resolves.toEqual({
+      recognizedCount: 1,
+      importedCount: 1,
+      unrecognizedCount: 0,
+    });
+
+    // Resume the abandoned attempt: the abort checkpoint stops it before it
+    // commits, so it cannot duplicate or roll back the retry's work.
+    release({ kind: 'matched', candidate: candidate('A') });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(h.jobs.commitImportBatch).toHaveBeenCalledTimes(1);
+    expect(h.games.map((game) => game.title)).toEqual(['A']);
+    warn.mockRestore();
+  });
+
+  it('logs one structured line with counts, duration and outcome on success', async () => {
+    const h = createHarness();
+    h.vision.recognize.mockResolvedValue({
+      items: [recognized('A'), recognized('B')],
+      countVisible: 2,
+    });
+    h.resolver.resolve.mockImplementation((item: RecognizedItem) =>
+      Promise.resolve({ kind: 'matched', candidate: candidate(item.title) }),
+    );
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+
+    await h.pipeline.run(makeJob());
+
+    const entry = log.mock.calls
+      .map((call) => parseOutcomeLine(call[0]))
+      .find((parsed) => parsed !== undefined);
+    expect(entry).toMatchObject({
+      event: 'photo_import_job',
+      jobId: 'job-1',
+      importJobId: 1,
+      photoRef: 'photo.png',
+      outcome: 'done',
+      recognizedCount: 2,
+      importedCount: 2,
+      unrecognizedCount: 0,
+      attempt: 1,
+      maxAttempts: 3,
+    });
+    expect(entry?.durationMs).toEqual(expect.any(Number));
+    log.mockRestore();
+  });
+
+  it('logs retry_scheduled for a non-last-attempt transient failure', async () => {
+    const h = createHarness();
+    h.vision.recognize.mockResolvedValue({
+      items: [recognized('A')],
+      countVisible: 1,
+    });
+    h.resolver.resolve.mockResolvedValue({
+      kind: 'transient',
+      reason: '429',
+    });
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+
+    await expect(h.pipeline.run(makeJob(0, 3))).rejects.toThrow(
+      RetryableImportError,
+    );
+
+    const entry = warn.mock.calls
+      .map((call) => parseOutcomeLine(call[0]))
+      .find((parsed) => parsed !== undefined);
+    expect(entry).toMatchObject({
+      event: 'photo_import_job',
+      outcome: 'retry_scheduled',
+      attempt: 1,
+      maxAttempts: 3,
+    });
+    expect(entry?.error).toEqual(expect.any(String));
+    warn.mockRestore();
+  });
+
+  it('formatImportJobOutcome serializes one JSON line and omits an undefined error', () => {
+    const line = formatImportJobOutcome({
+      jobId: 'job-1',
+      importJobId: 7,
+      photoRef: 'p.png',
+      outcome: 'done',
+      recognizedCount: 3,
+      importedCount: 2,
+      unrecognizedCount: 1,
+      durationMs: 12,
+      attempt: 1,
+      maxAttempts: 3,
+    });
+
+    expect(JSON.parse(line)).toEqual({
+      event: 'photo_import_job',
+      jobId: 'job-1',
+      importJobId: 7,
+      photoRef: 'p.png',
+      outcome: 'done',
+      recognizedCount: 3,
+      importedCount: 2,
+      unrecognizedCount: 1,
+      durationMs: 12,
+      attempt: 1,
+      maxAttempts: 3,
+    });
+    expect(line).not.toContain('error');
   });
 });
