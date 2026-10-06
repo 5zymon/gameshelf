@@ -1,10 +1,10 @@
 ---
 type: Feature
 title: IGDB Client & Rate Limiter
-description: One IGDB client that authenticates via Twitch client credentials, caches/refreshes the token, funnels every call through a central 4 req/s / 8-concurrent limiter, backs off on 429, and exposes an unauthenticated health probe.
-tags: [igdb, external-api, oauth, rate-limit, health]
+description: One IGDB client that authenticates via Twitch client credentials, caches/refreshes the token, funnels every call through a central 4 req/s / 8-concurrent limiter, backs off on 429, resolves many titles with two-phase batching (batched id search + batched hydration), and exposes an unauthenticated health probe.
+tags: [igdb, external-api, oauth, rate-limit, health, search]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T14:49:32Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T16:10:35Z }
 ---
 
 # Overview
@@ -19,12 +19,18 @@ The photo import pipeline resolves every recognized title against IGDB (ticket
 - funnels **all** IGDB traffic through one central limiter (4 requests per
   rolling second, at most 8 concurrent, bounded queue);
 - retries an upstream `429` internally with bounded exponential backoff;
+- searches for a title with `POST /v4/games` and looks up many titles with
+  two-phase batching — a batched `/v4/multiquery` id search (at most 10
+  sub-queries per request) followed by a batched `/v4/games` hydration (at most
+  500 ids per request);
 - fetches the full canonical platform list in one `POST /v4/platforms` page for
   the [Platforms API](/platforms-api.md) sync command;
 - exposes a non-throwing `GET /health/igdb` connectivity/token probe.
 
 The client is consumed by [Photo Import Pipeline](/photo-import-pipeline.md)
-through the `GameCatalogResolver` port; the contract is unchanged.
+through the `GameCatalogResolver` port; the per-title `resolve()` contract is
+unchanged, and the batched `resolveBatch()` seam is exposed for later pipeline
+integration (ticket 4.4).
 
 # Authentication
 
@@ -139,14 +145,110 @@ numeric `id` and string `name` are filtered out. The result is consumed by the
 `platforms` table (matching PS5/PlayStation 5 and storing `platform_family`);
 it is deliberately **not** called on a per-game import.
 
+# Game search and multi-query batching
+
+`searchGames(title)` (ticket 3.5) looks up one title with `POST /v4/games`.
+`multiqueryGames(titles)` (ticket 4.3) looks up many titles in **two phases**,
+because IGDB's `multiquery` has a known limitation.
+
+## Why two phases
+
+An IGDB `POST /v4/multiquery` sub-query that uses `search` **ignores `fields`**
+and returns only ids (confirmed by the Twitch/IGDB UserVoice bug and
+Cookie285/game-collection#10, merged 2026-09-28). Asking a `search` sub-query for
+`involved_companies.company.name` and the other enrichment fields therefore
+yields id-only rows that the catalog cannot use, so the client separates fuzzy
+matching from field hydration instead of requesting the full field set in phase
+one.
+
+## Phase 1 — batched fuzzy search (ids only)
+
+At most `IGDB_MULTIQUERY_MAX_QUERIES = 10` sub-queries are packed per
+`POST /v4/multiquery` request (11 titles → requests of 10 then 1). Each
+sub-query is named `g0`, `g1`, … in input order and requests only ids:
+
+```
+query games "g0" {
+search "Halo";
+fields id;
+limit 10;
+};
+query games "g1" { … };
+```
+
+Results are attributed back to the input title by that sub-query name. Named
+responses (`gN`) are authoritative; the positional fallback is used **only**
+when the whole response is the older array-of-arrays shape. A partially named
+response (an unnamed entry mixed with `g0`) therefore cannot shift an id onto
+the wrong title — the unnamed entry is ignored — and a missing or malformed
+`result` becomes an empty id list. Titles are escaped through
+`escapeApicalypse`, which also strips C0/DEL control characters before escaping
+quotes and backslashes.
+
+## Phase 2 — batched hydration (catalog fields)
+
+The unique ids from every phase-1 chunk (deduplicated across titles in
+first-seen order) are hydrated with the full catalog field set in
+`POST /v4/games` requests of at most `IGDB_HYDRATION_MAX_IDS = 500` ids:
+
+```
+fields name,first_release_date,cover.url,involved_companies.company.name,
+genres.name,platforms.id,platforms.name,platforms.abbreviation,summary,
+version_parent; where id = (1,2,…); limit 500;
+```
+
+The response rows are indexed `id → game`, and each title's candidates are
+rebuilt from its phase-1 id order, so `multiqueryGames` still returns one
+candidate array per input title, in input order. An id that hydration does not
+return is **dropped** — the client never substitutes a different game.
+Hydration asks for exactly the catalog fields (no `*`, no `alternative_names`);
+`involved_companies.company.name` feeds `CatalogCandidate.publisher`, and
+`summary`/`version_parent` are the card-4.3 enrichment fields archived through
+`CatalogCandidate.raw`.
+
+## Requests, tokens, errors
+
+Both phases reuse the cached token, resolved once per HTTP request
+(`authedRequest` → `getToken`, which returns `Promise.resolve` of a valid token)
+and run through the central limiter: one HTTP request is one limiter slot, and a
+`429` is retried per request by the same `send()` backoff. A 100-title batch is
+therefore 10 multiquery requests plus at most 2 hydration requests (≤1000 unique
+ids / 500).
+
+Error semantics are batch-level: a non-array multiquery **or** hydration body is
+a permanent `IgdbError` (`IGDB returned an unexpected response`), and any failing
+request throws so the caller can classify the whole batch (the resolver marks
+every item `transient` for a retryable error and `unrecognized` otherwise).
+`multiqueryGames([])` sends no request.
+
+## Known limitation: cross-system version tokens (m4)
+
+The version-token guard treats numerals and roman numerals as installment
+markers, so a title whose only difference is the _system_ scores 0 and is
+reported `unrecognized`: `GTA 5` vs `GTA V`, `Final Fantasy 7` vs
+`Final Fantasy VII`. This is an intentional false negative in the safe
+direction — it never force-matches a different edition — and is relevant to the
+ticket 4.5 fallback.
+
+The guard operates on whitespace-separated tokens, so a digit glued to a word —
+a candidate literally named `Halo2` or `FIFA23` — is **not** treated as a
+version token and is not covered by the guard. IGDB's canonical names use a
+space (`Halo 2`, `FIFA 23`), so this is a deliberate, low-risk accepted
+limitation rather than a bug.
+
 # Testing
 
 All suites fake the HTTP seam (`IgdbHttpClient`) and make no external call:
 `igdb.client.spec.ts` (token cache/refresh, single-flight acquisition, bootstrap
 warm-up, token URL default/override, limiter routing, 429 backoff and
-Retry-After, exhaustion, secret non-leakage, health outcomes, and platform-list
+Retry-After, exhaustion, secret non-leakage, health outcomes, platform-list
 fetch — exact request body, malformed-row filtering, non-array error, limiter
-routing),
+routing, and two-phase `multiqueryGames` — 0/2/10/11-title packing, ids-only
+phase 1 vs full-field hydration, named/mixed/omitted/legacy attribution, dedupe
+and drop-unknown hydration, multi-chunk input order, escaping, empty input, 429
+retry, non-array error),
+`title-match.spec.ts` (normalization, exact/typo/unrelated similarity,
+sequel/version guards, ranking, confident-match selection),
 `igdb-rate-limiter.spec.ts` (4/s window, 8 concurrent, slot release, bounded
 queue, `activeCount`), `igdb-health.service.spec.ts`,
 `igdb-health.controller.spec.ts`, and `igdb-health.e2e-spec.ts` (unauthenticated
@@ -154,7 +256,8 @@ queue, `activeCount`), `igdb-health.service.spec.ts`,
 
 # Out of scope
 
-- MobyGames fallback (4.5) and IGDB multiquery batching (4.3).
+- MobyGames fallback (4.5); production wiring of `resolveBatch()` into the
+  pipeline (4.4).
 - Multi-instance sharing: the limiter and token cache are per process, so the
   app assumes a single API instance (or accepts that each instance enforces its
   own limits).

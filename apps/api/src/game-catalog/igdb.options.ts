@@ -20,6 +20,13 @@ export const IGDB_RETRY_MAX_DELAY_MS = 5000;
 /** Random jitter added to computed backoff (never to Retry-After). */
 export const IGDB_RETRY_JITTER_MS = 250;
 
+/** IGDB multiquery cap: at most 10 sub-queries per HTTP request (docs). */
+export const IGDB_MULTIQUERY_MAX_QUERIES = 10;
+/** Candidates requested per title in search and multiquery. */
+export const IGDB_SEARCH_LIMIT = 10;
+/** IGDB games endpoint hard cap: max rows per hydration request. */
+export const IGDB_HYDRATION_MAX_IDS = 500;
+
 /** Optional override of the OAuth token endpoint. */
 export const IGDB_TOKEN_URL_ENV = 'IGDB_TOKEN_URL';
 /** Canonical Twitch client-credentials endpoint (card 4.1). */

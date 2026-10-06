@@ -22,6 +22,17 @@ function createResolver(
   } as unknown as IgdbClient);
 }
 
+type BatchMock = jest.Mock<Promise<IgdbGame[][]>, [readonly string[]]>;
+
+function createBatchResolver(
+  multiqueryGames: BatchMock,
+): IgdbGameCatalogResolver {
+  return new IgdbGameCatalogResolver({
+    searchGames: jest.fn(),
+    multiqueryGames,
+  } as unknown as IgdbClient);
+}
+
 describe('normalizeTitle (unit)', () => {
   it('lowercases, strips diacritics and punctuation, and collapses spaces', () => {
     expect(normalizeTitle('  Pokémon:  Édition   Rouge! ')).toBe(
@@ -69,6 +80,31 @@ describe('IgdbGameCatalogResolver (unit)', () => {
     const resolver = createResolver(search);
 
     const result = await resolver.resolve(item('Halo'));
+
+    expect(result).toEqual({
+      kind: 'unrecognized',
+      reason: 'No IGDB game matched the title',
+    });
+  });
+
+  it('accepts a candidate that differs by a minor typo', async () => {
+    const search = jest
+      .fn<Promise<IgdbGame[]>, [string]>()
+      .mockResolvedValue([game({ id: 7, name: 'Halo' })]);
+    const resolver = createResolver(search);
+
+    const result = await resolver.resolve(item('Haloo'));
+
+    expect(result.kind).toBe('matched');
+  });
+
+  it('does not match a sequel as a typo', async () => {
+    const search = jest
+      .fn<Promise<IgdbGame[]>, [string]>()
+      .mockResolvedValue([game({ id: 9, name: 'Fifa 23' })]);
+    const resolver = createResolver(search);
+
+    const result = await resolver.resolve(item('Fifa 24'));
 
     expect(result).toEqual({
       kind: 'unrecognized',
@@ -140,5 +176,100 @@ describe('IgdbGameCatalogResolver (unit)', () => {
         raw: expect.anything() as unknown,
       },
     });
+  });
+});
+
+describe('IgdbGameCatalogResolver.resolveBatch (unit)', () => {
+  it('resolves N titles in one call, aligned to input order', async () => {
+    const multiquery = jest
+      .fn<Promise<IgdbGame[][]>, [readonly string[]]>()
+      .mockResolvedValue([
+        [game({ id: 1, name: 'Halo' })],
+        [game({ id: 2, name: 'God of War' })],
+      ]);
+    const resolver = createBatchResolver(multiquery);
+
+    const results = await resolver.resolveBatch([
+      item('Halo'),
+      item('Mystery'),
+    ]);
+
+    expect(multiquery).toHaveBeenCalledTimes(1);
+    expect(multiquery).toHaveBeenCalledWith(['Halo', 'Mystery']);
+    expect(results.map((r) => r.kind)).toEqual(['matched', 'unrecognized']);
+  });
+
+  it('accepts a candidate that differs by a minor typo', async () => {
+    const multiquery = jest
+      .fn<Promise<IgdbGame[][]>, [readonly string[]]>()
+      .mockResolvedValue([[game({ id: 7, name: 'Halo' })]]);
+    const resolver = createBatchResolver(multiquery);
+
+    const results = await resolver.resolveBatch([item('Haloo')]);
+
+    expect(results[0]?.kind).toBe('matched');
+  });
+
+  it('reports no plausible match as unrecognized, not a wrong game', async () => {
+    const multiquery = jest
+      .fn<Promise<IgdbGame[][]>, [readonly string[]]>()
+      .mockResolvedValue([[game({ id: 9, name: 'Fifa 23' })]]);
+    const resolver = createBatchResolver(multiquery);
+
+    const results = await resolver.resolveBatch([item('Fifa 24')]);
+
+    expect(results[0]).toEqual({
+      kind: 'unrecognized',
+      reason: 'No IGDB game matched the title',
+    });
+  });
+
+  it('maps a retryable batch error to transient for every item', async () => {
+    const multiquery = jest
+      .fn<Promise<IgdbGame[][]>, [readonly string[]]>()
+      .mockRejectedValue(new IgdbError(true, 'IGDB rate-limited the request'));
+    const resolver = createBatchResolver(multiquery);
+
+    const results = await resolver.resolveBatch([item('Halo'), item('Doom')]);
+
+    expect(results).toEqual([
+      { kind: 'transient', reason: 'IGDB rate-limited the request' },
+      { kind: 'transient', reason: 'IGDB rate-limited the request' },
+    ]);
+  });
+
+  it('maps a permanent batch error to unrecognized for every item', async () => {
+    const multiquery = jest
+      .fn<Promise<IgdbGame[][]>, [readonly string[]]>()
+      .mockRejectedValue(new IgdbError(false, 'IGDB rejected the credentials'));
+    const resolver = createBatchResolver(multiquery);
+
+    const results = await resolver.resolveBatch([item('Halo')]);
+
+    expect(results).toEqual([
+      { kind: 'unrecognized', reason: 'IGDB rejected the credentials' },
+    ]);
+  });
+
+  it('passes all 11 titles in a single client call (chunking is the client’s)', async () => {
+    const titles = Array.from({ length: 11 }, (_, i) => `Game ${String(i)}`);
+    const multiquery = jest
+      .fn<Promise<IgdbGame[][]>, [readonly string[]]>()
+      .mockResolvedValue(Array.from({ length: 11 }, () => []));
+    const resolver = createBatchResolver(multiquery);
+
+    const results = await resolver.resolveBatch(titles.map(item));
+
+    expect(multiquery).toHaveBeenCalledTimes(1);
+    expect(multiquery).toHaveBeenCalledWith(titles);
+    expect(results).toHaveLength(11);
+  });
+
+  it('returns [] and makes no client call for an empty list', async () => {
+    const multiquery = jest.fn<Promise<IgdbGame[][]>, [readonly string[]]>();
+    const resolver = createBatchResolver(multiquery);
+
+    await expect(resolver.resolveBatch([])).resolves.toEqual([]);
+    expect(multiquery).not.toHaveBeenCalled();
   });
 });

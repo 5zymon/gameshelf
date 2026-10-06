@@ -9,10 +9,13 @@ import { IgdbError, igdbErrorFromStatus } from './igdb.errors';
 import { IgdbHttpClient, type IgdbHttpResponse } from './igdb-http.client';
 import { IgdbRateLimiter } from './igdb-rate-limiter';
 import {
+  IGDB_HYDRATION_MAX_IDS,
   IGDB_MAX_ATTEMPTS,
+  IGDB_MULTIQUERY_MAX_QUERIES,
   IGDB_RETRY_BASE_DELAY_MS,
   IGDB_RETRY_JITTER_MS,
   IGDB_RETRY_MAX_DELAY_MS,
+  IGDB_SEARCH_LIMIT,
   IGDB_TOKEN_URL_DEFAULT,
   IGDB_TOKEN_URL_ENV,
 } from './igdb.options';
@@ -21,9 +24,21 @@ export const IGDB_CLIENT_ID_ENV = 'IGDB_CLIENT_ID';
 export const IGDB_CLIENT_SECRET_ENV = 'IGDB_CLIENT_SECRET';
 
 const IGDB_GAMES_URL = 'https://api.igdb.com/v4/games';
+const IGDB_MULTIQUERY_URL = 'https://api.igdb.com/v4/multiquery';
 const IGDB_PLATFORMS_URL = 'https://api.igdb.com/v4/platforms';
 const IGDB_PLATFORMS_QUERY =
   'fields name,abbreviation,alternative_name,platform_family,slug; limit 500;';
+
+/**
+ * Exactly the fields the catalog needs. `involved_companies.company.name`
+ * feeds CatalogCandidate.publisher; `summary` and `version_parent` are
+ * requested by card 4.3 (version_parent is IGDB's edition/version link).
+ * Deliberately no `*` and no `alternative_names`.
+ */
+const IGDB_GAME_FIELDS =
+  'name,first_release_date,cover.url,involved_companies.company.name,' +
+  'genres.name,platforms.id,platforms.name,platforms.abbreviation,' +
+  'summary,version_parent';
 
 /** Raw IGDB game shape (only the fields the query asks for). */
 export interface IgdbGame {
@@ -34,6 +49,9 @@ export interface IgdbGame {
   involved_companies?: { company?: { name?: string } }[];
   genres?: { name?: string }[];
   platforms?: { id?: number; name?: string; abbreviation?: string }[];
+  summary?: string;
+  /** IGDB id of the base game when this row is an edition/port; absent otherwise. */
+  version_parent?: number;
 }
 
 /**
@@ -88,14 +106,10 @@ export class IgdbClient implements OnApplicationBootstrap {
   }
 
   async searchGames(title: string): Promise<IgdbGame[]> {
-    const token = await this.getToken();
     const query =
       `search "${escapeApicalypse(title)}"; ` +
-      'fields name,first_release_date,cover.url,' +
-      'involved_companies.company.name,genres.name,' +
-      'platforms.id,platforms.name,platforms.abbreviation; ' +
-      'limit 10;';
-    const response = await this.request(IGDB_GAMES_URL, token, query);
+      `fields ${IGDB_GAME_FIELDS}; limit ${String(IGDB_SEARCH_LIMIT)};`;
+    const response = await this.authedRequest(IGDB_GAMES_URL, query);
     const body = await this.json(response);
     if (!Array.isArray(body)) {
       throw new IgdbError(false, 'IGDB returned an unexpected response');
@@ -104,15 +118,75 @@ export class IgdbClient implements OnApplicationBootstrap {
   }
 
   /**
+   * Looks up up to `titles.length` titles in two phases. Phase 1 packs at most
+   * `IGDB_MULTIQUERY_MAX_QUERIES` fuzzy `search` sub-queries per
+   * `POST /v4/multiquery` request and collects only ids (IGDB ignores `fields`
+   * for a sub-query that uses `search`). Phase 2 hydrates the unique ids with
+   * the catalog fields in `/v4/games` requests of at most
+   * `IGDB_HYDRATION_MAX_IDS`. Returns one candidate array per input title, in
+   * input order (empty array for a title with no/malformed result). Each HTTP
+   * request is one limiter slot and retries a 429 via `send()`; any failing
+   * chunk throws `IgdbError`.
+   */
+  async multiqueryGames(titles: readonly string[]): Promise<IgdbGame[][]> {
+    if (titles.length === 0) return [];
+
+    // Phase 1 — batched fuzzy search: ids only, IGDB search relevance order.
+    // IGDB ignores `fields` for a sub-query that uses `search`, so we cannot
+    // ask for hydration fields here (confirmed: Twitch/IGDB UserVoice bug and
+    // Cookie285/game-collection#10, merged 2026-09-28); we only collect ids.
+    const candidateIds: number[][] = [];
+    for (
+      let start = 0;
+      start < titles.length;
+      start += IGDB_MULTIQUERY_MAX_QUERIES
+    ) {
+      const chunk = titles.slice(start, start + IGDB_MULTIQUERY_MAX_QUERIES);
+      const response = await this.authedRequest(
+        IGDB_MULTIQUERY_URL,
+        multiquerySearchBody(chunk),
+      );
+      const body = await this.json(response);
+      candidateIds.push(...parseMultiqueryIds(body, chunk.length));
+    }
+
+    // Phase 2 — hydration: one batched /v4/games request per ≤500 unique ids.
+    const uniqueIds = dedupeIds(candidateIds);
+    const gamesById = new Map<number, IgdbGame>();
+    for (
+      let start = 0;
+      start < uniqueIds.length;
+      start += IGDB_HYDRATION_MAX_IDS
+    ) {
+      const ids = uniqueIds.slice(start, start + IGDB_HYDRATION_MAX_IDS);
+      const response = await this.authedRequest(
+        IGDB_GAMES_URL,
+        hydrationBody(ids),
+      );
+      const body = await this.json(response);
+      if (!Array.isArray(body)) {
+        throw new IgdbError(false, 'IGDB returned an unexpected response');
+      }
+      for (const game of body.filter(isIgdbGame)) gamesById.set(game.id, game);
+    }
+
+    // Rebuild each title's candidates in the phase-1 id order; an id that
+    // hydration did not return is dropped (never substitute a different game).
+    return candidateIds.map((ids) =>
+      ids
+        .map((id) => gamesById.get(id))
+        .filter((game): game is IgdbGame => game !== undefined),
+    );
+  }
+
+  /**
    * Fetches the full canonical IGDB platform list in exactly one request
    * (ticket 4.2). Reuses the cached token and the central rate limiter, and
    * retries a 429 internally just like `searchGames`.
    */
   async fetchPlatforms(): Promise<IgdbPlatform[]> {
-    const token = await this.getToken();
-    const response = await this.request(
+    const response = await this.authedRequest(
       IGDB_PLATFORMS_URL,
-      token,
       IGDB_PLATFORMS_QUERY,
     );
     const body = await this.json(response);
@@ -175,6 +249,18 @@ export class IgdbClient implements OnApplicationBootstrap {
       expiresAt: Date.now() + Math.max(0, expiresIn - 60) * 1000,
     };
     return value;
+  }
+
+  /**
+   * Resolves a (cached) token per HTTP request and delegates to `request`, so
+   * every request in a multi-chunk sequence uses a valid token.
+   */
+  private async authedRequest(
+    url: string,
+    body: string,
+  ): Promise<IgdbHttpResponse> {
+    const token = await this.getToken();
+    return this.request(url, token, body);
   }
 
   private async request(
@@ -334,9 +420,93 @@ export class IgdbClient implements OnApplicationBootstrap {
   }
 }
 
-/** Escapes an APICalypse double-quoted search term. */
+/** Escapes an APICalypse double-quoted search term and strips control chars. */
 export function escapeApicalypse(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+  return (
+    value
+      // eslint-disable-next-line no-control-regex -- deliberately strips C0/DEL controls
+      .replace(/[\u0000-\u001F\u007F]+/g, ' ')
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+  );
+}
+
+/** One `query games "gN" { search …; fields id; limit …; };` block per title. */
+function multiquerySearchBody(titles: readonly string[]): string {
+  return titles
+    .map(
+      (title, index) =>
+        `query games "g${String(index)}" {\n` +
+        `search "${escapeApicalypse(title)}";\n` +
+        `fields id;\n` +
+        `limit ${String(IGDB_SEARCH_LIMIT)};\n` +
+        '};',
+    )
+    .join('\n');
+}
+
+/** Hydration query: all catalog fields for a bounded set of ids. */
+function hydrationBody(ids: readonly number[]): string {
+  return (
+    `fields ${IGDB_GAME_FIELDS}; ` +
+    `where id = (${ids.join(',')}); ` +
+    `limit ${String(IGDB_HYDRATION_MAX_IDS)};`
+  );
+}
+
+/** Numeric ids from a `{ result: [{ id }] }` / legacy `[{ id }]` entry. */
+function entryIds(entry: unknown): number[] {
+  const rows = Array.isArray(entry)
+    ? entry
+    : isRecord(entry) && Array.isArray(entry.result)
+      ? entry.result
+      : [];
+  return rows
+    .map((row) => (isRecord(row) ? row.id : undefined))
+    .filter((id): id is number => Number.isInteger(id) && (id as number) > 0);
+}
+
+/**
+ * Maps a phase-1 multiquery response to one id list per sub-query, in input
+ * order. Named responses (`gN`) are authoritative; positional fallback is used
+ * ONLY when the whole response is the legacy unnamed array-of-arrays shape, so
+ * a partially-named response can never shift ids onto the wrong title.
+ */
+function parseMultiqueryIds(body: unknown, count: number): number[][] {
+  if (!Array.isArray(body)) {
+    throw new IgdbError(false, 'IGDB returned an unexpected response');
+  }
+  const byName = new Map<string, number[]>();
+  const positional: number[][] = [];
+  let anyNamed = false;
+  for (const entry of body) {
+    const ids = entryIds(entry);
+    positional.push(ids);
+    if (isRecord(entry) && typeof entry.name === 'string') {
+      byName.set(entry.name, ids);
+      anyNamed = true;
+    }
+  }
+  return Array.from({ length: count }, (_, index) =>
+    anyNamed
+      ? (byName.get(`g${String(index)}`) ?? [])
+      : (positional[index] ?? []),
+  );
+}
+
+/** Unique ids in first-seen order, across all titles. */
+function dedupeIds(lists: readonly (readonly number[])[]): number[] {
+  const seen = new Set<number>();
+  const unique: number[] = [];
+  for (const list of lists) {
+    for (const id of list) {
+      if (!seen.has(id)) {
+        seen.add(id);
+        unique.push(id);
+      }
+    }
+  }
+  return unique;
 }
 
 /** Parses an HTTP Retry-After header (seconds or HTTP-date); null if absent. */

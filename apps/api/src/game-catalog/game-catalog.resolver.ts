@@ -39,4 +39,19 @@ export type CatalogResolution =
  */
 export abstract class GameCatalogResolver {
   abstract resolve(item: RecognizedItem): Promise<CatalogResolution>;
+
+  /**
+   * Validates a batch of titles. The IGDB implementation overrides this with one
+   * multiquery request per ≤10 titles (card 4.3); the default is sequential and
+   * exists so the port stays usable by any resolver that does not batch.
+   */
+  async resolveBatch(
+    items: readonly RecognizedItem[],
+  ): Promise<CatalogResolution[]> {
+    const results: CatalogResolution[] = [];
+    for (const item of items) {
+      results.push(await this.resolve(item));
+    }
+    return results;
+  }
 }
