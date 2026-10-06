@@ -15,7 +15,8 @@ after [Import Photo Upload API](/import-upload-api.md) queues it. The BullMQ
 
 1. calls the vision provider **once** for the photo;
 2. persists the recognized item list;
-3. validates each title against an external game database (IGDB);
+3. validates each title against the ordered external-source validation chain
+   (IGDB today);
 4. saves confirmed games in one MySQL transaction per batch;
 5. records unrecognized titles as `unrecognized_items`;
 6. maintains the job counters and persists the result;
@@ -146,7 +147,19 @@ Key properties:
 # External validation
 
 `GameCatalogResolver` is a port (an abstract class used as the Nest DI token)
-with a single IGDB implementation, `IgdbGameCatalogResolver`:
+whose production binding is the ordered anti-hallucination chain,
+`ChainedGameCatalogResolver`: it tries the injected `GAME_CATALOG_SOURCES` in
+registration order (array order = validation order) and returns the first
+`matched` candidate. A title no source confirms is never returned as a candidate
+and therefore never saved as a `Game`; see
+[Anti-hallucination Validation](/anti-hallucination-validation.md) for the
+invariant, the `transient` short-circuit, and the `UnrecognizedItem` trace.
+Ticket 4.4 registers exactly one source — `IgdbGameCatalogResolver`
+(`label = 'IGDB'`) — so production validation is IGDB-only for now. Ticket 4.5
+appends a MobyGames source (`label = 'MobyGames'`) to the same array with no
+pipeline change.
+
+The IGDB source:
 
 - `IgdbClient` obtains an OAuth client-credentials token (cached until
   `expiry − 60 s`, token URL defaulting to the Twitch endpoint) and issues one
@@ -166,6 +179,13 @@ with a single IGDB implementation, `IgdbGameCatalogResolver`:
 - a non-`429` 5xx/network/timeout — or a `429` whose internal retries are
   exhausted — becomes `transient` and is retried by the job; a 401/403 or
   malformed query becomes `unrecognized`, and no match becomes `unrecognized`.
+
+Because `transient` means "unknown", the chain **stops** at the first
+`transient` instead of falling through (a real title must not be permanently
+dropped while a source is merely throttled/down); only an `unrecognized` outcome
+moves on to the next source. Once every source has returned `unrecognized`, the
+chain emits one aggregated reason preserving each source's label, e.g.
+`No game matched the title in any source — IGDB: No IGDB game matched the title`.
 
 A matched candidate is mapped to a local `Platform` row: the candidate's IGDB
 id first, then an anchored, equality-only match over the candidate's
@@ -187,12 +207,15 @@ first `npm run platforms:sync`) shows up as review noise. The `reason` is a
 fixed, UI-translatable token rather than prose, so the UI can render a
 dedicated message and the value stays stable if wording changes.
 
-The MobyGames fallback (ticket 4.5) plugs into the same port. The port also
-exposes a batched `resolveBatch()` (ticket 4.3) that resolves many titles in two
-phases — a batched `/v4/multiquery` id search (≤10 sub-queries per request) then
-a batched `/v4/games` hydration (≤500 ids per request); the pipeline still calls
-the per-title `resolve()`, so production request reduction and batch integration
-are owned by ticket 4.4.
+The MobyGames fallback (ticket 4.5) appends a source to the same chain. The IGDB
+source retains its batched `resolveBatch()` (ticket 4.3), which resolves many
+titles in two phases — a batched `/v4/multiquery` id search (≤10 sub-queries per
+request) then a batched `/v4/games` hydration (≤500 ids per request). The chain
+does not override that method, however, so through the `GameCatalogResolver`
+port batches currently fall back to the inherited sequential per-item
+`resolve()`; the pipeline still calls the per-title `resolve()`, so production
+request reduction via batch integration remains **deferred** (it is not part of
+ticket 4.4).
 
 # Retry configuration
 
@@ -271,6 +294,7 @@ a failed job.
 
 # Out of scope
 
-- MobyGames fallback (4.5) and pipeline integration of batched resolution (4.4).
+- MobyGames concrete client and rate limiting (4.5); pipeline integration of
+  batched resolution (`resolveBatch`) is deferred (not part of 4.4).
 - Manual item resolution (pick candidate / manual add).
 - Frontend progress/flagged-item views.

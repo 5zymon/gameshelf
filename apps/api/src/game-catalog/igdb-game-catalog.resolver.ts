@@ -5,6 +5,7 @@ import {
   type CatalogPlatform,
   type CatalogResolution,
   GameCatalogResolver,
+  type GameCatalogSource,
 } from './game-catalog.resolver';
 import { IgdbError } from './igdb.errors';
 import { IgdbClient, type IgdbGame } from './igdb.client';
@@ -21,7 +22,13 @@ export { normalizeTitle } from './title-match';
  * difference (`Halo` vs `Halo 2`) as a match.
  */
 @Injectable()
-export class IgdbGameCatalogResolver extends GameCatalogResolver {
+export class IgdbGameCatalogResolver
+  extends GameCatalogResolver
+  implements GameCatalogSource
+{
+  /** Source label; used in the chain's aggregated reason. */
+  readonly label = 'IGDB';
+
   constructor(private readonly igdb: IgdbClient) {
     super();
   }

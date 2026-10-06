@@ -11,6 +11,7 @@ okf_version: '0.2'
 - [Import Jobs API](/import-jobs-api.md) - persisted import runs (status, counts, flagged items), dismissal, and the indefinite retention policy.
 - [Import Photo Upload API](/import-upload-api.md) - `POST /import/upload`: multi-photo upload, optional per-photo declared counts, ephemeral storage, and background queuing.
 - [Photo Import Pipeline](/photo-import-pipeline.md) - the worker's per-photo pipeline: one vision call, IGDB validation, per-batch MySQL transactions, retry-only-unresolved, and photo deletion after completion.
+- [Anti-hallucination Validation](/anti-hallucination-validation.md) - no `Game` row without external confirmation: the ordered IGDB → fallback → unrecognized chain, transient short-circuit, unrecognized trace, and MANUAL-only bypass.
 - [IGDB Client & Rate Limiter](/igdb-client.md) - one IGDB client: Twitch client-credentials auth, cached/refreshable token, a central 4 req/s / 8-concurrent limiter, internal 429 backoff, two-phase IGDB batching (batched id search + batched hydration, ≤10 sub-queries and ≤500 ids per request), and an unauthenticated `GET /health/igdb` probe.
 - [Photo Lifecycle & Retention](/photo-lifecycle.md) - ephemeral photo lifecycle: kept while queued/retryable, deleted on completion, swept when orphaned or past the failed-retry window.
 - [Vision Provider Abstraction](/vision-provider-abstraction.md) - one `VisionProvider` interface with swappable Gemini/OpenAI backends behind a registry and `VisionService` seam, and a list-based (never count-based) recognition contract.

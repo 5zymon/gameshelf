@@ -33,9 +33,26 @@ export type CatalogResolution =
   | { kind: 'transient'; reason: string };
 
 /**
- * Port for external game-database validation. Ticket 3.5 ships the IGDB
- * implementation; the MobyGames fallback (4.5) and multiquery batching (4.3)
- * plug in here without touching the pipeline.
+ * One external game-database source in the ordered validation chain.
+ * A source returns `matched`, `unrecognized` (no candidate in *this* source),
+ * or `transient` (lookup failed, retry may succeed). It never throws: errors are
+ * mapped to a resolution. `IgdbGameCatalogResolver` implements this today;
+ * ticket 4.5 plugs the MobyGames source in behind the same contract.
+ */
+export interface GameCatalogSource {
+  /** Stable label used in the aggregated "no source matched" reason. */
+  readonly label: string;
+  resolve(item: RecognizedItem): Promise<CatalogResolution>;
+}
+
+/** Nest DI token for the ordered source list (array order = validation order). */
+export const GAME_CATALOG_SOURCES = 'GAME_CATALOG_SOURCES';
+
+/**
+ * Port for external game-database validation. The production binding
+ * (`ChainedGameCatalogResolver`) composes the ordered source list behind this
+ * port; ticket 4.5 adds a source to `GAME_CATALOG_SOURCES` without touching the
+ * pipeline.
  */
 export abstract class GameCatalogResolver {
   abstract resolve(item: RecognizedItem): Promise<CatalogResolution>;

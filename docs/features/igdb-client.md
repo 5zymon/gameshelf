@@ -29,8 +29,11 @@ The photo import pipeline resolves every recognized title against IGDB (ticket
 
 The client is consumed by [Photo Import Pipeline](/photo-import-pipeline.md)
 through the `GameCatalogResolver` port; the per-title `resolve()` contract is
-unchanged, and the batched `resolveBatch()` seam is exposed for later pipeline
-integration (ticket 4.4).
+unchanged. The IGDB source retains its batched `resolveBatch()` capability, but
+the production binding — `ChainedGameCatalogResolver` — does not override it, so
+through the port batch resolution currently falls back to the inherited
+sequential per-item `resolve()`. Wiring the batched path into the pipeline is
+**deferred** (it is not part of ticket 4.4).
 
 # Authentication
 
@@ -256,8 +259,8 @@ queue, `activeCount`), `igdb-health.service.spec.ts`,
 
 # Out of scope
 
-- MobyGames fallback (4.5); production wiring of `resolveBatch()` into the
-  pipeline (4.4).
+- MobyGames fallback (4.5); wiring `resolveBatch()` into the pipeline is
+  deferred (not part of 4.4).
 - Multi-instance sharing: the limiter and token cache are per process, so the
   app assumes a single API instance (or accepts that each instance enforces its
   own limits).
