@@ -33,6 +33,18 @@ export interface RecognizedItem {
   confidence: number;
 }
 
+/** Full recognition output: the item list plus the model's own (advisory) count. */
+export interface VisionRecognitionResult {
+  items: RecognizedItem[];
+  /**
+   * The model's self-reported number of visible games. ADVISORY ONLY: the
+   * number of recognized games is always `items.length`; this value is never
+   * used as the authoritative count. `null` when the model omitted a usable
+   * number.
+   */
+  countVisible: number | null;
+}
+
 export interface VisionRecognitionInput {
   image: Buffer;
   mimeType: string;
@@ -50,23 +62,28 @@ export interface VisionProvider {
   recognize(
     input: VisionRecognitionInput,
     config: VisionProviderConfig,
-  ): Promise<RecognizedItem[]>;
+  ): Promise<VisionRecognitionResult>;
 }
 
 /** Shared instruction text; each provider passes it in its own request shape. */
 export const VISION_INSTRUCTION_PROMPT =
-  'You read photos of physical video-game shelves. Identify every distinct ' +
-  'video game visible (spines, covers, boxes). Return a JSON array with one ' +
-  'object per game and these fields: "title" (the title as printed, required), ' +
+  'You read photos of physical video-game shelves. List EVERY distinct video ' +
+  'game you can see (spines, covers, boxes). Never guess or estimate how many ' +
+  'games are in the photo — counting objects is unreliable, so return the list ' +
+  'instead. Read each title off its box; when the text is unreadable, use your ' +
+  'knowledge of the cover art to identify the game. Return a JSON object with: ' +
+  '"items", one object per game with "title" (the title as printed, required), ' +
   '"edition" (e.g. "GOTY Edition", or null), "platform" (e.g. "PlayStation 5", ' +
-  'or null), and "confidence" (a number from 0 to 1). Only include actual ' +
-  'video games; if none are visible, return an empty array.';
+  'or null) and "confidence" (a number from 0 to 1); and "count_visible", the ' +
+  'number of games you listed, or null if unsure. "count_visible" is advisory ' +
+  'only and must match the number of items. Only include actual video games; ' +
+  'if none are visible, return an empty "items" array and "count_visible": 0.';
 
 /**
- * Canonical strict JSON Schema for the array of recognized items. Gemini passes
- * it as-is (`GEMINI_RESPONSE_SCHEMA` adapts it to the OpenAPI subset with
- * `nullable` instead of `type: [..., "null"]`). OpenAI wraps it under an object
- * root because Structured Outputs only accept an object at the top level.
+ * Canonical strict JSON Schema for the `items` value of the full recognition
+ * response. Gemini adapts it to the OpenAPI subset with `nullable` instead of
+ * `type: [..., "null"]`; the full object schema (`VISION_RECOGNITION_SCHEMA`)
+ * adds the advisory count sibling.
  */
 export const VISION_RESPONSE_SCHEMA = {
   type: 'array',
@@ -83,6 +100,21 @@ export const VISION_RESPONSE_SCHEMA = {
   },
 } as const;
 
+/**
+ * Canonical strict JSON Schema for the full recognition response: the item
+ * array plus the advisory `count_visible`. OpenAI uses it directly; Gemini
+ * adapts it to the OpenAPI subset in `gemini-vision.provider.ts`.
+ */
+export const VISION_RECOGNITION_SCHEMA = {
+  type: 'object',
+  properties: {
+    items: VISION_RESPONSE_SCHEMA,
+    count_visible: { type: ['number', 'null'] },
+  },
+  required: ['items', 'count_visible'],
+  additionalProperties: false,
+} as const;
+
 /** Narrows unknown JSON to a plain object (never an array). */
 export function isJsonRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -91,6 +123,19 @@ export function isJsonRecord(value: unknown): value is Record<string, unknown> {
 /** Narrows unknown JSON to an array whose elements stay `unknown` (not `any`). */
 export function asUnknownArray(value: unknown): unknown[] | null {
   return Array.isArray(value) ? (value as unknown[]) : null;
+}
+
+/** Caps a raw model response before it is logged (debug only, never stored). */
+export const RAW_VISION_LOG_LIMIT = 2000;
+
+export function truncateForLog(
+  text: string,
+  limit: number = RAW_VISION_LOG_LIMIT,
+): string {
+  if (text.length <= limit) {
+    return text;
+  }
+  return `${text.slice(0, limit)}…[truncated ${String(text.length - limit)} chars]`;
 }
 
 /**
@@ -135,6 +180,32 @@ export function parseRecognizedItems(raw: unknown): RecognizedItem[] {
       confidence: Math.min(1, Math.max(0, confidence)),
     };
   });
+}
+
+/**
+ * The model's advisory `count_visible`. Never throws: a missing, non-numeric,
+ * negative or non-finite value becomes `null`, so a bad count can never abort
+ * recognition.
+ */
+export function parseAdvisoryCount(value: unknown): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+  return Math.floor(value);
+}
+
+/**
+ * Full recognition parse: validates the item list (throwing `bad_response` for
+ * a missing/invalid list) and attaches the advisory count. The number of
+ * recognized games is `result.items.length`; `countVisible` is never trusted.
+ */
+export function parseVisionRecognition(raw: unknown): VisionRecognitionResult {
+  return {
+    items: parseRecognizedItems(raw),
+    countVisible: isJsonRecord(raw)
+      ? parseAdvisoryCount(raw.count_visible)
+      : null,
+  };
 }
 
 /** Parses the model's JSON text, mapping a syntax error to `bad_response`. */

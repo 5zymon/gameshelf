@@ -19,9 +19,9 @@ function httpResponse(status: number, body: unknown): VisionHttpResponse {
   };
 }
 
-function geminiBody(items: unknown[]): unknown {
+function geminiBody(content: unknown): unknown {
   return {
-    candidates: [{ content: { parts: [{ text: JSON.stringify(items) }] } }],
+    candidates: [{ content: { parts: [{ text: JSON.stringify(content) }] } }],
   };
 }
 
@@ -50,7 +50,9 @@ const config: VisionProviderConfig = {
 
 describe('GeminiVisionProvider (unit)', () => {
   it('exposes its id, label and default model', () => {
-    const { provider } = createProvider(httpResponse(200, geminiBody([])));
+    const { provider } = createProvider(
+      httpResponse(200, geminiBody({ items: [], count_visible: 0 })),
+    );
 
     expect(provider.id).toBe('gemini');
     expect(provider.defaultModel).toBe('gemini-3.8-flash');
@@ -58,7 +60,7 @@ describe('GeminiVisionProvider (unit)', () => {
 
   it('posts to the model endpoint with the key in x-goog-api-key', async () => {
     const { provider, postJson } = createProvider(
-      httpResponse(200, geminiBody([])),
+      httpResponse(200, geminiBody({ items: [], count_visible: 0 })),
     );
 
     await provider.recognize(input, config);
@@ -79,12 +81,23 @@ describe('GeminiVisionProvider (unit)', () => {
         responseMimeType: string;
         responseSchema: {
           type: string;
-          items: {
-            type: string;
-            properties: Record<string, { type: string; nullable?: boolean }>;
-            required: string[];
-            propertyOrdering: string[];
+          properties: {
+            items: {
+              type: string;
+              items: {
+                type: string;
+                properties: Record<
+                  string,
+                  { type: string; nullable?: boolean }
+                >;
+                required: string[];
+                propertyOrdering: string[];
+              };
+            };
+            count_visible: { type: string; nullable?: boolean };
           };
+          required: string[];
+          propertyOrdering: string[];
         };
       };
     };
@@ -94,25 +107,33 @@ describe('GeminiVisionProvider (unit)', () => {
     });
     expect(body.generationConfig.responseMimeType).toBe('application/json');
     const schema = body.generationConfig.responseSchema;
-    expect(schema.type).toBe('ARRAY');
-    expect(schema.items.type).toBe('OBJECT');
-    expect(schema.items.properties.title).toEqual({ type: 'STRING' });
-    expect(schema.items.properties.edition).toEqual({
+    expect(schema.type).toBe('OBJECT');
+    expect(schema.properties.items.type).toBe('ARRAY');
+    expect(schema.properties.count_visible).toEqual({
+      type: 'NUMBER',
+      nullable: true,
+    });
+    expect(schema.required).toEqual(['items', 'count_visible']);
+    expect(schema.propertyOrdering).toEqual(['items', 'count_visible']);
+    const item = schema.properties.items.items;
+    expect(item.type).toBe('OBJECT');
+    expect(item.properties.title).toEqual({ type: 'STRING' });
+    expect(item.properties.edition).toEqual({
       type: 'STRING',
       nullable: true,
     });
-    expect(schema.items.properties.platform).toEqual({
+    expect(item.properties.platform).toEqual({
       type: 'STRING',
       nullable: true,
     });
-    expect(schema.items.properties.confidence).toEqual({ type: 'NUMBER' });
-    expect(schema.items.required).toEqual([
+    expect(item.properties.confidence).toEqual({ type: 'NUMBER' });
+    expect(item.required).toEqual([
       'title',
       'edition',
       'platform',
       'confidence',
     ]);
-    expect(schema.items.propertyOrdering).toEqual([
+    expect(item.propertyOrdering).toEqual([
       'title',
       'edition',
       'platform',
@@ -120,42 +141,53 @@ describe('GeminiVisionProvider (unit)', () => {
     ]);
   });
 
-  it('parses recognized items from the candidate text', async () => {
+  it('parses recognized items and the advisory count from the candidate text', async () => {
     const { provider } = createProvider(
       httpResponse(
         200,
-        geminiBody([
-          {
-            title: 'Hollow Knight',
-            edition: null,
-            platform: 'PS5',
-            confidence: 0.9,
-          },
-          {
-            title: 'Celeste',
-            edition: 'Deluxe',
-            platform: null,
-            confidence: 1.4,
-          },
-        ]),
+        geminiBody({
+          items: [
+            {
+              title: 'Hollow Knight',
+              edition: null,
+              platform: 'PS5',
+              confidence: 0.9,
+            },
+            {
+              title: 'Celeste',
+              edition: 'Deluxe',
+              platform: null,
+              confidence: 1.4,
+            },
+          ],
+          count_visible: 2,
+        }),
       ),
     );
 
-    await expect(provider.recognize(input, config)).resolves.toEqual([
-      {
-        title: 'Hollow Knight',
-        edition: null,
-        platform: 'PS5',
-        confidence: 0.9,
-      },
-      { title: 'Celeste', edition: 'Deluxe', platform: null, confidence: 1 },
-    ]);
+    await expect(provider.recognize(input, config)).resolves.toEqual({
+      items: [
+        {
+          title: 'Hollow Knight',
+          edition: null,
+          platform: 'PS5',
+          confidence: 0.9,
+        },
+        { title: 'Celeste', edition: 'Deluxe', platform: null, confidence: 1 },
+      ],
+      countVisible: 2,
+    });
   });
 
-  it('accepts an empty array', async () => {
-    const { provider } = createProvider(httpResponse(200, geminiBody([])));
+  it('accepts an empty list', async () => {
+    const { provider } = createProvider(
+      httpResponse(200, geminiBody({ items: [], count_visible: 0 })),
+    );
 
-    await expect(provider.recognize(input, config)).resolves.toEqual([]);
+    await expect(provider.recognize(input, config)).resolves.toEqual({
+      items: [],
+      countVisible: 0,
+    });
   });
 
   it.each([
@@ -198,7 +230,15 @@ describe('GeminiVisionProvider (unit)', () => {
 
   it('maps an invalid item to bad_response', async () => {
     const { provider } = createProvider(
-      httpResponse(200, geminiBody([{ title: '', confidence: 0.5 }])),
+      httpResponse(
+        200,
+        geminiBody({
+          items: [
+            { title: '', edition: null, platform: null, confidence: 0.5 },
+          ],
+          count_visible: 1,
+        }),
+      ),
     );
 
     await expect(provider.recognize(input, config)).rejects.toMatchObject({

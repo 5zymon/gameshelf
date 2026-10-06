@@ -8,8 +8,8 @@ import {
   type VisionTestCode,
 } from './vision.errors';
 import {
-  type RecognizedItem,
   type VisionRecognitionInput,
+  type VisionRecognitionResult,
 } from './vision-provider';
 
 /** A real, valid 1x1 PNG used by `test()` so the call exercises the provider. */
@@ -32,7 +32,9 @@ export class VisionService {
   ) {}
 
   /** Throws `VisionUnavailableError` when no provider key is configured. */
-  async recognize(input: VisionRecognitionInput): Promise<RecognizedItem[]> {
+  async recognize(
+    input: VisionRecognitionInput,
+  ): Promise<VisionRecognitionResult> {
     const active = await this.settings.resolveActive();
     if (active === null) {
       throw new VisionUnavailableError();

@@ -46,9 +46,10 @@ describe('VisionService (unit)', () => {
       apiKey: 'key-123',
     });
     mocks.get.mockReturnValue({ recognize: mocks.recognize });
-    mocks.recognize.mockResolvedValue([
-      { title: 'Hades', edition: null, platform: null, confidence: 1 },
-    ]);
+    mocks.recognize.mockResolvedValue({
+      items: [{ title: 'Hades', edition: null, platform: null, confidence: 1 }],
+      countVisible: null,
+    });
 
     const result = await service.recognize({
       image: Buffer.from('x'),
@@ -60,7 +61,7 @@ describe('VisionService (unit)', () => {
       { image: expect.any(Buffer) as Buffer, mimeType: 'image/png' },
       { apiKey: 'key-123', model: 'gpt-4o-mini' },
     );
-    expect(result).toHaveLength(1);
+    expect(result.items).toHaveLength(1);
   });
 
   it('test reports not_configured with 200-style result when no key is set', async () => {
@@ -85,7 +86,7 @@ describe('VisionService (unit)', () => {
       apiKey: 'key',
     });
     mocks.get.mockReturnValue({ recognize: mocks.recognize });
-    mocks.recognize.mockResolvedValue([]);
+    mocks.recognize.mockResolvedValue({ items: [], countVisible: null });
 
     const result = await service.test();
 
