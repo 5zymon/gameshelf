@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 
 const API_ORIGIN = (
@@ -35,13 +36,14 @@ async function authFetch(path: string, init?: RequestInit): Promise<Response> {
   });
 }
 
-/** 401 → null (not signed in). Other failures throw so they surface as an error, not a false "signed out". */
-export async function getCurrentUser(): Promise<AuthUser | null> {
+/** 401 → null (not signed in). Other failures throw. Cached per request so
+ *  the layout and the page share a single `/auth/me` call per navigation. */
+export const getCurrentUser = cache(async (): Promise<AuthUser | null> => {
   const res = await authFetch('/auth/me');
   if (res.status === 401) return null;
   if (!res.ok) throw new Error(`GET /auth/me failed (${String(res.status)})`);
   return (await res.json()) as AuthUser;
-}
+});
 
 /** Public endpoint; no cookie needed. Non-OK throws. */
 export async function getSetupStatus(): Promise<boolean> {

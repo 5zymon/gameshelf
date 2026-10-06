@@ -1,7 +1,7 @@
 ---
 type: Feature
 title: Web Auth UI
-description: Browser login and first-run setup flows, route protection, the same-origin /api proxy, and the cookie-only auth guarantee.
+description: Browser login and first-run setup flows, the authenticated navigation shell, layered route protection, the same-origin /api proxy, and the cookie-only auth guarantee.
 tags: [web, auth, ui]
 status: draft
 generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T00:00:00Z }
@@ -22,21 +22,62 @@ is disabled server-side (see [Auth API](/auth-api.md#out-of-scope)).
 
 # Routes and protection
 
-| Route            | Group    | Protection                                                                                 |
-| ---------------- | -------- | ------------------------------------------------------------------------------------------ |
-| `/setup`         | `(auth)` | Server component: `getSetupStatus()`; redirects to `/login` when setup is already complete |
-| `/login`         | `(auth)` | Server component: `getSetupStatus()`; redirects to `/setup` while setup is required        |
-| `/`              | `(app)`  | `(app)/layout.tsx` calls `getCurrentUser()`; `null` → `redirect('/login')`                 |
-| any `(app)` page | `(app)`  | Same layout guard as `/` — a new page under `(app)` is protected automatically             |
+| Route            | Group    | Protection                                                                                       |
+| ---------------- | -------- | ------------------------------------------------------------------------------------------------ |
+| `/setup`         | `(auth)` | Server component: `getSetupStatus()`; redirects to `/login` when setup is already complete       |
+| `/login`         | `(auth)` | Server component: `getSetupStatus()`; redirects to `/setup` while setup is required              |
+| `/`              | `(app)`  | `middleware.ts` cookie check + `(app)/layout.tsx` `requireUser()`; `null` → `redirect('/login')` |
+| `/platforms`     | `(app)`  | Same shell + `requireUser` guard                                                                 |
+| `/import`        | `(app)`  | Same shell + `requireUser` guard                                                                 |
+| `/settings`      | `(app)`  | Same shell + `requireUser` guard                                                                 |
+| any `(app)` page | `(app)`  | Same layout guard — a new page under `(app)` is protected automatically                          |
 
-Protection is enforced **server-side** in server components, not in client
-JavaScript: `(app)/layout.tsx` resolves the session and redirects before it
-renders any protected markup. `(auth)/setup/page.tsx` and `(auth)/login/page.tsx`
-are `export const dynamic = 'force-dynamic'` so the redirect decision is made on
-every request rather than baked into a static page.
+Protection is layered and enforced **server-side**, not in client JavaScript:
 
-Unauthenticated `GET /` returns a `307` to `/login`; when setup is required,
-`GET /login` returns a `307` to `/setup`.
+- `middleware.ts` runs on every request, including the RSC requests Next.js
+  makes for client-side (`<Link>`) navigations, where shared layouts are **not**
+  re-rendered. It optimistically redirects to `/login` when the
+  `gameshelf_session` cookie is absent, before any protected markup is produced.
+  It performs no API or database call, so it is safe on prefetches.
+- `lib/auth.ts#requireUser()` is the authoritative check. It calls
+  `getCurrentUser()` and `redirect('/login')` on `null`, so a request with an
+  expired-but-present cookie is still rejected. Both the `(app)` layout and each
+  protected page call it, which is what makes an expired session redirect even
+  on a soft navigation where the layout is reused.
+- `(auth)/setup/page.tsx` and `(auth)/login/page.tsx` are
+  `export const dynamic = 'force-dynamic'` so the redirect decision is made on
+  every request rather than baked into a static page.
+
+Unauthenticated `GET /` (and every other `(app)` route) returns a `307` to
+`/login`; when setup is required, `GET /login` returns a `307` to `/setup`.
+
+# Navigation shell (ticket 2.6)
+
+`(app)/layout.tsx` is a server component that wraps every catalog route with the
+same chrome: the **GameShelf** brand link, `components/main-nav.tsx`, the current
+user's email, and `components/logout-button.tsx`. `requireUser()` resolves the
+email before render, so the initial HTML already contains it — there is no
+client-side round-trip and therefore no flash of an empty or signed-out shell.
+`LogoutButton` is the only client component and it does not fetch on mount.
+
+`components/main-nav.tsx` is a small client component (it needs `usePathname`
+for active state) rendering four links:
+
+| Label     | `href`       |
+| --------- | ------------ |
+| Catalog   | `/`          |
+| Platforms | `/platforms` |
+| Import    | `/import`    |
+| Settings  | `/settings`  |
+
+The active link gets `aria-current="page"` and the `bg-shelf text-fog` style;
+`/` matches exactly while the others also match their sub-paths, so `/platforms`
+does not light up for a hypothetical `/platforms-x`.
+
+`getCurrentUser()` in `lib/api.ts` is wrapped in React `cache()`, so when the
+layout and the page both call `requireUser()` during one navigation the API is
+hit at most once. On a soft navigation only the page segment runs (the layout is
+reused), so the cost stays at one `/auth/me` call.
 
 # Same-origin `/api` rewrite
 
@@ -115,7 +156,7 @@ docker compose down && rm -rf data/mysql
 docker compose up -d mysql && npm run db:deploy
 ```
 
-Then walk the six acceptance criteria:
+Then walk the seven acceptance criteria:
 
 1. **Fresh install routes to setup and the first account is creatable.** Open
    `http://localhost:3000/`. Expect a `307` to `/setup` and the "First-run
@@ -129,10 +170,13 @@ Then walk the six acceptance criteria:
    Submit an unknown email — the **same** message (no user enumeration).
    Submitting the empty form shows `Enter an email and a password, then try
 again.` (not the connection message), because the API replies `400`.
-4. **Login lands on the catalog; logout returns to login and `/` bounces back.**
+4. **Login lands on the catalog; the shell navigates and guards every route.**
    Sign in with the correct credentials. Expect the catalog page at `/` with the
-   account email in the header. Click **Sign out**; expect `/login`. Open `/`
-   again; expect a `307` back to `/login`.
+   account email in the header and the **Catalog / Platforms / Import / Settings**
+   nav. Click each nav item: expect the matching page (with the same shell) and
+   the active link carrying `aria-current="page"`. Click **Sign out**; expect
+   `/login`. Open `/`, `/platforms`, `/import` and `/settings` again; expect a
+   `307` back to `/login` each time.
 5. **No signup link anywhere.** Inspect `/login` and `/setup` (and the catalog
    header). There is no "Sign up", "Register" or "Create account" link. The only
    `Create account` text is the setup form's submit button, which is reachable
@@ -142,6 +186,12 @@ again.` (not the connection message), because the API replies `400`.
    `localStorage.length === 0 && sessionStorage.length === 0` returns `true`.
    Under Cookies, `gameshelf_session` is present with `HttpOnly` and
    `SameSite=Lax`; `document.cookie` does not contain it.
+7. **An expired session mid-use routes back to `/login`.** While signed in on
+   `/`, delete the `gameshelf_session` cookie in DevTools (or revoke the session
+   server-side), then click a nav link. Expect to land on `/login`: the page
+   segment is re-fetched, `requireUser()` sees the missing/expired session and
+   redirects. The missing cookie alone is already caught by `middleware.ts` on
+   the next navigation.
 
 ## Proxy smoke commands
 
@@ -169,9 +219,14 @@ curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:3000/api/auth/
 curl -s -o /dev/null -w '%{http_code}\n' -X POST http://localhost:3000/api/auth/register \
   -H 'content-type: application/json' -d '{"email":"a@b.c","password":"x"}'         # 404
 
-# Server-side route protection
-curl -s -o /dev/null -w '%{http_code} -> %{redirect_url}\n' http://localhost:3000/           # 307 -> /login
+# Server-side route protection (no cookie): every catalog route -> 307 /login
+for p in / /platforms /import /settings; do
+  curl -s -o /dev/null -w "$p -> %{http_code} %{redirect_url}\n" "http://localhost:3000$p"
+done
 curl -s -o /dev/null -w '%{http_code} -> %{redirect_url}\n' http://localhost:3000/setup      # 307 -> /login (setup complete)
+
+# The matcher excludes /api, so the proxy still answers without a cookie
+curl -s -o /dev/null -w 'api/setup/status -> %{http_code}\n' http://localhost:3000/api/setup/status   # 200
 ```
 
 # Out of scope
