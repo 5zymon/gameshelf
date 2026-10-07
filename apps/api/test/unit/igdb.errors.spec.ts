@@ -1,4 +1,5 @@
 import {
+  IgdbConfigError,
   IgdbError,
   igdbErrorFromStatus,
 } from '../../src/game-catalog/igdb.errors';
@@ -10,6 +11,7 @@ describe('igdbErrorFromStatus (unit)', () => {
       const error = igdbErrorFromStatus(status);
 
       expect(error).toBeInstanceOf(IgdbError);
+      expect(error).toBeInstanceOf(IgdbConfigError);
       expect(error.retryable).toBe(false);
       expect(error.message).toBe('IGDB rejected the credentials');
     },

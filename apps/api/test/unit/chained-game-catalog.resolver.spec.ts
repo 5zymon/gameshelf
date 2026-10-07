@@ -162,6 +162,25 @@ describe('ChainedGameCatalogResolver (unit)', () => {
     expect(fallback.resolve).not.toHaveBeenCalled();
   });
 
+  it('short-circuits on a config_error and does not fall through', async () => {
+    const resolution: CatalogResolution = {
+      kind: 'config_error',
+      source: 'igdb',
+      reason: 'IGDB rejected the credentials',
+    };
+    const igdb = source('IGDB', mockResolving(resolution));
+    const fallback = source(
+      'MobyGames',
+      jest.fn<Promise<CatalogResolution>, [RecognizedItem]>(),
+    );
+    const resolver = new ChainedGameCatalogResolver([igdb, fallback]);
+
+    const result = await resolver.resolve(item('Halo'));
+
+    expect(result).toEqual(resolution);
+    expect(fallback.resolve).not.toHaveBeenCalled();
+  });
+
   it('preserves a later transient rather than dropping the title', async () => {
     const igdb = source(
       'IGDB',

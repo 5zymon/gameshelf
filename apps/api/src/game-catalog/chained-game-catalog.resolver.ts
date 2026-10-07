@@ -51,6 +51,9 @@ export class ChainedGameCatalogResolver extends GameCatalogResolver {
       if (resolution.kind === 'transient') {
         return resolution;
       }
+      if (resolution.kind === 'config_error') {
+        return resolution;
+      }
       misses.push({ label: source.label, reason: resolution.reason });
     }
     return {

@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { IGDB_REQUEST_TIMEOUT_MS } from '../import-jobs/import-pipeline.options';
-import { IgdbError, igdbErrorFromStatus } from './igdb.errors';
+import { IgdbConfigError, IgdbError, igdbErrorFromStatus } from './igdb.errors';
 import { IgdbHttpClient, type IgdbHttpResponse } from './igdb-http.client';
 import { IgdbRateLimiter } from './igdb-rate-limiter';
 import {
@@ -414,7 +414,7 @@ export class IgdbClient implements OnApplicationBootstrap {
   private requiredEnv(name: string): string {
     const value = this.config.get<string>(name);
     if (value === undefined || value.trim() === '') {
-      throw new IgdbError(false, `${name} is not configured`);
+      throw new IgdbConfigError(`${name} is not configured`);
     }
     return value.trim();
   }

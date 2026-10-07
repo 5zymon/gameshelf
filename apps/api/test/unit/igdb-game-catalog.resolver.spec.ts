@@ -2,7 +2,7 @@ import {
   IgdbGameCatalogResolver,
   normalizeTitle,
 } from '../../src/game-catalog/igdb-game-catalog.resolver';
-import { IgdbError } from '../../src/game-catalog/igdb.errors';
+import { IgdbConfigError, IgdbError } from '../../src/game-catalog/igdb.errors';
 import { IgdbClient, type IgdbGame } from '../../src/game-catalog/igdb.client';
 import type { RecognizedItem } from '../../src/settings/vision/vision-provider';
 
@@ -136,15 +136,28 @@ describe('IgdbGameCatalogResolver (unit)', () => {
     });
   });
 
-  it('maps a permanent IgdbError to an unrecognized resolution', async () => {
+  it('maps an IgdbConfigError to a config_error resolution', async () => {
     const search = jest
       .fn<Promise<IgdbGame[]>, [string]>()
-      .mockRejectedValue(new IgdbError(false, 'IGDB rejected the credentials'));
+      .mockRejectedValue(new IgdbConfigError('IGDB rejected the credentials'));
+    const resolver = createResolver(search);
+
+    await expect(resolver.resolve(item('Halo'))).resolves.toEqual({
+      kind: 'config_error',
+      source: 'igdb',
+      reason: 'IGDB rejected the credentials',
+    });
+  });
+
+  it('maps a generic permanent IgdbError to an unrecognized resolution', async () => {
+    const search = jest
+      .fn<Promise<IgdbGame[]>, [string]>()
+      .mockRejectedValue(new IgdbError(false, 'IGDB malformed query'));
     const resolver = createResolver(search);
 
     await expect(resolver.resolve(item('Halo'))).resolves.toEqual({
       kind: 'unrecognized',
-      reason: 'IGDB rejected the credentials',
+      reason: 'IGDB malformed query',
     });
   });
 
@@ -238,16 +251,20 @@ describe('IgdbGameCatalogResolver.resolveBatch (unit)', () => {
     ]);
   });
 
-  it('maps a permanent batch error to unrecognized for every item', async () => {
+  it('maps a config batch error to config_error for every item', async () => {
     const multiquery = jest
       .fn<Promise<IgdbGame[][]>, [readonly string[]]>()
-      .mockRejectedValue(new IgdbError(false, 'IGDB rejected the credentials'));
+      .mockRejectedValue(new IgdbConfigError('IGDB rejected the credentials'));
     const resolver = createBatchResolver(multiquery);
 
     const results = await resolver.resolveBatch([item('Halo')]);
 
     expect(results).toEqual([
-      { kind: 'unrecognized', reason: 'IGDB rejected the credentials' },
+      {
+        kind: 'config_error',
+        source: 'igdb',
+        reason: 'IGDB rejected the credentials',
+      },
     ]);
   });
 

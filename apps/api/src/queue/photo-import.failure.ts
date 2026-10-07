@@ -1,7 +1,9 @@
+import { IgdbConfigError } from '../game-catalog/igdb.errors';
 import {
   VisionProviderError,
   VisionUnavailableError,
 } from '../settings/vision/vision.errors';
+import type { ConfigErrorSource } from './photo-import.types';
 
 const GENERIC_FAILURE_REASON = 'Photo recognition failed unexpectedly';
 
@@ -18,6 +20,38 @@ export class RetryableImportError extends Error {
   }
 }
 
+/** A configuration error (rejected/absent credentials) that pauses the queue. */
+export class ConfigurationImportError extends Error {
+  constructor(
+    readonly source: ConfigErrorSource,
+    message: string,
+  ) {
+    super(message);
+    this.name = 'ConfigurationImportError';
+  }
+}
+
+/**
+ * The one classification seam used by the pipeline (both the vision and the
+ * IGDB path) to tell a "configuration error → pause the queue" apart from an
+ * ordinary permanent failure. Returns the integration to fix, or null.
+ */
+export function configErrorSource(error: unknown): ConfigErrorSource | null {
+  if (error instanceof ConfigurationImportError) {
+    return error.source;
+  }
+  if (error instanceof IgdbConfigError) {
+    return 'igdb';
+  }
+  if (error instanceof VisionUnavailableError) {
+    return 'llm';
+  }
+  if (error instanceof VisionProviderError && error.code === 'unauthorized') {
+    return 'llm';
+  }
+  return null;
+}
+
 /** Vision error codes worth retrying; everything else is permanent. */
 const RETRYABLE_VISION_CODES: ReadonlySet<string> = new Set([
   'rate_limited',
@@ -31,6 +65,9 @@ const RETRYABLE_VISION_CODES: ReadonlySet<string> = new Set([
  * retryable; a `VisionProviderError` only for transient codes.
  */
 export function isRetryableImportError(error: unknown): boolean {
+  if (configErrorSource(error) !== null) {
+    return false;
+  }
   if (error instanceof RetryableImportError) {
     return true;
   }
@@ -55,6 +92,12 @@ export function photoImportFailureReason(error: unknown): string {
     return error.message;
   }
   if (error instanceof RetryableImportError) {
+    return error.message;
+  }
+  if (error instanceof ConfigurationImportError) {
+    return error.message;
+  }
+  if (error instanceof IgdbConfigError) {
     return error.message;
   }
   return GENERIC_FAILURE_REASON;

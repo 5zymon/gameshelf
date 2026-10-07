@@ -1,13 +1,19 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { UnrecoverableError, type Job } from 'bullmq';
 import { GameCatalogResolver } from '../game-catalog/game-catalog.resolver';
-import type { PhotoImportJobData } from '../queue/photo-import.types';
+import type {
+  ConfigErrorSource,
+  PhotoImportJobData,
+} from '../queue/photo-import.types';
 import type { PhotoImportJobResult } from '../queue/photo-import.types';
 import {
+  ConfigurationImportError,
+  configErrorSource,
   isRetryableImportError,
   RetryableImportError,
   photoImportFailureReason,
 } from '../queue/photo-import.failure';
+import { QueueControlService } from '../queue/queue-control.service';
 import { VisionService } from '../settings/vision/vision.service';
 import {
   IMPORT_BATCH_SIZE,
@@ -101,6 +107,7 @@ export class PhotoImportPipelineService {
     private readonly storage: PhotoStorageService,
     private readonly vision: VisionService,
     private readonly resolver: GameCatalogResolver,
+    private readonly queueControl: QueueControlService,
   ) {}
 
   async run(job: Job<PhotoImportJobData>): Promise<PhotoImportJobResult> {
@@ -139,7 +146,18 @@ export class PhotoImportPipelineService {
         const message = error instanceof Error ? error.message : String(error);
         const isLastAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
         const retryable = isRetryableImportError(error);
+        const configSource = configErrorSource(error);
         counts = (await this.summarizeSafely(jobId)) ?? counts;
+        if (configSource !== null) {
+          // Config error: fail the current photo, pause the queue, never retry.
+          outcome = 'failed';
+          await this.markFailedSafely(jobId, error, counts);
+          await this.pauseForConfigErrorSafely(
+            configSource,
+            photoImportFailureReason(error),
+          );
+          throw new UnrecoverableError(message);
+        }
         if (!retryable || isLastAttempt) {
           outcome = 'failed';
           await this.markFailedSafely(jobId, error, counts);
@@ -239,6 +257,16 @@ export class PhotoImportPipelineService {
         platform: item.rawPlatform,
         confidence: item.confidence,
       });
+      if (resolution.kind === 'config_error') {
+        // Configuration error (rejected/absent credentials): stop the job and
+        // let the caller pause the queue. Nothing from this batch is committed —
+        // the still-pending titles are re-resolved on a later retry, never
+        // duplicated.
+        throw new ConfigurationImportError(
+          resolution.source,
+          resolution.reason,
+        );
+      }
       if (resolution.kind === 'transient') {
         outcome.transient.push({
           recognizedItemId: item.id,
@@ -382,6 +410,22 @@ export class PhotoImportPipelineService {
       this.logger.warn(
         `Failed to delete photo "${photoRef ?? ''}": ${
           error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  /** Pauses the queue without masking the original config error. */
+  private async pauseForConfigErrorSafely(
+    source: ConfigErrorSource,
+    reason: string,
+  ): Promise<void> {
+    try {
+      await this.queueControl.pauseForConfig(source, reason);
+    } catch (pauseError) {
+      this.logger.error(
+        `Failed to pause the photo-import queue after a ${source} configuration error: ${
+          pauseError instanceof Error ? pauseError.message : String(pauseError)
         }`,
       );
     }

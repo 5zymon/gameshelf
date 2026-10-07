@@ -22,3 +22,6 @@ export interface PhotoImportJobResult {
   importedCount: number;
   unrecognizedCount: number;
 }
+
+/** Which external integration's configuration error paused the queue (3.10). */
+export type ConfigErrorSource = 'llm' | 'igdb';

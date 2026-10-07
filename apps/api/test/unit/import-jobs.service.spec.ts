@@ -10,6 +10,7 @@ import { IMPORT_QUEUE_STATE_TIMEOUT_MS } from '../../src/import-jobs/import-pipe
 import type { PhotoImportJobData } from '../../src/queue/photo-import.types';
 import { RetryableImportError } from '../../src/queue/photo-import.failure';
 import type { PrismaService } from '../../src/prisma/prisma.service';
+import type { QueueControlService } from '../../src/queue/queue-control.service';
 
 interface ImportJobsPrismaMock {
   importJob: {
@@ -44,10 +45,18 @@ interface ImportJobsPrismaMock {
   $transaction: jest.Mock;
 }
 
+interface QueueControlMock {
+  pauseForConfig: jest.Mock;
+  resume: jest.Mock;
+  resumeIfPausedBy: jest.Mock;
+  getState: jest.Mock;
+}
+
 function createService(): {
   service: ImportJobsService;
   mock: ImportJobsPrismaMock;
   queue: { getJob: jest.Mock; add: jest.Mock };
+  queueControl: QueueControlMock;
 } {
   const mock: ImportJobsPrismaMock = {
     importJob: {
@@ -89,13 +98,28 @@ function createService(): {
   mock.importJob.groupBy.mockResolvedValue([]);
   mock.recognizedItem.groupBy.mockResolvedValue([]);
   const queue = { getJob: jest.fn(), add: jest.fn() };
+  const queueControl: QueueControlMock = {
+    pauseForConfig: jest.fn(),
+    resume: jest.fn(() => Promise.resolve()),
+    resumeIfPausedBy: jest.fn(() => Promise.resolve(false)),
+    getState: jest.fn(() =>
+      Promise.resolve({
+        paused: false,
+        reason: null,
+        source: null,
+        pausedAt: null,
+      }),
+    ),
+  };
   return {
     service: new ImportJobsService(
       mock as unknown as PrismaService,
       queue as unknown as Queue<PhotoImportJobData>,
+      queueControl as unknown as QueueControlService,
     ),
     mock,
     queue,
+    queueControl,
   };
 }
 
@@ -141,9 +165,10 @@ describe('ImportJobsService (unit)', () => {
   let service: ImportJobsService;
   let mock: ImportJobsPrismaMock;
   let queue: { getJob: jest.Mock; add: jest.Mock };
+  let queueControl: QueueControlMock;
 
   beforeEach(() => {
-    ({ service, mock, queue } = createService());
+    ({ service, mock, queue, queueControl } = createService());
   });
 
   describe('list', () => {
@@ -1488,6 +1513,9 @@ describe('ImportJobsService (unit)', () => {
         completedCount: 7,
         pendingCount: 3,
         allCompleted: false,
+        paused: false,
+        pauseReason: null,
+        pauseSource: null,
       });
     });
 
@@ -1497,6 +1525,48 @@ describe('ImportJobsService (unit)', () => {
       await expect(service.getBatchProgress('nope')).rejects.toThrow(
         new NotFoundException('Import batch nope not found'),
       );
+    });
+
+    it('surfaces the pause state from QueueControlService', async () => {
+      mock.importJob.groupBy.mockResolvedValue([
+        { status: 'queued', _count: { _all: 2 } },
+      ]);
+      const pausedAt = new Date('2026-10-07T00:00:00.000Z');
+      queueControl.getState.mockResolvedValue({
+        paused: true,
+        reason: 'IGDB rejected the credentials',
+        source: 'igdb',
+        pausedAt,
+      });
+
+      const result = await service.getBatchProgress('b1');
+
+      expect(result).toMatchObject({
+        paused: true,
+        pauseReason: 'IGDB rejected the credentials',
+        pauseSource: 'igdb',
+      });
+    });
+  });
+
+  describe('resumeQueue', () => {
+    it('resumes the queue and returns the new state', async () => {
+      queueControl.getState.mockResolvedValue({
+        paused: false,
+        reason: null,
+        source: null,
+        pausedAt: null,
+      });
+
+      const result = await service.resumeQueue();
+
+      expect(queueControl.resume).toHaveBeenCalledTimes(1);
+      expect(result).toEqual({
+        paused: false,
+        reason: null,
+        source: null,
+        pausedAt: null,
+      });
     });
   });
 

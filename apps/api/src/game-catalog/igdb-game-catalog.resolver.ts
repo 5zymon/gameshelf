@@ -7,7 +7,7 @@ import {
   GameCatalogResolver,
   type GameCatalogSource,
 } from './game-catalog.resolver';
-import { IgdbError } from './igdb.errors';
+import { IgdbConfigError, IgdbError } from './igdb.errors';
 import { IgdbClient, type IgdbGame } from './igdb.client';
 import { selectConfidentMatch } from './title-match';
 
@@ -66,6 +66,9 @@ export class IgdbGameCatalogResolver
   }
 
   private errorResolution(error: unknown): CatalogResolution {
+    if (error instanceof IgdbConfigError) {
+      return { kind: 'config_error', source: 'igdb', reason: error.message };
+    }
     if (error instanceof IgdbError && error.retryable) {
       return { kind: 'transient', reason: error.message };
     }

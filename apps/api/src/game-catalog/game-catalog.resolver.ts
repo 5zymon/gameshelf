@@ -21,16 +21,22 @@ export interface CatalogCandidate {
   raw: unknown;
 }
 
+/** Which catalog source reported a configuration error (IGDB today; 4.5 adds MobyGames). */
+export type GameCatalogConfigSource = 'igdb';
+
 /**
  * Outcome of validating one recognized title:
  * - `matched` — a candidate passed acceptance;
  * - `unrecognized` — no candidate will ever match (permanent);
- * - `transient` — the lookup failed and a retry may succeed (e.g. 429).
+ * - `transient` — the lookup failed and a retry may succeed (e.g. 429);
+ * - `config_error` — rejected/absent credentials; the pipeline must stop and
+ *   pause, not flag the title.
  */
 export type CatalogResolution =
   | { kind: 'matched'; candidate: CatalogCandidate }
   | { kind: 'unrecognized'; reason: string }
-  | { kind: 'transient'; reason: string };
+  | { kind: 'transient'; reason: string }
+  | { kind: 'config_error'; source: GameCatalogConfigSource; reason: string };
 
 /**
  * One external game-database source in the ordered validation chain.

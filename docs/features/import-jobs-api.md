@@ -34,6 +34,7 @@ the multi-photo upload that calls `createJob` — is documented separately in th
 | `GET`   | `/import-jobs/batches/:batchId`         | Aggregate progress for one upload batch (X of Y photos)         | `200` `ImportBatchProgressModel` | `400`, `404`               |
 | `GET`   | `/import-jobs/:id`                      | One run with ALL its unrecognized items (full trace)            | `200` `ImportJobDetailModel`     | `400`, `404`               |
 | `POST`  | `/import-jobs/:id/retry`                | Retry a failed run in place (re-runs only unresolved titles)    | `202` `ImportJobDetailModel`     | `400`, `404`, `409`, `503` |
+| `POST`  | `/import-jobs/resume`                   | Resume a queue paused by a configuration error (idempotent)     | `200` `ImportQueueStateModel`    | `401`                      |
 | `GET`   | `/import-jobs/:id/unrecognized`         | Flagged items awaiting review (non-dismissed only)              | `200` `UnrecognizedItemModel[]`  | `400`, `404`               |
 | `PATCH` | `/import-jobs/:id`                      | Dismiss a needs-attention/failed job (`{"status":"dismissed"}`) | `200` `ImportJobDetailModel`     | `400`, `404`, `409`        |
 | `PATCH` | `/import-jobs/:id/unrecognized/:itemId` | Dismiss/acknowledge a flagged item (`{"dismissed":true}`)       | `200` `UnrecognizedItemModel`    | `400`, `404`               |
@@ -229,7 +230,10 @@ can report aggregate progress without polling each job:
   "dismissed": 0,
   "completedCount": 3,
   "pendingCount": 2,
-  "allCompleted": false
+  "allCompleted": false,
+  "paused": false,
+  "pauseReason": null,
+  "pauseSource": null
 }
 ```
 
@@ -238,6 +242,32 @@ The aggregate is one `groupBy(status)` over the durable rows:
 `pendingCount` is `queued + processing` (the "X of Y" view); `allCompleted` is
 `pendingCount === 0`. An unknown/empty batch is a `404` (not an empty-but-valid
 batch). `batchId` is at most 64 chars (`400` otherwise).
+
+Ticket 3.10 adds the queue pause fields: `paused` mirrors BullMQ
+`queue.isPaused()`, and `pauseReason`/`pauseSource` (`'llm' | 'igdb'`) come from
+the durable `import_queue_state` row. See
+[Queue Pause on Configuration Error](/queue-pause-on-config-error.md).
+
+# Queue pause (ticket 3.10)
+
+When a photo import hits a rejected/absent LLM or IGDB credential, the pipeline
+fails the current photo and pauses the single `photo-import` queue, so no
+further photo is processed. The pause and its reason are reported on
+`GET /import-jobs/batches/:batchId` (`paused`, `pauseReason`, `pauseSource`).
+
+`POST /import-jobs/resume` clears the pause and the stored reason and returns
+`ImportQueueStateModel`:
+
+```json
+{ "paused": false, "reason": null, "source": null, "pausedAt": null }
+```
+
+It is idempotent — resuming an already-running queue is a `200` no-op — and
+requires the normal session auth (`401` otherwise). Saving an LLM key
+(`PUT /settings/llm`) also auto-resumes a queue paused by an `llm` config error
+when `keyPresent` is true. A restart never auto-resumes, so a still-broken
+configuration is not re-failed. Full behaviour in
+[Queue Pause on Configuration Error](/queue-pause-on-config-error.md).
 
 # Dismissal semantics
 
