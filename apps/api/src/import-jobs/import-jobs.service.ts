@@ -45,7 +45,7 @@ export interface JobCompletionResult {
   recognizedCount: number;
   /** Items saved to the catalog. */
   importedCount: number;
-  /** Flagged items: unrecognized + unreadable. */
+  /** Flagged items: recognized rows with status 'unrecognized'. */
   unrecognizedCount: number;
 }
 

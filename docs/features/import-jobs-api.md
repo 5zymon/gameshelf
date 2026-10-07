@@ -78,7 +78,8 @@ unrecognized)`; for a running job it is the live count of `pending`
 - `needsAttention` — `status === 'needs_attention'` (the status-derived flag
   for the review UI).
 - `declaredCountMismatch` — terminal job whose `declaredCount` is set and
-  differs from `recognizedCount` (ticket 4.8 will consume it).
+  differs from `recognizedCount` (the ticket 4.8 comparison; `needsAttention`
+  is the status-derived flag the UI acts on).
 - `batchId` — the upload batch this run belongs to
   ([Import Photo Upload API](/import-upload-api.md)); `null` for rows created
   without one.
@@ -147,7 +148,7 @@ rows; the processor is the source of truth):
 interface JobCompletionResult {
   recognizedCount: number; // detected items — every outcome the model reported
   importedCount: number; // items saved to the catalog
-  unrecognizedCount: number; // flagged items: unrecognized + unreadable
+  unrecognizedCount: number; // flagged items: recognized rows with status unrecognized
 }
 ```
 
@@ -167,12 +168,30 @@ needsAttention =
    different number.
 3. **Any flagged item** — at least one item needs review.
 
-Note for ticket 3.5: `unrecognizedCount` counts **flagged** items, i.e.
-unrecognized **plus unreadable** (ADR-002 result contract: "number flagged
-as unrecognized"). That is what makes trigger 3 fire for unreadable items.
-Also note: `raw_title` is `NOT NULL` in the schema while spec §4.2.3 has an
-_Unreadable_ outcome with no title — the processor must store a
-placeholder/empty string for unreadable items.
+Trigger 1 and trigger 3 are independent of `declaredCount`: with no declared
+count the mismatch trigger stays off, and a clean recognition reports
+`recognizedCount` (the recognized games) with `status: "done"` and
+`needsAttention: false`. The model's advisory `count_visible` is never part of
+this computation — it does not set or clear a flag.
+
+`unrecognizedCount` counts the flagged `recognized_items` rows: those whose
+validation status is `unrecognized` (a title no catalog source confirmed, or a
+match whose platform is not in the local table). There is **no** separate
+`unreadable` status, enum, or column, and no placeholder row is ever written.
+The recognition prompt (`VISION_INSTRUCTION_PROMPT`) instructs the model to
+identify an item from its cover art when the printed text cannot be read, so a
+returned item always carries a title and resolves to `imported` or
+`unrecognized`. The two residual cases are not silent successes:
+
+- A response containing an item with a missing/empty title is rejected
+  **whole** by `parseRecognizedItems` as a non-retryable `bad_response`, so the
+  job ends `failed` (with its reason shown to the UI) rather than storing a
+  placeholder `raw_title`.
+- An item the model omits entirely leaves no row to flag; it is detectable only
+  when the user declared a count (trigger 2). The advisory `count_visible` is
+  deliberately never used for the flag.
+
+`raw_title` stays `NOT NULL` in the schema.
 
 The failure path also carries counts: `markFailed(jobId, errorMessage, counts?)`
 accepts the same `JobCompletionResult`, so a run that committed earlier batches

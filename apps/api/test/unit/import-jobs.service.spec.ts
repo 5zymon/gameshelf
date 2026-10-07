@@ -564,6 +564,58 @@ describe('ImportJobsService (unit)', () => {
       });
     });
 
+    it('marks done when no count was declared and items were recognized', async () => {
+      mock.importJob.findUnique.mockResolvedValue({
+        id: 1,
+        status: 'processing',
+        declaredCount: null,
+      });
+      mock.importJob.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.markCompleted(1, {
+        recognizedCount: 4,
+        importedCount: 4,
+        unrecognizedCount: 0,
+      });
+
+      expect(mock.importJob.updateMany).toHaveBeenCalledWith({
+        where: { id: 1, status: { in: ['queued', 'processing'] } },
+        data: {
+          status: 'done',
+          recognizedCount: 4,
+          importedCount: 4,
+          unrecognizedCount: 0,
+          completedAt: expect.any(Date) as Date,
+        },
+      });
+    });
+
+    it('marks needs_attention when the declared count matches but an item is unrecognized', async () => {
+      mock.importJob.findUnique.mockResolvedValue({
+        id: 1,
+        status: 'processing',
+        declaredCount: 2,
+      });
+      mock.importJob.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.markCompleted(1, {
+        recognizedCount: 2,
+        importedCount: 1,
+        unrecognizedCount: 1,
+      });
+
+      expect(mock.importJob.updateMany).toHaveBeenCalledWith({
+        where: { id: 1, status: { in: ['queued', 'processing'] } },
+        data: {
+          status: 'needs_attention',
+          recognizedCount: 2,
+          importedCount: 1,
+          unrecognizedCount: 1,
+          completedAt: expect.any(Date) as Date,
+        },
+      });
+    });
+
     it('marks needs_attention when nothing was recognized', async () => {
       mock.importJob.findUnique.mockResolvedValue({
         id: 1,
