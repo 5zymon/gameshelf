@@ -92,6 +92,45 @@ A [`Taskfile.yml`](./Taskfile.yml) provides [Task](https://taskfile.dev/) shortc
 | `task ci`     | `task check` plus a production build, tests and the migration check |
 | `task fix`    | Apply ESLint autofixes and Prettier formatting                      |
 
+## Single origin, CSP, and fonts
+
+The browser talks to **one origin only** — the Next.js web app. Every API call
+goes to a same-origin `/api/:path*` URL, which Next.js rewrites server-side to
+the NestJS API (`apps/web/next.config.mjs`). `NEXT_PUBLIC_API_URL` is the
+internal server-side target of that rewrite and of SSR; the browser never calls
+it directly. Because of this, the `gameshelf_session` cookie is a host-only
+**first-party** cookie on the app's own origin — there is no CORS configuration,
+no cookie `Domain`, and no external reverse proxy or TLS terminator assumed
+anywhere in the stack.
+
+The app ships a strict Content Security Policy (`apps/web/src/middleware.ts`):
+
+- every directive (`default-src`, `script-src`, `style-src`, `img-src`,
+  `font-src`, `connect-src`, …) is `'self'`-only; there is no external host, no
+  `*`, and no `'unsafe-inline'`;
+- a fresh per-request nonce (plus `'strict-dynamic'`) lets Next.js run its inline
+  bootstrap/flight scripts without `'unsafe-inline'`;
+- `'unsafe-eval'` is present in development only;
+- there is deliberately no `upgrade-insecure-requests`, so the supported
+  `http://localhost` install keeps working.
+
+Fonts are **self-hosted at build time**: `next/font/google` downloads Geist
+during `npm run build` and emits it under `/_next/static/media/*.woff2`, served
+by the app. No font CDN is contacted at runtime, which is why `font-src 'self'`
+is sufficient.
+
+**Zero-external-request guarantee.** A page load makes no request to a
+non-GameShelf origin. Verify it in DevTools → Network (hard-reload any page; every
+request host is the app origin), or from the shell:
+
+```bash
+curl -sS http://localhost:3000/login | grep -oE '(src|href)="https?://[^"]+"' || echo 'OK: none'
+grep -rIl 'fonts.gstatic\|fonts.googleapis' apps/web/.next/static || echo OK
+```
+
+See [`docs/features/single-origin-frontend-api.md`](./docs/features/single-origin-frontend-api.md)
+for the full CSP directive table and verification steps.
+
 ## Accounts and registration
 
 GameShelf has **no public self-registration**. There is deliberately no signup
@@ -374,7 +413,7 @@ All variables live in a single root `.env` file (see `.env.example`):
 | `API_PORT`            | `apps/api` | API listen port (default `3001`)                                                                                                                                                   |
 | `API_HOST`            | `apps/api` | API bind address                                                                                                                                                                   |
 | `WEB_PORT`            | `apps/web` | Web dev server port (default `3000`)                                                                                                                                               |
-| `NEXT_PUBLIC_API_URL` | `apps/web` | Browser-facing API base URL                                                                                                                                                        |
+| `NEXT_PUBLIC_API_URL` | `apps/web` | Internal API origin for the `/api` rewrite and SSR (never called by the browser)                                                                                                   |
 | `MYSQL_HOST`          | `apps/api` | MySQL host (default `localhost`)                                                                                                                                                   |
 | `MYSQL_PORT`          | `apps/api` | MySQL port (default `3306`)                                                                                                                                                        |
 | `MYSQL_DATABASE`      | `apps/api` | Database name (default `gameshelf`)                                                                                                                                                |

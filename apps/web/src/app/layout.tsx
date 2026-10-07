@@ -1,5 +1,12 @@
 import type { Metadata } from 'next';
+import { Geist } from 'next/font/google';
 import './globals.css';
+
+const geistSans = Geist({
+  subsets: ['latin'],
+  display: 'swap',
+  variable: '--font-geist-sans',
+});
 
 export const metadata: Metadata = {
   title: 'GameShelf',
@@ -12,7 +19,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }): React.ReactElement {
   return (
-    <html lang="en">
+    <html lang="en" className={geistSans.variable}>
       <body className="min-h-dvh bg-ink text-fog antialiased">{children}</body>
     </html>
   );
