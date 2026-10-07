@@ -18,6 +18,8 @@ export interface CatalogCandidate {
   releaseYear: number | null;
   publisher: string | null;
   genre: string | null;
+  /** Max supported players, when the source exposes it; never invented. */
+  playerCount: number | null;
   coverUrl: string | null;
   platforms: CatalogPlatform[];
   source: CatalogSource;

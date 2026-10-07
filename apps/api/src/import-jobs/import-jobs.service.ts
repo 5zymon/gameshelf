@@ -13,6 +13,7 @@ import type {
   CatalogCandidate,
   CatalogPlatform,
 } from '../game-catalog/game-catalog.resolver';
+import { GameEnrichmentService } from '../enrichment/game-enrichment.service';
 import { findPlatformMatch } from '../platforms/platform-match';
 import type { PhotoImportJobData } from '../queue/photo-import.types';
 import { RetryableImportError } from '../queue/photo-import.failure';
@@ -142,6 +143,7 @@ export class ImportJobsService {
     @InjectQueue(PHOTO_IMPORT_QUEUE)
     private readonly queue: Queue<PhotoImportJobData>,
     private readonly queueControl: QueueControlService,
+    private readonly enrichment: GameEnrichmentService,
   ) {}
 
   // ---------- read API ----------
@@ -846,34 +848,47 @@ export class ImportJobsService {
     jobId: number,
     outcome: ImportBatchOutcome,
   ): Promise<void> {
+    // Terminal-status guard (read outside the transaction): a job already
+    // `failed`/`done`/`needs_attention` (e.g. marked by the timeout path while
+    // an abandoned attempt is still running) must stop mutating items and the
+    // catalog — and must not even start a cover download.
+    const job = await this.prisma.importJob.findUnique({
+      where: { id: jobId },
+      select: { status: true },
+    });
+    if (job && isTerminalImportJobStatus(job.status)) {
+      throw new RetryableImportError(
+        `Import job ${String(jobId)} is already ${job.status}; refusing to commit a batch`,
+      );
+    }
+
+    // Cover resolution (network/fs) happens BEFORE and OUTSIDE the DB
+    // transaction, so a slow download never holds a MySQL transaction open.
+    const resolved = await Promise.all(
+      outcome.resolved.map(async (item) => ({
+        recognizedItemId: item.recognizedItemId,
+        data: await this.enrichment.enrichCandidate(
+          item.candidate,
+          item.platformId,
+          item.edition,
+        ),
+      })),
+    );
+
     await this.prisma.$transaction(async (tx) => {
-      // Terminal-status guard: a job already `failed`/`done`/`needs_attention`
-      // (e.g. marked by the timeout path while an abandoned attempt is still
-      // running) must stop mutating items and the catalog.
-      const job = await tx.importJob.findUnique({
+      // Re-check inside the transaction so a job that turned terminal while the
+      // covers were downloading is still refused.
+      const guard = await tx.importJob.findUnique({
         where: { id: jobId },
         select: { status: true },
       });
-      if (job && isTerminalImportJobStatus(job.status)) {
+      if (guard && isTerminalImportJobStatus(guard.status)) {
         throw new RetryableImportError(
-          `Import job ${String(jobId)} is already ${job.status}; refusing to commit a batch`,
+          `Import job ${String(jobId)} is already ${guard.status}; refusing to commit a batch`,
         );
       }
-      for (const item of outcome.resolved) {
-        const game = await tx.game.create({
-          data: {
-            title: item.candidate.title,
-            platformId: item.platformId,
-            edition: item.edition,
-            releaseYear: item.candidate.releaseYear,
-            publisher: item.candidate.publisher,
-            genre: item.candidate.genre,
-            coverUrl: item.candidate.coverUrl,
-            rawMetadata: JSON.stringify(item.candidate.raw),
-            enrichedAt: new Date(),
-            source: item.candidate.source,
-          },
-        });
+      for (const item of resolved) {
+        const game = await tx.game.create({ data: item.data });
         const claim = await tx.recognizedItem.updateMany({
           where: {
             id: item.recognizedItemId,

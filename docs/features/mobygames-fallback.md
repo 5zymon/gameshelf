@@ -71,6 +71,7 @@ row, with `source: 'MobyGames'`:
 | `releaseYear` | earliest four-digit year across `platforms[].release_date` and `platforms[].releases[].release_date` |
 | `publisher`   | first `release.companies[]` whose `role` matches `/publish/i`, else the first `company_name`         |
 | `genre`       | first `genres[].name`                                                                                |
+| `playerCount` | always `null` — the v2 search `include` exposes none; inventing one is forbidden                     |
 | `coverUrl`    | first non-empty of `covers[].images[].image_url` / `original_url` / `thumbnail_url`                  |
 | `platforms`   | `{ igdbId: null, name, abbreviation: null }` per `platforms[]`                                       |
 | `raw`         | the raw `MobygameGame`                                                                               |
@@ -191,7 +192,10 @@ until then the fallback stays disabled and imports validate against IGDB alone.
 # Out of scope
 
 - The MobyGames health endpoint and recorded-fixture integration tests (4.9).
-- Cover local caching (4.10/4.6) and re-enrichment (4.7).
+- Cover local caching is implemented by
+  [Game Metadata Enrichment](/game-metadata-enrichment.md) (ticket 4.6); a
+  MobyGames cover is cached from its external URL like an IGDB one. Re-enrichment
+  (4.7) is still out of scope.
 - Platform alias creation; multi-instance budget sharing (the limiter is per
   process, like IGDB).
 - Threading a cancellation signal into the resolver port to drop abandoned

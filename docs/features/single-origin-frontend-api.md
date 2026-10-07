@@ -21,8 +21,8 @@ This document covers the three guarantees that make that setup work end to end:
 
 1. the same-origin `/api` rewrite (server-to-server);
 2. a strict Content Security Policy that only ever allows `'self'`;
-3. fonts self-hosted at build time, so today's UI (which renders no covers yet)
-   loads zero external resources.
+3. self-hosted assets at build time (fonts) and a local cover cache served
+   from the app origin, so the UI loads zero external resources at runtime.
 
 # Content Security Policy
 
@@ -60,13 +60,12 @@ Key properties:
   subresource URLs to HTTPS and break the supported `http://localhost` install.
 - **No external host.** Every directive is `'self'` (plus the nonce and
   `'strict-dynamic'`); there is no `http://`, `https://`, or `*` source.
-- **Covers must be same-origin.** The API's `coverUrl` still points at the
-  external source (IGDB returns `https://images.igdb.com/...`; see
-  `GameDetailModel.coverUrl`), but no page renders a cover yet, so
-  `img-src 'self'` is not exercised today. Any cover the UI adds must be served
-  same-origin — through `next/image` optimization or a first-party API image
-  route — because `img-src 'self'` deliberately does **not** permit direct
-  external image URLs.
+- **Covers are same-origin.** A saved `Game.coverUrl` is a first-party
+  `/api/covers/<file>` path, not an external URL: the import downloads the
+  external cover once into the local cache and the API serves it through
+  `GET /covers/:file`, which the `/api` rewrite puts on the app origin (see
+  [Game Metadata Enrichment](/game-metadata-enrichment.md)). `img-src 'self'`
+  therefore permits it, while a direct external image URL would be blocked.
 
 Production static pages would be rendered at build time without a nonce, so all
 document routes are dynamically rendered (`export const dynamic =
@@ -111,12 +110,14 @@ appears in the CSP.
 
 # Zero external requests
 
-The **current UI** makes no request to a non-GameShelf origin on a page load: it
-renders no covers and self-hosts its fonts. Verify it two ways:
+The app makes no request to a non-GameShelf origin on a page load: it self-hosts
+its fonts and any rendered cover is a same-origin `/api/covers/<file>` asset.
+Verify it two ways:
 
 - **Network panel.** Open DevTools → Network, hard-reload `/login` (or any page),
   and confirm every request's host is the app origin. There is no
-  `fonts.googleapis.com`, `fonts.gstatic.com`, CDN, or analytics host.
+  `fonts.googleapis.com`, `fonts.gstatic.com`, `images.igdb.com`, CDN, or
+  analytics host.
 - **Grep the served HTML.** Inline `src`/`href` attributes must never point at an
   absolute external URL:
 
@@ -130,13 +131,12 @@ renders no covers and self-hosts its fonts. Verify it two ways:
   grep -rIl 'fonts.gstatic\|fonts.googleapis' apps/web/.next/static || echo OK
   ```
 
-> **Covers (future work).** The API exposes external `coverUrl` values (IGDB's
-> `https://images.igdb.com/...`; see `GameDetailModel.coverUrl`), but no page
-> renders them yet. `img-src 'self'` deliberately allows no external image host,
-> so any future cover rendering must go through a same-origin path — `next/image`
-> optimization or a same-origin API image route — or the browser will CSP-block
-> it. Until covers ship, the zero-external-request guarantee holds for the
-> current UI only.
+> **Covers.** A saved `Game.coverUrl` is a same-origin `/api/covers/<file>` path,
+> never an external host: the import downloads the external cover into the local
+> cache and the API serves it (see
+> [Game Metadata Enrichment](/game-metadata-enrichment.md)). A direct external
+> image URL would be blocked by `img-src 'self'`; the cache is what makes cover
+> rendering CSP-safe without loosening the policy.
 
 # Configuration and the "no proxy" guarantee
 

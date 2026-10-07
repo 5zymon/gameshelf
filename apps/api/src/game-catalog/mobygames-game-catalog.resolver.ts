@@ -106,6 +106,9 @@ function toCandidate(game: MobygameGame): CatalogCandidate {
     releaseYear: releaseYear(game),
     publisher: publisher(game),
     genre: game.genres?.[0]?.name ?? null,
+    // The v2 search `include` exposes no player-count field; inventing one is
+    // forbidden, so a MobyGames import always leaves `playerCount` null.
+    playerCount: null,
     coverUrl: coverUrl(game),
     platforms: objects(game.platforms).map(toPlatform),
     source: 'MobyGames',

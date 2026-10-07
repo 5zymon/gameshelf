@@ -8,7 +8,11 @@ import {
   type GameCatalogSource,
 } from './game-catalog.resolver';
 import { IgdbConfigError, IgdbError } from './igdb.errors';
-import { IgdbClient, type IgdbGame } from './igdb.client';
+import {
+  IgdbClient,
+  type IgdbGame,
+  type IgdbMultiplayerMode,
+} from './igdb.client';
 import { selectConfidentMatch } from './title-match';
 
 // Kept as this module's public surface for existing importers/tests; the actual
@@ -99,11 +103,34 @@ function toCandidate(game: IgdbGame): CatalogCandidate {
     releaseYear: releaseYear(game.first_release_date),
     publisher: game.involved_companies?.[0]?.company?.name ?? null,
     genre: game.genres?.[0]?.name ?? null,
+    playerCount: playerCount(game.multiplayer_modes),
     coverUrl: normalizeCoverUrl(game.cover?.url ?? null),
     platforms: (game.platforms ?? []).map(toPlatform),
     source: 'IGDB',
     raw: game,
   };
+}
+
+/**
+ * Max supported players across every IGDB multiplayer mode, or `null` when the
+ * source exposes none. Only positive integers count; a mode is ignored unless
+ * it actually carries a max field, so no value is ever invented.
+ */
+function playerCount(modes: IgdbMultiplayerMode[] | undefined): number | null {
+  let max: number | null = null;
+  for (const mode of modes ?? []) {
+    for (const value of [
+      mode.offlinemax,
+      mode.onlinemax,
+      mode.offlinecoopmax,
+      mode.onlinecoopmax,
+    ]) {
+      if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+        max = Math.max(max ?? 0, value);
+      }
+    }
+  }
+  return max;
 }
 
 function toPlatform(platform: {

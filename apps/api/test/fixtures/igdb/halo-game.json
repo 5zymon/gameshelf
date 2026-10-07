@@ -1,0 +1,27 @@
+{
+  "id": 1036,
+  "name": "Halo: Combat Evolved",
+  "first_release_date": 1005782400,
+  "cover": {
+    "id": 280041,
+    "url": "//images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg"
+  },
+  "involved_companies": [
+    { "company": { "id": 238, "name": "Bungie" } },
+    { "company": { "id": 200, "name": "Microsoft Game Studios" } }
+  ],
+  "genres": [{ "id": 5, "name": "Shooter" }],
+  "platforms": [
+    { "id": 11, "name": "Xbox", "abbreviation": "XBOX" },
+    { "id": 6, "name": "PC (Microsoft Windows)", "abbreviation": "PC" }
+  ],
+  "summary": "Halo: Combat Evolved is a first-person shooter and the debut title of the Halo series.",
+  "multiplayer_modes": [
+    {
+      "offlinemax": 4,
+      "onlinemax": 16,
+      "offlinecoopmax": 2,
+      "onlinecoopmax": 4
+    }
+  ]
+}

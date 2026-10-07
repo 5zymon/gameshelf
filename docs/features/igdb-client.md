@@ -197,7 +197,9 @@ first-seen order) are hydrated with the full catalog field set in
 ```
 fields name,first_release_date,cover.url,involved_companies.company.name,
 genres.name,platforms.id,platforms.name,platforms.abbreviation,summary,
-version_parent; where id = (1,2,…); limit 500;
+version_parent,multiplayer_modes.offlinemax,multiplayer_modes.onlinemax,
+multiplayer_modes.offlinecoopmax,multiplayer_modes.onlinecoopmax;
+where id = (1,2,…); limit 500;
 ```
 
 The response rows are indexed `id → game`, and each title's candidates are
@@ -205,8 +207,13 @@ rebuilt from its phase-1 id order, so `multiqueryGames` still returns one
 candidate array per input title, in input order. An id that hydration does not
 return is **dropped** — the client never substitutes a different game.
 Hydration asks for exactly the catalog fields (no `*`, no `alternative_names`);
-`involved_companies.company.name` feeds `CatalogCandidate.publisher`, and
-`summary`/`version_parent` are the card-4.3 enrichment fields archived through
+`involved_companies.company.name` feeds `CatalogCandidate.publisher`,
+`genres.name` feeds `CatalogCandidate.genre`, and the requested
+`multiplayer_modes.*` maxima feed `CatalogCandidate.playerCount` (the maximum of
+`offlinemax`/`onlinemax`/`offlinecoopmax`/`onlinecoopmax` across modes, or `null`
+when none is present — see
+[Game Metadata Enrichment](/game-metadata-enrichment.md)). `summary`/
+`version_parent`/`multiplayer_modes` are archived through
 `CatalogCandidate.raw`.
 
 ## Requests, tokens, errors

@@ -25,7 +25,7 @@ export class GameListItemModel {
 
   @ApiPropertyOptional({
     nullable: true,
-    example: 'https://example.com/hk.jpg',
+    example: '/api/covers/0123456789abcdef0123456789abcdef.jpg',
   })
   coverUrl!: string | null;
 
@@ -61,7 +61,7 @@ export class GameDetailModel {
 
   @ApiPropertyOptional({
     nullable: true,
-    example: 'https://example.com/hk.jpg',
+    example: '/api/covers/0123456789abcdef0123456789abcdef.jpg',
   })
   coverUrl!: string | null;
 
