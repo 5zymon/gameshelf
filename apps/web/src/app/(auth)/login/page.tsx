@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { AuthCard } from '@/components/auth-card';
-import { getSetupStatus } from '@/lib/api';
+import { getSetupStatus } from '@/lib/api/server';
 import { LoginForm } from './login-form';
 
 export const dynamic = 'force-dynamic';

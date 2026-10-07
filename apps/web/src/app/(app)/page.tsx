@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
-import { getGames } from '@/lib/api';
+import { getGames } from '@/lib/api/server';
 
 export const dynamic = 'force-dynamic';
 
@@ -28,9 +28,7 @@ export default async function CatalogPage(): Promise<React.ReactElement> {
               className="rounded-xl border border-edge bg-shelf p-4"
             >
               <p className="font-medium text-fog">{game.title}</p>
-              <p className="text-sm text-muted">
-                {game.platform?.name ?? 'Unknown platform'}
-              </p>
+              <p className="text-sm text-muted">{game.platform.name}</p>
             </li>
           ))}
         </ul>

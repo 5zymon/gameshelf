@@ -2,6 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { isApiError } from '@/lib/api';
+import { api } from '@/lib/api/browser';
 
 const INVALID_CREDENTIALS = 'Incorrect email or password.';
 const INVALID_INPUT = 'Enter an email and a password, then try again.';
@@ -22,27 +24,19 @@ export function LoginForm(): React.ReactElement {
     setError(null);
     setSubmitting(true);
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-        credentials: 'same-origin',
-      });
-      if (res.ok) {
-        router.replace('/');
-        router.refresh();
-        return;
-      }
-      if (res.status === 401) {
+      await api.auth.login({ email, password });
+      router.replace('/');
+      router.refresh();
+      return;
+    } catch (error) {
+      if (isApiError(error) && error.status === 401) {
         setError(INVALID_CREDENTIALS);
         return;
       }
-      if (res.status === 400) {
+      if (isApiError(error) && error.status === 400) {
         setError(INVALID_INPUT);
         return;
       }
-      setError(GENERIC_ERROR);
-    } catch {
       setError(GENERIC_ERROR);
     } finally {
       setSubmitting(false);

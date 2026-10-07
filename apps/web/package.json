@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@gameshelf/contracts": "*",
     "@next/env": "^15.5.27",
     "next": "^15.2.4",
     "react": "^19.1.0",
