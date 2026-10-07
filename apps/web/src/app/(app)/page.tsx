@@ -1,15 +1,19 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getGames } from '@/lib/api/server';
+import { CatalogFilterBar } from '@/components/catalog-filter-bar';
 import { CatalogPagination } from '@/components/catalog-pagination';
 import { GameCard } from '@/components/game-card';
 import type { ListGamesQuery } from '@/lib/api';
+import {
+  hasActiveFilters,
+  parseCatalogFilters,
+  type CatalogSearchParams,
+} from '@/lib/catalog-filters';
 
 export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 24;
-
-type CatalogSearchParams = Record<string, string | string[] | undefined>;
 
 function parsePage(value: string | string[] | undefined): number {
   const raw = Array.isArray(value) ? value[0] : value;
@@ -18,7 +22,7 @@ function parsePage(value: string | string[] | undefined): number {
   return Number.isInteger(parsed) && parsed >= 1 ? parsed : 1;
 }
 
-/** Preserves every current query param (forward-compatible with 5.3 filters) but `page`. */
+/** Preserves every other current query param (the 5.3 filters) but `page`. */
 function pageHref(searchParams: CatalogSearchParams, target: number): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(searchParams)) {
@@ -42,12 +46,14 @@ export default async function CatalogPage({
 }): Promise<React.ReactElement> {
   const params = await searchParams;
   const page = parsePage(params.page);
-  const query: ListGamesQuery = { page, limit: PAGE_SIZE };
+  const filters = parseCatalogFilters(params);
+  const query: ListGamesQuery = { page, limit: PAGE_SIZE, ...filters };
   const games = await getGames(query);
   if (games === null) redirect('/login');
 
-  const { items, meta } = games;
-  if (meta.total === 0) return <EmptyCatalog />;
+  const { items, meta, filters: options } = games;
+  const active = hasActiveFilters(filters);
+  if (meta.total === 0 && !active) return <EmptyCatalog />;
 
   const first = (meta.page - 1) * meta.limit + 1;
   const last = first + items.length - 1;
@@ -59,18 +65,28 @@ export default async function CatalogPage({
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
           Your shelf
         </h1>
-        <p className="mt-1 text-sm text-muted">
-          {items.length === 0
-            ? `No games on page ${String(meta.page)}`
-            : `Showing ${String(first)}–${String(last)} of ${String(meta.total)} games`}
-        </p>
+        {items.length > 0 && (
+          <p className="mt-1 text-sm text-muted">
+            {active
+              ? `Showing ${String(first)}–${String(last)} of ${String(meta.total)} matching games`
+              : `Showing ${String(first)}–${String(last)} of ${String(meta.total)} games`}
+          </p>
+        )}
       </header>
 
-      {items.length === 0 ? (
+      <CatalogFilterBar
+        values={filters}
+        platforms={options.platforms}
+        editions={options.editions}
+      />
+
+      {meta.total === 0 ? (
+        <NoResults />
+      ) : items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-edge p-10 text-center text-muted">
           That page has no games.{' '}
           <Link
-            href="/"
+            href={pageHref(params, 1)}
             className="text-accent underline-offset-4 hover:underline hover:text-accent-strong"
           >
             Back to the first page
@@ -128,5 +144,24 @@ function EmptyCatalog(): React.ReactElement {
         </div>
       </div>
     </section>
+  );
+}
+
+function NoResults(): React.ReactElement {
+  return (
+    <div className="rounded-2xl border border-dashed border-edge px-6 py-16 text-center">
+      <h2 className="text-lg font-medium text-fog">
+        No games match these filters
+      </h2>
+      <p className="mx-auto mt-2 max-w-md text-sm text-muted">
+        Try broadening your search or removing a filter.
+      </p>
+      <Link
+        href="/"
+        className="mt-6 inline-block rounded-md border border-edge px-4 py-2 font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        Clear all filters
+      </Link>
+    </div>
   );
 }

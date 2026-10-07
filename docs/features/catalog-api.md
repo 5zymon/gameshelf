@@ -106,6 +106,12 @@ the current filter combination (no faceting):
 - `platforms` — platforms that have at least one game, sorted by name.
 - `editions` — distinct non-null edition values, sorted.
 
+The web filter bar (see [Catalog Filters & Search](/catalog-filters.md))
+renders `platforms` and `editions` as its two select options and surfaces the
+remaining query params (`year`, `publisher`, `genre`, `playerCount`, `q`) as
+free-text inputs — the contract exposes no facet lists for those, so they are
+exact-match (or, for `q`, partial-title) text fields rather than pickers.
+
 # Indexes
 
 Filter columns on `games`. Five indexes were added in migration
