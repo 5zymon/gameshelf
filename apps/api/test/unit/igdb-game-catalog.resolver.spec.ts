@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   IgdbGameCatalogResolver,
   normalizeTitle,
@@ -12,6 +14,13 @@ function item(title: string): RecognizedItem {
 
 function game(overrides: Partial<IgdbGame>): IgdbGame {
   return { id: 1, name: 'Halo', ...overrides };
+}
+
+/** Loads a real (sanitised) IGDB payload from `test/fixtures/igdb`. */
+function igdbFixture(name: string): IgdbGame {
+  return JSON.parse(
+    readFileSync(join(__dirname, '..', 'fixtures', 'igdb', name), 'utf8'),
+  ) as IgdbGame;
 }
 
 function createResolver(
@@ -184,12 +193,49 @@ describe('IgdbGameCatalogResolver (unit)', () => {
         releaseYear: 2001,
         publisher: 'Bungie',
         genre: 'Shooter',
+        playerCount: null,
         coverUrl: 'https://images.igdb.com/igdb/image/upload/t_thumb/halo.jpg',
         platforms: [{ igdbId: 11, name: 'Xbox', abbreviation: 'XBOX' }],
         source: 'IGDB',
         raw: expect.anything() as unknown,
       },
     });
+  });
+
+  it('maps a real (sanitised) IGDB payload and derives the player count', async () => {
+    const search = jest
+      .fn<Promise<IgdbGame[]>, [string]>()
+      .mockResolvedValue([igdbFixture('halo-game.json')]);
+    const resolver = createResolver(search);
+
+    const result = await resolver.resolve(item('Halo: Combat Evolved'));
+
+    expect(result.kind).toBe('matched');
+    if (result.kind !== 'matched') return;
+    expect(result.candidate).toMatchObject({
+      externalId: 1036,
+      title: 'Halo: Combat Evolved',
+      releaseYear: 2001,
+      publisher: 'Bungie',
+      genre: 'Shooter',
+      // max(onlinemax=16, offlinemax=4, offlinecoopmax=2, onlinecoopmax=4)
+      playerCount: 16,
+      coverUrl: 'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
+      source: 'IGDB',
+    });
+  });
+
+  it('leaves playerCount null when multiplayer modes are absent', async () => {
+    const search = jest
+      .fn<Promise<IgdbGame[]>, [string]>()
+      .mockResolvedValue([game({ id: 4, name: 'Halo' })]);
+    const resolver = createResolver(search);
+
+    const result = await resolver.resolve(item('Halo'));
+
+    expect(result.kind).toBe('matched');
+    if (result.kind !== 'matched') return;
+    expect(result.candidate.playerCount).toBeNull();
   });
 });
 

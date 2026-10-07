@@ -191,6 +191,7 @@ describe('Anti-hallucination validation (e2e)', () => {
         releaseYear: 1999,
         publisher: 'Indie Co',
         genre: 'Puzzle',
+        playerCount: null,
         coverUrl: null,
         platforms: [
           { igdbId: null, name: 'PlayStation 5', abbreviation: null },

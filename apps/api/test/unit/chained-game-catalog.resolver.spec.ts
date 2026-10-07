@@ -20,6 +20,7 @@ function candidate(title: string): CatalogCandidate {
     releaseYear: 2001,
     publisher: null,
     genre: null,
+    playerCount: null,
     coverUrl: null,
     platforms: [],
     source: 'IGDB',

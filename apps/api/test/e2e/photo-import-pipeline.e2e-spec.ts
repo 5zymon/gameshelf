@@ -64,6 +64,7 @@ function candidate(title: string): CatalogCandidate {
     releaseYear: 2001,
     publisher: 'Sony Interactive Entertainment',
     genre: 'Action',
+    playerCount: null,
     coverUrl: null,
     platforms: [
       { igdbId: PLATFORM_IGDB_ID, name: 'PlayStation 5', abbreviation: 'PS5' },
@@ -352,6 +353,11 @@ describe('Photo import pipeline (e2e)', () => {
     expect(game.title).toBe('Validated Title');
     expect(game.source).toBe('IGDB');
     expect(game.enrichedAt).not.toBeNull();
+    expect(game.playerCount).toBeNull();
+    // The raw upstream payload is archived in the archival column.
+    expect(JSON.parse(game.rawMetadata ?? '')).toEqual({
+      title: 'Validated Title',
+    });
   });
 
   it('fails the current photo and pauses the queue on an IGDB config error', async () => {

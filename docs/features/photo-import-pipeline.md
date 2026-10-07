@@ -17,7 +17,8 @@ after [Import Photo Upload API](/import-upload-api.md) queues it. The BullMQ
 2. persists the recognized item list;
 3. validates each title against the ordered external-source validation chain
    (IGDB, then the optional MobyGames fallback);
-4. saves confirmed games in one MySQL transaction per batch;
+4. maps each confirmed candidate to `Game` data (caching its cover locally) and
+   saves the batch in one MySQL transaction;
 5. records unrecognized titles as `unrecognized_items`;
 6. maintains the job counters and persists the result;
 7. deletes the photo only after the job reaches completion.
@@ -59,7 +60,7 @@ try:
         if none: break
         batch   = pending[0..IMPORT_BATCH_SIZE]     # batch size 10
         outcome = resolveBatch(batch)               # external calls OUTSIDE any tx
-        commitImportBatch(jobId, outcome)           # ONE tx per batch
+        commitImportBatch(jobId, outcome)           # cover cache + ONE tx per batch
         if outcome has transient: retry, break
     result = summarizeRecognizedItems()
     markCompleted(jobId, result)                 # status done | needs_attention
@@ -84,6 +85,12 @@ Key properties:
 - **Batches.** `IMPORT_BATCH_SIZE = 10`, so a typical photo spans several
   batches. Killing the worker mid-job leaves every already-committed batch
   persisted.
+- **Enrichment and covers.** `commitImportBatch` delegates the candidate→`Game`
+  mapping to `GameEnrichmentService.enrichCandidate`; the cover download happens
+  **outside** the DB transaction (so a slow download never holds a MySQL
+  transaction open) and the saved `coverUrl` is a same-origin
+  `/api/covers/<file>` path. A failed download leaves `coverUrl` null without
+  failing the item. See [Game Metadata Enrichment](/game-metadata-enrichment.md).
 - **Per-job timeout + cancellation.** The whole unit of work (`processJob`)
   runs under `withJobTimeout` (`IMPORT_JOB_TIMEOUT_MS = 300 s`). A job that
   exceeds it rejects with `RetryableImportError`, so it fails cleanly and is

@@ -11,6 +11,7 @@ import type { PhotoImportJobData } from '../../src/queue/photo-import.types';
 import { RetryableImportError } from '../../src/queue/photo-import.failure';
 import type { PrismaService } from '../../src/prisma/prisma.service';
 import type { QueueControlService } from '../../src/queue/queue-control.service';
+import type { GameEnrichmentService } from '../../src/enrichment/game-enrichment.service';
 
 interface ImportJobsPrismaMock {
   importJob: {
@@ -57,6 +58,7 @@ function createService(): {
   mock: ImportJobsPrismaMock;
   queue: { getJob: jest.Mock; add: jest.Mock };
   queueControl: QueueControlMock;
+  enrichment: { enrichCandidate: jest.Mock };
 } {
   const mock: ImportJobsPrismaMock = {
     importJob: {
@@ -111,15 +113,18 @@ function createService(): {
       }),
     ),
   };
+  const enrichment = { enrichCandidate: jest.fn() };
   return {
     service: new ImportJobsService(
       mock as unknown as PrismaService,
       queue as unknown as Queue<PhotoImportJobData>,
       queueControl as unknown as QueueControlService,
+      enrichment as unknown as GameEnrichmentService,
     ),
     mock,
     queue,
     queueControl,
+    enrichment,
   };
 }
 
@@ -166,9 +171,10 @@ describe('ImportJobsService (unit)', () => {
   let mock: ImportJobsPrismaMock;
   let queue: { getJob: jest.Mock; add: jest.Mock };
   let queueControl: QueueControlMock;
+  let enrichment: { enrichCandidate: jest.Mock };
 
   beforeEach(() => {
-    ({ service, mock, queue, queueControl } = createService());
+    ({ service, mock, queue, queueControl, enrichment } = createService());
   });
 
   describe('list', () => {
@@ -1179,13 +1185,30 @@ describe('ImportJobsService (unit)', () => {
       releaseYear: 2001,
       publisher: 'Bungie',
       genre: 'Shooter',
+      playerCount: 16,
       coverUrl: 'https://images.igdb.com/halo.jpg',
       platforms: [],
       source: 'IGDB' as const,
       raw: { id: 7 },
     };
 
+    /** What the enrichment service returns; `game.create` must receive it. */
+    const enriched = {
+      title: 'Halo',
+      platformId: 3,
+      edition: 'GOTY',
+      releaseYear: 2001,
+      publisher: 'Bungie',
+      genre: 'Shooter',
+      playerCount: 16,
+      coverUrl: '/api/covers/0123456789abcdef0123456789abcdef.jpg',
+      rawMetadata: JSON.stringify({ id: 7 }),
+      enrichedAt: new Date('2026-10-07T00:00:00.000Z'),
+      source: 'IGDB' as const,
+    };
+
     it('creates a game and claims the recognized item in one transaction', async () => {
+      enrichment.enrichCandidate.mockResolvedValue(enriched);
       mock.game.create.mockResolvedValue({ id: 42 });
       mock.recognizedItem.updateMany.mockResolvedValue({ count: 1 });
 
@@ -1197,21 +1220,15 @@ describe('ImportJobsService (unit)', () => {
         transient: [],
       });
 
+      // The candidate is mapped (and its cover cached) by the enrichment
+      // service; `game.create` persists exactly the returned data.
+      expect(enrichment.enrichCandidate).toHaveBeenCalledWith(
+        candidate,
+        3,
+        'GOTY',
+      );
       expect(mock.$transaction).toHaveBeenCalledTimes(1);
-      expect(mock.game.create).toHaveBeenCalledWith({
-        data: {
-          title: 'Halo',
-          platformId: 3,
-          edition: 'GOTY',
-          releaseYear: 2001,
-          publisher: 'Bungie',
-          genre: 'Shooter',
-          coverUrl: 'https://images.igdb.com/halo.jpg',
-          rawMetadata: JSON.stringify({ id: 7 }),
-          enrichedAt: expect.any(Date) as Date,
-          source: 'IGDB',
-        },
-      });
+      expect(mock.game.create).toHaveBeenCalledWith({ data: enriched });
       expect(mock.recognizedItem.updateMany).toHaveBeenCalledWith({
         where: { id: 1, importJobId: 5, status: 'pending' },
         data: { status: 'imported', gameId: 42 },
@@ -1219,6 +1236,14 @@ describe('ImportJobsService (unit)', () => {
     });
 
     it('creates the game with source MobyGames for a fallback candidate', async () => {
+      const mobyCandidate = {
+        ...candidate,
+        source: 'MobyGames' as const,
+      };
+      enrichment.enrichCandidate.mockResolvedValue({
+        ...enriched,
+        source: 'MobyGames' as const,
+      });
       mock.game.create.mockResolvedValue({ id: 43 });
       mock.recognizedItem.updateMany.mockResolvedValue({ count: 1 });
 
@@ -1228,19 +1253,25 @@ describe('ImportJobsService (unit)', () => {
             recognizedItemId: 1,
             platformId: 3,
             edition: null,
-            candidate: { ...candidate, source: 'MobyGames' as const },
+            candidate: mobyCandidate,
           },
         ],
         unrecognized: [],
         transient: [],
       });
 
+      expect(enrichment.enrichCandidate).toHaveBeenCalledWith(
+        mobyCandidate,
+        3,
+        null,
+      );
       expect(mock.game.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ source: 'MobyGames' }) as unknown,
       });
     });
 
     it('rolls the batch back when the item was already resolved', async () => {
+      enrichment.enrichCandidate.mockResolvedValue(enriched);
       mock.game.create.mockResolvedValue({ id: 42 });
       mock.recognizedItem.updateMany.mockResolvedValue({ count: 0 });
 
@@ -1268,6 +1299,8 @@ describe('ImportJobsService (unit)', () => {
         }),
       ).rejects.toThrow(RetryableImportError);
 
+      // The guard fires before any cover download or catalog write.
+      expect(enrichment.enrichCandidate).not.toHaveBeenCalled();
       expect(mock.game.create).not.toHaveBeenCalled();
       expect(mock.recognizedItem.updateMany).not.toHaveBeenCalled();
     });

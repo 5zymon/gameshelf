@@ -375,6 +375,8 @@ Queued jobs live in Redis, so they survive an API restart: stop the API, enqueue
 
 Each photo job inherits `attempts: 3` and exponential backoff (`IMPORT_RETRY_BACKOFF_MS`) from the registered queue's `defaultJobOptions`, so upload and retry enqueue paths cannot drift. A transient failure (e.g. an external 429) throws a retryable error, the `import_jobs` row stays `processing`, and the retry re-runs only the titles that are still unresolved — the vision provider is called at most once per photo (a `vision_completed_at` marker plus a transaction make the recognition write one-shot). A job is marked `failed` only on a non-retryable error or on the final attempt. Confirmed games are saved in one MySQL transaction per batch (batch size 10), so a worker killed mid-job leaves the earlier batches committed.
 
+**Metadata and covers.** Each confirmed candidate is mapped to a `Game` by the reusable `GameEnrichmentService` (title, canonical platform, vision-only edition, year, publisher, genre, player count, provenance, and the raw archival payload); a source field that is absent stays empty rather than being invented. The candidate's external cover is downloaded once **outside** the DB transaction into the local cache (`COVERS_DIR`, default `~/.gameshelf/covers`) and the saved `coverUrl` becomes a same-origin `/api/covers/<file>` served by the API — never an external host. A failed download leaves `coverUrl` null without failing the import item. See `docs/features/game-metadata-enrichment.md`.
+
 **Worker settings** (ticket 3.7; all compile-time constants, not env vars):
 
 | Setting                | Value                                  | Constant                         |
@@ -437,6 +439,7 @@ All variables live in a single root `.env` file (see `.env.example`):
 | `LLM_SETTINGS_SECRET` | `apps/api` | Key-derivation secret for the stored API key's AES-256-GCM key (falls back to `SESSION_SECRET`)                                                                                    |
 | `ANTHROPIC_API_KEY`   | `apps/api` | Reserved for a future provider; **not read** by the current code                                                                                                                   |
 | `IMPORT_PHOTOS_DIR`   | `apps/api` | Ephemeral upload directory (default `<OS temp>/gameshelf-import-photos`); the pipeline deletes a photo after its job completes and a sweep removes leftovers (see Photo Lifecycle) |
+| `COVERS_DIR`          | `apps/api` | Durable cover-cache directory (default `~/.gameshelf/covers`); the import maps a saved game's `coverUrl` to a same-origin `/api/covers/<file>` served from here                    |
 | `IGDB_CLIENT_ID`      | `apps/api` | IGDB credentials                                                                                                                                                                   |
 | `IGDB_CLIENT_SECRET`  | `apps/api` | IGDB credentials                                                                                                                                                                   |
 | `IGDB_TOKEN_URL`      | `apps/api` | Optional OAuth token endpoint override (default `https://id.twitch.tv/oauth2/token`)                                                                                               |

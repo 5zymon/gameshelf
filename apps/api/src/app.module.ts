@@ -7,6 +7,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { SessionGuard } from './auth/session.guard';
+import { CoversModule } from './covers/covers.module';
 import { GamesModule } from './games/games.module';
 import { ImportJobsModule } from './import-jobs/import-jobs.module';
 import { PlatformsModule } from './platforms/platforms.module';
@@ -37,6 +38,7 @@ import { SetupModule } from './setup/setup.module';
     PrismaModule,
     AuthModule,
     GamesModule,
+    CoversModule,
     ImportJobsModule,
     PlatformsModule,
     SetupModule,

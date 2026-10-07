@@ -70,6 +70,15 @@ and flips its `RecognizedItem.status` to `unrecognized`; the job ends
 writing a second trace row, so the trailing records are idempotent under retry
 (see [Photo Import Pipeline](/photo-import-pipeline.md)).
 
+# Persisting a confirmed candidate
+
+A `matched` candidate is mapped onto a `Game` by
+[Game Metadata Enrichment](/game-metadata-enrichment.md): the confirmed source
+supplies title/year/publisher/genre/playerCount and provenance
+(`source`/`enrichedAt`), the raw payload is archived (never queried), and the
+cover is cached locally so `coverUrl` is same-origin. A field the source does not
+provide stays empty rather than being invented.
+
 # The MANUAL-only bypass
 
 External validation only applies to titles the vision model recognized. A user

@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   MobygamesConfigError,
   MobygamesError,
@@ -15,6 +17,13 @@ function item(title: string): RecognizedItem {
 
 function game(overrides: Partial<MobygameGame>): MobygameGame {
   return { game_id: 1, title: 'Halo', ...overrides };
+}
+
+/** Loads a real (sanitised) MobyGames payload from `test/fixtures/mobygames`. */
+function mobygamesFixture(name: string): MobygameGame {
+  return JSON.parse(
+    readFileSync(join(__dirname, '..', 'fixtures', 'mobygames', name), 'utf8'),
+  ) as MobygameGame;
 }
 
 type SearchMock = jest.Mock<Promise<MobygameGame[]>, [string]>;
@@ -76,7 +85,36 @@ describe('MobygamesGameCatalogResolver (unit)', () => {
         releaseYear: 2001,
         publisher: 'Bungie',
         genre: 'Shooter',
+        playerCount: null,
         coverUrl: 'https://cdn.mobygames.com/halo.jpg',
+        platforms: [{ igdbId: null, name: 'Xbox', abbreviation: null }],
+        source: 'MobyGames',
+        raw: expect.anything() as unknown,
+      },
+    });
+  });
+
+  it('maps a real (sanitised) MobyGames payload with playerCount null', async () => {
+    const search = jest
+      .fn<Promise<MobygameGame[]>, [string]>()
+      .mockResolvedValue([mobygamesFixture('halo-game.json')]);
+    const resolver = createResolver(search);
+
+    const result = await resolver.resolve(item('Halo: Combat Evolved'));
+
+    expect(result).toEqual({
+      kind: 'matched',
+      candidate: {
+        externalId: 1201,
+        title: 'Halo: Combat Evolved',
+        releaseYear: 2001,
+        publisher: 'Microsoft Game Studios',
+        genre: 'Action',
+        // The v2 search `include` exposes no player count; inventing one is
+        // forbidden, so this stays null.
+        playerCount: null,
+        coverUrl:
+          'https://cdn.mobygames.com/covers/4074-halo-combat-evolved-xbox-front-cover.jpg',
         platforms: [{ igdbId: null, name: 'Xbox', abbreviation: null }],
         source: 'MobyGames',
         raw: expect.anything() as unknown,
@@ -170,6 +208,7 @@ describe('MobygamesGameCatalogResolver (unit)', () => {
         releaseYear: null,
         publisher: null,
         genre: null,
+        playerCount: null,
         coverUrl: null,
         platforms: [{ igdbId: null, name: 'Xbox', abbreviation: null }],
         source: 'MobyGames',

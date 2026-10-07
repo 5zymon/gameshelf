@@ -254,7 +254,9 @@ describe('IgdbClient (unit)', () => {
     expect(gamesRequest?.body).toBe(
       'search "Halo"; fields name,first_release_date,cover.url,' +
         'involved_companies.company.name,genres.name,platforms.id,' +
-        'platforms.name,platforms.abbreviation,summary,version_parent; limit 10;',
+        'platforms.name,platforms.abbreviation,summary,version_parent,' +
+        'multiplayer_modes.offlinemax,multiplayer_modes.onlinemax,' +
+        'multiplayer_modes.offlinecoopmax,multiplayer_modes.onlinecoopmax; limit 10;',
     );
     expect(gamesRequest?.body).not.toContain('fields *');
     expect(gamesRequest?.body).not.toContain('alternative_names');
@@ -735,7 +737,9 @@ describe('IgdbClient.multiqueryGames (unit)', () => {
     expect(gamesBody).toBe(
       'fields name,first_release_date,cover.url,' +
         'involved_companies.company.name,genres.name,platforms.id,' +
-        'platforms.name,platforms.abbreviation,summary,version_parent; ' +
+        'platforms.name,platforms.abbreviation,summary,version_parent,' +
+        'multiplayer_modes.offlinemax,multiplayer_modes.onlinemax,' +
+        'multiplayer_modes.offlinecoopmax,multiplayer_modes.onlinecoopmax; ' +
         'where id = (5); limit 500;',
     );
     expect(gamesBody).not.toContain('fields *');

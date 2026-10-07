@@ -38,7 +38,16 @@ const IGDB_PLATFORMS_QUERY =
 const IGDB_GAME_FIELDS =
   'name,first_release_date,cover.url,involved_companies.company.name,' +
   'genres.name,platforms.id,platforms.name,platforms.abbreviation,' +
-  'summary,version_parent';
+  'summary,version_parent,multiplayer_modes.offlinemax,multiplayer_modes.onlinemax,' +
+  'multiplayer_modes.offlinecoopmax,multiplayer_modes.onlinecoopmax';
+
+/** IGDB `multiplayer_modes` row (only the player-count maxima are requested). */
+export interface IgdbMultiplayerMode {
+  offlinemax?: number;
+  onlinemax?: number;
+  offlinecoopmax?: number;
+  onlinecoopmax?: number;
+}
 
 /** Raw IGDB game shape (only the fields the query asks for). */
 export interface IgdbGame {
@@ -52,6 +61,8 @@ export interface IgdbGame {
   summary?: string;
   /** IGDB id of the base game when this row is an edition/port; absent otherwise. */
   version_parent?: number;
+  /** IGDB multiplayer modes; the max over their max fields is the player count. */
+  multiplayer_modes?: IgdbMultiplayerMode[];
 }
 
 /**

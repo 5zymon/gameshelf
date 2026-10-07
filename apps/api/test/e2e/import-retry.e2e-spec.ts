@@ -46,6 +46,7 @@ function candidate(title: string): CatalogCandidate {
     releaseYear: 2001,
     publisher: 'Sony Interactive Entertainment',
     genre: 'Action',
+    playerCount: null,
     coverUrl: null,
     platforms: [
       { igdbId: PLATFORM_IGDB_ID, name: 'PlayStation 5', abbreviation: 'PS5' },
