@@ -33,6 +33,12 @@ export function seedGame(
     genre?: string | null;
     playerCount?: number | null;
     coverUrl?: string | null;
+    source?: 'IGDB' | 'MobyGames' | 'MANUAL';
+    enrichedAt?: Date | null;
+    rawMetadata?: string | null;
+    externalId?: number | null;
+    platformUnverified?: boolean;
+    userEditedFields?: string | null;
   },
 ) {
   return prisma.game.create({

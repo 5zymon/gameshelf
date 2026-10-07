@@ -203,6 +203,7 @@ describe('Cover cache (e2e)', () => {
     expect(game.genre).toBe('Shooter');
     expect(game.playerCount).toBe(16);
     expect(game.source).toBe('IGDB');
+    expect(game.externalId).toBe(7);
     expect(game.enrichedAt).not.toBeNull();
     expect(JSON.parse(game.rawMetadata ?? '')).toEqual({ id: 7 });
 

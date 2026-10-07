@@ -1,27 +1,42 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import type { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { GameCatalogResolver } from '../game-catalog/game-catalog.resolver';
+import { GameEnrichmentService } from '../enrichment/game-enrichment.service';
+import {
+  buildReenrichmentUpdate,
+  mergeEditedFields,
+  serializeEditedFields,
+  toEditedFields,
+  TRACKED_METADATA_FIELDS,
+} from '../enrichment/reenrichment';
 import { CreateGameDto } from './dto/create-game.dto';
+import { EnrichGameDto } from './dto/enrich-game.dto';
+import {
+  EnrichGameResponseModel,
+  toEnrichCandidateModel,
+} from './dto/enrich-game-response.model';
 import {
   GameDetailModel,
   ListGamesResponseModel,
 } from './dto/game-response.model';
 import { ListGamesQueryDto } from './dto/list-games-query.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
-
-const PLATFORM_SELECT: Prisma.PlatformSelect = {
-  id: true,
-  name: true,
-  slug: true,
-};
+import { PLATFORM_SELECT, toGameDetail } from './game-detail.mapper';
 
 @Injectable()
 export class GamesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly catalog: GameCatalogResolver,
+    private readonly enrichment: GameEnrichmentService,
+  ) {}
 
   async list(query: ListGamesQueryDto): Promise<ListGamesResponseModel> {
     const page = query.page ?? 1;
@@ -75,12 +90,15 @@ export class GamesService {
     if (!game) {
       throw new NotFoundException(`Game with id ${String(id)} not found`);
     }
-    return game;
+    return toGameDetail(game);
   }
 
   async create(dto: CreateGameDto): Promise<GameDetailModel> {
     await this.assertPlatformExists(dto.platformId);
-    return this.prisma.game.create({
+    const editedNow = TRACKED_METADATA_FIELDS.filter(
+      (field) => dto[field] !== undefined,
+    );
+    const game = await this.prisma.game.create({
       data: {
         title: dto.title,
         platformId: dto.platformId,
@@ -90,9 +108,13 @@ export class GamesService {
         genre: dto.genre ?? null,
         playerCount: dto.playerCount ?? null,
         coverUrl: dto.coverUrl ?? null,
+        ...(editedNow.length > 0 && {
+          userEditedFields: serializeEditedFields(editedNow),
+        }),
       },
       include: { platform: { select: PLATFORM_SELECT } },
     });
+    return toGameDetail(game);
   }
 
   async update(id: number, dto: UpdateGameDto): Promise<GameDetailModel> {
@@ -110,7 +132,7 @@ export class GamesService {
     }
     const existing = await this.prisma.game.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, userEditedFields: true },
     });
     if (!existing) {
       throw new NotFoundException(`Game with id ${String(id)} not found`);
@@ -118,7 +140,12 @@ export class GamesService {
     if (dto.platformId !== undefined) {
       await this.assertPlatformExists(dto.platformId);
     }
-    return this.prisma.game.update({
+    // A hand edit to any tracked metadata field is recorded as provenance so a
+    // later re-enrichment never overwrites it.
+    const editedNow = TRACKED_METADATA_FIELDS.filter(
+      (field) => dto[field] !== undefined,
+    );
+    const game = await this.prisma.game.update({
       where: { id },
       data: {
         ...(dto.title !== undefined && { title: dto.title }),
@@ -129,9 +156,109 @@ export class GamesService {
         ...(dto.genre !== undefined && { genre: dto.genre }),
         ...(dto.playerCount !== undefined && { playerCount: dto.playerCount }),
         ...(dto.coverUrl !== undefined && { coverUrl: dto.coverUrl }),
+        // Fixing the platform confirms it, so clear any "unverified" flag.
+        ...(dto.platformId !== undefined && { platformUnverified: false }),
+        ...(editedNow.length > 0 && {
+          userEditedFields: serializeEditedFields(
+            mergeEditedFields(existing.userEditedFields, editedNow),
+          ),
+        }),
       },
       include: { platform: { select: PLATFORM_SELECT } },
     });
+    return toGameDetail(game);
+  }
+
+  /**
+   * Re-enrich an existing game against its **current** (possibly corrected)
+   * title: re-run the IGDB → MobyGames → unresolved chain and either return the
+   * candidate(s) (no body) or apply the picked one (a `candidate` body).
+   *
+   * Applying updates the existing row in place — never a duplicate — through
+   * the same candidate mapping as the import path, then merges it without
+   * touching `title`/`platformId`/`edition` or any hand-edited field. A second
+   * identical apply writes nothing (record idempotency).
+   */
+  async enrich(
+    id: number,
+    dto: EnrichGameDto,
+  ): Promise<EnrichGameResponseModel> {
+    const game = await this.findOne(id);
+
+    const resolution = await this.catalog.resolve({
+      title: game.title,
+      edition: game.edition,
+      platform: game.platform.name,
+      confidence: 1,
+    });
+
+    if (resolution.kind === 'transient' || resolution.kind === 'config_error') {
+      throw new ServiceUnavailableException(resolution.reason);
+    }
+    if (resolution.kind === 'unrecognized') {
+      return {
+        status: 'unrecognized',
+        reason: resolution.reason,
+        applied: false,
+        candidates: [],
+        game,
+      };
+    }
+
+    const candidate = resolution.candidate;
+    const candidateModel = toEnrichCandidateModel(candidate);
+
+    // Search step: report the candidate, mutate nothing.
+    if (dto.candidate === undefined) {
+      return {
+        status: 'matched',
+        reason: null,
+        applied: false,
+        candidates: [candidateModel],
+        game,
+      };
+    }
+
+    // The pick must match what re-resolution just returned (the search is
+    // re-run on apply, so a stale pick is rejected rather than mis-applied).
+    if (
+      dto.candidate.source !== candidate.source ||
+      dto.candidate.externalId !== candidate.externalId
+    ) {
+      throw new ConflictException(
+        'The selected candidate is no longer available; run the search again',
+      );
+    }
+
+    const enriched = await this.enrichment.enrichCandidate(
+      candidate,
+      game.platformId,
+      game.edition,
+    );
+    const updateData = buildReenrichmentUpdate({
+      existing: game,
+      enriched,
+      editedFields: toEditedFields(game.userEditedFields),
+    });
+
+    const updated =
+      updateData === null
+        ? game
+        : toGameDetail(
+            await this.prisma.game.update({
+              where: { id },
+              data: updateData,
+              include: { platform: { select: PLATFORM_SELECT } },
+            }),
+          );
+
+    return {
+      status: 'matched',
+      reason: null,
+      applied: updateData !== null,
+      candidates: [candidateModel],
+      game: updated,
+    };
   }
 
   async remove(id: number): Promise<void> {
