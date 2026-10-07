@@ -5,7 +5,12 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { IGDB_REQUEST_TIMEOUT_MS } from '../import-jobs/import-pipeline.options';
-import { IgdbConfigError, IgdbError, igdbErrorFromStatus } from './igdb.errors';
+import {
+  IgdbConfigError,
+  IgdbError,
+  igdbErrorFromStatus,
+  igdbTokenErrorFromStatus,
+} from './igdb.errors';
 import { IgdbHttpClient, type IgdbHttpResponse } from './igdb-http.client';
 import { IgdbRateLimiter } from './igdb-rate-limiter';
 import {
@@ -228,16 +233,20 @@ export class IgdbClient implements OnApplicationBootstrap {
   private async acquireToken(): Promise<string> {
     const clientId = this.requiredEnv(IGDB_CLIENT_ID_ENV);
     const clientSecret = this.requiredEnv(IGDB_CLIENT_SECRET_ENV);
-    const response = await this.send(() =>
-      this.http.post({
-        url: this.tokenUrl(),
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body:
-          `client_id=${encodeURIComponent(clientId)}` +
-          `&client_secret=${encodeURIComponent(clientSecret)}` +
-          '&grant_type=client_credentials',
-        timeoutMs: IGDB_REQUEST_TIMEOUT_MS,
-      }),
+    const response = await this.send(
+      () =>
+        this.http.post({
+          url: this.tokenUrl(),
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body:
+            `client_id=${encodeURIComponent(clientId)}` +
+            `&client_secret=${encodeURIComponent(clientSecret)}` +
+            '&grant_type=client_credentials',
+          timeoutMs: IGDB_REQUEST_TIMEOUT_MS,
+        }),
+      // Twitch rejects bad credentials with 400 (`invalid client`), not just
+      // 401/403, so a rejected client id/secret must be a config error.
+      igdbTokenErrorFromStatus,
     );
     const body = await this.json(response);
     const data = isRecord(body) ? body : {};
@@ -248,7 +257,12 @@ export class IgdbClient implements OnApplicationBootstrap {
           ? data.token
           : null;
     if (value === null) {
-      throw new IgdbError(false, 'IGDB did not return an access token');
+      // A 2xx token response without a token means the configured token
+      // endpoint (e.g. a proxy/mock) is misconfigured or misbehaving — a
+      // config failure, not a permanent data error. Classifying it as config
+      // surfaces 503 on search and a config-error pause on import instead of a
+      // silent 200-empty search / unrecognized import.
+      throw new IgdbConfigError('IGDB did not return an access token');
     }
     const expiresIn =
       typeof data.expires_in === 'number' && Number.isFinite(data.expires_in)
@@ -305,9 +319,13 @@ export class IgdbClient implements OnApplicationBootstrap {
    * Sends one request through the central limiter, retrying a 429 up to
    * `IGDB_MAX_ATTEMPTS` times with bounded backoff. On exhaustion the
    * retryable `IgdbError` propagates so BullMQ's outer retry still applies.
+   * `classify` maps a final non-2xx status to an error; token-endpoint callers
+   * pass `igdbTokenErrorFromStatus` so rejected credentials become config
+   * errors instead of permanent request errors.
    */
   private async send(
     makeRequest: () => Promise<IgdbHttpResponse>,
+    classify: (status: number) => IgdbError = igdbErrorFromStatus,
   ): Promise<IgdbHttpResponse> {
     for (let attempt = 1; attempt <= IGDB_MAX_ATTEMPTS; attempt += 1) {
       let response: IgdbHttpResponse;
@@ -317,7 +335,7 @@ export class IgdbClient implements OnApplicationBootstrap {
         throw this.toIgdbError(error);
       }
       if (response.ok) return response;
-      const error = igdbErrorFromStatus(response.status);
+      const error = classify(response.status);
       if (response.status !== 429 || attempt >= IGDB_MAX_ATTEMPTS) {
         throw error;
       }

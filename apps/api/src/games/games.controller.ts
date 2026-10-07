@@ -25,7 +25,9 @@ import { CreateGameDto } from './dto/create-game.dto';
 import { EnrichGameDto } from './dto/enrich-game.dto';
 import { EnrichGameResponseModel } from './dto/enrich-game-response.model';
 import { GameIdParamDto } from './dto/game-id-param.dto';
+import { GameSearchResponseModel } from './dto/game-search-response.model';
 import { ListGamesQueryDto } from './dto/list-games-query.dto';
+import { SearchGamesQueryDto } from './dto/search-games-query.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
 import {
   GameDetailModel,
@@ -54,6 +56,21 @@ export class GamesController {
     return this.gamesService.list(query);
   }
 
+  @Get('search')
+  @ApiOperation({
+    summary:
+      'Search the external game database for manual add (debounce-protected)',
+  })
+  @ApiOkResponse({ type: GameSearchResponseModel })
+  @ApiServiceUnavailableResponse({
+    description: 'Game database unavailable or not configured',
+  })
+  search(
+    @Query() query: SearchGamesQueryDto,
+  ): Promise<GameSearchResponseModel> {
+    return this.gamesService.search(query);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get a single game by id' })
   @ApiParam({ name: 'id', type: Number })
@@ -69,8 +86,27 @@ export class GamesController {
   @ApiBadRequestResponse({
     description: 'Validation error or unknown platformId',
   })
+  @ApiConflictResponse({
+    description:
+      'A game with the same identity is already in the catalog (`code=GAME_ALREADY_IN_CATALOG`; the existing game is in the body). A picked `candidate` that no longer appears in a fresh search also returns 409.',
+  })
+  @ApiServiceUnavailableResponse({
+    description: 'Game database unavailable or not configured',
+  })
   create(@Body() dto: CreateGameDto): Promise<GameDetailModel> {
     return this.gamesService.create(dto);
+  }
+
+  @Post(':id/copies')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Increment a game copy count (add another physical copy)',
+  })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiOkResponse({ type: GameDetailModel })
+  @ApiNotFoundResponse({ description: 'Game not found' })
+  addCopy(@Param() params: GameIdParamDto): Promise<GameDetailModel> {
+    return this.gamesService.addCopy(params.id);
   }
 
   @Patch(':id')

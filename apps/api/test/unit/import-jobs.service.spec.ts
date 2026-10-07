@@ -65,6 +65,8 @@ function createService(): {
   queueControl: QueueControlMock;
   enrichment: { enrichCandidate: jest.Mock };
   platforms: { createFromImport: jest.Mock };
+  identity: { findExisting: jest.Mock };
+  maintenance: { removeIfUnreferenced: jest.Mock };
 } {
   const mock: ImportJobsPrismaMock = {
     importJob: {
@@ -125,6 +127,10 @@ function createService(): {
   };
   const enrichment = { enrichCandidate: jest.fn() };
   const platforms = { createFromImport: jest.fn() };
+  const identity = { findExisting: jest.fn(() => Promise.resolve(null)) };
+  const maintenance = {
+    removeIfUnreferenced: jest.fn(() => Promise.resolve()),
+  };
   return {
     service: new ImportJobsService(
       mock as unknown as PrismaService,
@@ -132,12 +138,16 @@ function createService(): {
       queueControl as unknown as QueueControlService,
       enrichment as unknown as GameEnrichmentService,
       platforms as unknown as PlatformsService,
+      identity as never,
+      maintenance as never,
     ),
     mock,
     queue,
     queueControl,
     enrichment,
     platforms,
+    identity,
+    maintenance,
   };
 }
 
@@ -186,10 +196,20 @@ describe('ImportJobsService (unit)', () => {
   let queueControl: QueueControlMock;
   let enrichment: { enrichCandidate: jest.Mock };
   let platforms: { createFromImport: jest.Mock };
+  let identity: { findExisting: jest.Mock };
+  let maintenance: { removeIfUnreferenced: jest.Mock };
 
   beforeEach(() => {
-    ({ service, mock, queue, queueControl, enrichment, platforms } =
-      createService());
+    ({
+      service,
+      mock,
+      queue,
+      queueControl,
+      enrichment,
+      platforms,
+      identity,
+      maintenance,
+    } = createService());
   });
 
   describe('list', () => {
@@ -1377,6 +1397,42 @@ describe('ImportJobsService (unit)', () => {
       expect(mock.game.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ source: 'MobyGames' }) as unknown,
       });
+    });
+
+    it('links an already-catalogued identity without creating a row or incrementing copies', async () => {
+      enrichment.enrichCandidate.mockResolvedValue(enriched);
+      identity.findExisting.mockResolvedValue({ id: 77, copyCount: 1 });
+      mock.recognizedItem.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.commitImportBatch(5, {
+        resolved: [
+          { recognizedItemId: 1, platformId: 3, edition: 'GOTY', candidate },
+        ],
+        unrecognized: [],
+        transient: [],
+      });
+
+      // The identity lookup uses the enriched row's identity and the transaction.
+      expect(identity.findExisting).toHaveBeenCalledWith(
+        {
+          title: 'Halo',
+          platformId: 3,
+          edition: 'GOTY',
+          source: 'IGDB',
+          externalId: 7,
+        },
+        mock,
+      );
+      // No second catalog row; the recognized item links to the existing game.
+      expect(mock.game.create).not.toHaveBeenCalled();
+      expect(mock.recognizedItem.updateMany).toHaveBeenCalledWith({
+        where: { id: 1, importJobId: 5, status: 'pending' },
+        data: { status: 'imported', gameId: 77 },
+      });
+      // The downloaded candidate cover was not adopted and is cleaned up.
+      expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(
+        enriched.coverUrl,
+      );
     });
 
     it('rolls the batch back when the item was already resolved', async () => {

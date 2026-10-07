@@ -4,6 +4,7 @@ import {
   type CatalogCandidate,
   type CatalogPlatform,
   type CatalogResolution,
+  type CatalogSearchResult,
   GameCatalogResolver,
   type GameCatalogSource,
 } from './game-catalog.resolver';
@@ -13,7 +14,8 @@ import {
   type MobygameGame,
   type MobygamePlatform,
 } from './mobygames.client';
-import { selectConfidentMatch } from './title-match';
+import { rankTitleMatches, selectConfidentMatch } from './title-match';
+import { CATALOG_SEARCH_MAX_RESULTS } from './catalog-search.options';
 
 /**
  * MobyGames-backed catalog source (card 4.5). Consulted only after IGDB returns
@@ -43,6 +45,52 @@ export class MobygamesGameCatalogResolver
       return this.errorResolution(error);
     }
     return this.mapResolution(item.title, games);
+  }
+
+  /** Ranked title search for manual add; a human picks from the list. */
+  override async search(query: string): Promise<CatalogSearchResult> {
+    let games: MobygameGame[];
+    try {
+      games = await this.client.searchGames(query);
+    } catch (error) {
+      return this.searchErrorResolution(error);
+    }
+    return this.mapSearchResult(query, games);
+  }
+
+  /** Ranks an already-fetched list, degrading a malformed row to an empty list. */
+  private mapSearchResult(
+    query: string,
+    games: readonly MobygameGame[],
+  ): CatalogSearchResult {
+    try {
+      return {
+        kind: 'matches',
+        candidates: rankTitleMatches(
+          query,
+          games.map((game) => ({ name: game.title, game })),
+        )
+          .filter((match) => match.score > 0)
+          .slice(0, CATALOG_SEARCH_MAX_RESULTS)
+          .map((match) => toCandidate(match.game.game)),
+      };
+    } catch {
+      return { kind: 'matches', candidates: [] };
+    }
+  }
+
+  private searchErrorResolution(error: unknown): CatalogSearchResult {
+    if (error instanceof MobygamesConfigError) {
+      return {
+        kind: 'config_error',
+        source: 'mobygames',
+        reason: error.message,
+      };
+    }
+    if (error instanceof MobygamesError && error.retryable) {
+      return { kind: 'transient', reason: error.message };
+    }
+    return { kind: 'matches', candidates: [] };
   }
 
   /**

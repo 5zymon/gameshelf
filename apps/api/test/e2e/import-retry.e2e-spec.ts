@@ -39,9 +39,25 @@ function clearPhotoDir(dir: string): void {
   rmSync(dir, { recursive: true, force: true });
 }
 
+const EXTERNAL_IDS_BY_TITLE = new Map<string, number>();
+
+/**
+ * Deterministic, unique-per-title external id. A real catalog returns one
+ * record per game, so two differently-titled fixtures must not share an
+ * `externalId` (the shared identity rule would otherwise link them into one
+ * row).
+ */
+function externalIdFor(title: string): number {
+  const existing = EXTERNAL_IDS_BY_TITLE.get(title);
+  if (existing !== undefined) return existing;
+  const id = EXTERNAL_IDS_BY_TITLE.size + 1;
+  EXTERNAL_IDS_BY_TITLE.set(title, id);
+  return id;
+}
+
 function candidate(title: string): CatalogCandidate {
   return {
-    externalId: 1,
+    externalId: externalIdFor(title),
     title,
     releaseYear: 2001,
     publisher: 'Sony Interactive Entertainment',

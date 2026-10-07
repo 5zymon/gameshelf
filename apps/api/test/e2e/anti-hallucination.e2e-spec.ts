@@ -72,8 +72,12 @@ describe('Anti-hallucination validation (e2e)', () => {
   beforeAll(async () => {
     igdbResolve = jest.fn<Promise<CatalogResolution>, [RecognizedItem]>();
     fallbackResolve = jest.fn<Promise<CatalogResolution>, [RecognizedItem]>();
-    igdb = { label: 'IGDB', resolve: igdbResolve };
-    fallback = { label: 'MobyGames', resolve: fallbackResolve };
+    igdb = { label: 'IGDB', resolve: igdbResolve, search: jest.fn() };
+    fallback = {
+      label: 'MobyGames',
+      resolve: fallbackResolve,
+      search: jest.fn(),
+    };
     vision = {
       recognize: jest.fn((): Promise<VisionRecognitionResult> =>
         Promise.resolve({ items: [], countVisible: null }),

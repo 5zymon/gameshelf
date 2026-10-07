@@ -333,3 +333,116 @@ describe('MobygamesGameCatalogResolver (unit)', () => {
     ]);
   });
 });
+
+describe('MobygamesGameCatalogResolver.search (unit)', () => {
+  it('returns ranked candidates (score > 0) with cover and metadata', async () => {
+    const search = jest
+      .fn<Promise<MobygameGame[]>, [string]>()
+      .mockResolvedValue([
+        game({ game_id: 9, title: 'Halo 2' }),
+        game({
+          game_id: 42,
+          title: 'Halo',
+          genres: [{ id: 1, name: 'Shooter' }],
+          covers: [
+            { images: [{ image_url: 'https://cdn.mobygames.com/halo.jpg' }] },
+          ],
+          platforms: [
+            {
+              platform_id: 5,
+              name: 'Xbox',
+              release_date: '2001-11-15',
+              releases: [
+                {
+                  release_date: '2001-11-15',
+                  companies: [
+                    {
+                      company_id: 9,
+                      company_name: 'Bungie',
+                      role: 'Published by',
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        }),
+      ]);
+    const resolver = createResolver(search);
+
+    const result = await resolver.search('Halo');
+
+    expect(search).toHaveBeenCalledWith('Halo');
+    expect(result.kind).toBe('matches');
+    if (result.kind !== 'matches') return;
+    expect(result.candidates.map((c) => c.externalId)).toEqual([42]);
+    expect(result.candidates[0]).toMatchObject({
+      externalId: 42,
+      title: 'Halo',
+      releaseYear: 2001,
+      publisher: 'Bungie',
+      genre: 'Shooter',
+      coverUrl: 'https://cdn.mobygames.com/halo.jpg',
+      source: 'MobyGames',
+    });
+  });
+
+  it('maps a MobygamesConfigError to a config_error result', async () => {
+    const search = jest
+      .fn<Promise<MobygameGame[]>, [string]>()
+      .mockRejectedValue(
+        new MobygamesConfigError('MobyGames rejected the credentials'),
+      );
+    const resolver = createResolver(search);
+
+    await expect(resolver.search('Halo')).resolves.toEqual({
+      kind: 'config_error',
+      source: 'mobygames',
+      reason: 'MobyGames rejected the credentials',
+    });
+  });
+
+  it('maps a retryable MobygamesError to transient', async () => {
+    const search = jest
+      .fn<Promise<MobygameGame[]>, [string]>()
+      .mockRejectedValue(
+        new MobygamesError(true, 'MobyGames rate-limited the request'),
+      );
+    const resolver = createResolver(search);
+
+    await expect(resolver.search('Halo')).resolves.toEqual({
+      kind: 'transient',
+      reason: 'MobyGames rate-limited the request',
+    });
+  });
+
+  it('maps a permanent MobygamesError to an empty matches result', async () => {
+    const search = jest
+      .fn<Promise<MobygameGame[]>, [string]>()
+      .mockRejectedValue(new MobygamesError(false, 'MobyGames malformed'));
+    const resolver = createResolver(search);
+
+    await expect(resolver.search('Halo')).resolves.toEqual({
+      kind: 'matches',
+      candidates: [],
+    });
+  });
+
+  it('degrades a malformed row to an empty matches result rather than throwing', async () => {
+    const malformed = game({});
+    Object.defineProperty(malformed, 'platforms', {
+      get: () => {
+        throw new TypeError('malformed platforms');
+      },
+    });
+    const search = jest
+      .fn<Promise<MobygameGame[]>, [string]>()
+      .mockResolvedValue([malformed]);
+    const resolver = createResolver(search);
+
+    await expect(resolver.search('Halo')).resolves.toEqual({
+      kind: 'matches',
+      candidates: [],
+    });
+  });
+});

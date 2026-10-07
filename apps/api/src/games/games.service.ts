@@ -7,7 +7,11 @@ import {
 } from '@nestjs/common';
 import type { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { GameCatalogResolver } from '../game-catalog/game-catalog.resolver';
+import {
+  type CatalogCandidate,
+  GameCatalogResolver,
+} from '../game-catalog/game-catalog.resolver';
+import { CatalogSearchService } from '../game-catalog/catalog-search.service';
 import { GameEnrichmentService } from '../enrichment/game-enrichment.service';
 import { CoverCacheService } from '../covers/cover-cache.service';
 import { CoverMaintenanceService } from '../covers/cover-maintenance.service';
@@ -26,12 +30,16 @@ import {
   EnrichGameResponseModel,
   toEnrichCandidateModel,
 } from './dto/enrich-game-response.model';
+import { GameSearchResponseModel } from './dto/game-search-response.model';
 import {
   GameDetailModel,
   ListGamesResponseModel,
 } from './dto/game-response.model';
 import { ListGamesQueryDto } from './dto/list-games-query.dto';
+import { SearchGamesQueryDto } from './dto/search-games-query.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
+import { GAME_ALREADY_IN_CATALOG, type GameIdentity } from './game-identity';
+import { GameIdentityService } from './game-identity.service';
 import {
   PLATFORM_SELECT,
   toGameDetail,
@@ -48,7 +56,9 @@ interface CoverWrite {
 export class GamesService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly catalog: GameCatalogResolver,
+    private readonly catalog: GameCatalogResolver, // enrich
+    private readonly catalogSearch: CatalogSearchService, // manual-add search
+    private readonly identity: GameIdentityService,
     private readonly enrichment: GameEnrichmentService,
     private readonly covers: CoverCacheService,
     private readonly preview: CoverPreviewService,
@@ -110,8 +120,95 @@ export class GamesService {
     return toGameDetail(game);
   }
 
+  async search(query: SearchGamesQueryDto): Promise<GameSearchResponseModel> {
+    const result = await this.catalogSearch.search(query.q ?? '');
+    if (result.kind !== 'matches') {
+      throw new ServiceUnavailableException(result.reason);
+    }
+    return {
+      candidates: result.candidates.map((candidate) =>
+        toEnrichCandidateModel(
+          candidate,
+          this.preview.previewUrl(candidate.coverUrl),
+        ),
+      ),
+    };
+  }
+
   async create(dto: CreateGameDto): Promise<GameDetailModel> {
     await this.assertPlatformExists(dto.platformId);
+    const edition = dto.edition ?? null;
+
+    // 1. Establish the identity, resolving the picked candidate first.
+    let candidate: CatalogCandidate | null = null;
+    if (dto.candidate !== undefined) {
+      const picked = dto.candidate;
+      const result = await this.catalogSearch.search(dto.title);
+      if (result.kind !== 'matches') {
+        throw new ServiceUnavailableException(result.reason);
+      }
+      candidate =
+        result.candidates.find(
+          (c) =>
+            c.source === picked.source && c.externalId === picked.externalId,
+        ) ?? null;
+      if (candidate === null) {
+        throw new ConflictException(
+          'The selected candidate is no longer available; run the search again',
+        );
+      }
+    }
+    const identity: GameIdentity =
+      candidate === null
+        ? {
+            title: dto.title,
+            platformId: dto.platformId,
+            edition,
+            source: 'MANUAL',
+            externalId: null,
+          }
+        : {
+            title: candidate.title,
+            platformId: dto.platformId,
+            edition,
+            source: candidate.source,
+            externalId: candidate.externalId,
+          };
+
+    // 2. Duplicate → offer "add another copy" (no write).
+    const existing = await this.identity.findExisting(identity);
+    if (existing !== null) {
+      const existingGame = await this.prisma.game.findUnique({
+        where: { id: existing.id },
+        include: { platform: { select: PLATFORM_SELECT } },
+      });
+      if (existingGame !== null) {
+        throw new ConflictException({
+          statusCode: 409,
+          error: 'Conflict',
+          code: GAME_ALREADY_IN_CATALOG,
+          message: 'This game is already in the catalog — add another copy?',
+          game: toGameDetail(existingGame),
+        });
+      }
+      // row deleted in the race window: fall through and create
+    }
+
+    // 3. Linked path: reuse the import mapping (candidate is source of truth for
+    //    metadata + cover; platform/edition are the user's confirmed inputs).
+    if (candidate !== null) {
+      const game = await this.prisma.game.create({
+        data: await this.enrichment.enrichCandidate(
+          candidate,
+          dto.platformId,
+          edition,
+        ),
+        include: { platform: { select: PLATFORM_SELECT } },
+      });
+      return toGameDetail(game);
+    }
+
+    // 4. Unlinked typed path: current behavior, now guarded by the identity check.
     const editedNow = TRACKED_METADATA_FIELDS.filter(
       (field) => dto[field] !== undefined,
     );
@@ -120,7 +217,7 @@ export class GamesService {
       data: {
         title: dto.title,
         platformId: dto.platformId,
-        edition: dto.edition ?? null,
+        edition,
         releaseYear: dto.releaseYear ?? null,
         publisher: dto.publisher ?? null,
         genre: dto.genre ?? null,
@@ -131,6 +228,22 @@ export class GamesService {
           userEditedFields: serializeEditedFields(editedNow),
         }),
       },
+      include: { platform: { select: PLATFORM_SELECT } },
+    });
+    return toGameDetail(game);
+  }
+
+  async addCopy(id: number): Promise<GameDetailModel> {
+    const existing = await this.prisma.game.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+    if (!existing) {
+      throw new NotFoundException(`Game with id ${String(id)} not found`);
+    }
+    const game = await this.prisma.game.update({
+      where: { id },
+      data: { copyCount: { increment: 1 } }, // atomic
       include: { platform: { select: PLATFORM_SELECT } },
     });
     return toGameDetail(game);

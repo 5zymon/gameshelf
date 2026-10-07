@@ -9,7 +9,8 @@ import {
   IGDB_CLIENT_SECRET_ENV,
   parseRetryAfter,
 } from '../../src/game-catalog/igdb.client';
-import { IgdbError } from '../../src/game-catalog/igdb.errors';
+import { IgdbConfigError, IgdbError } from '../../src/game-catalog/igdb.errors';
+import { IgdbGameCatalogResolver } from '../../src/game-catalog/igdb-game-catalog.resolver';
 import {
   IGDB_MAX_ATTEMPTS,
   IGDB_TOKEN_URL_DEFAULT,
@@ -549,6 +550,159 @@ describe('IgdbClient (unit)', () => {
     expect(health.status).toBe('error');
     expect(health.token).toBe('error');
     expect(health.message).toContain('IGDB_CLIENT_ID');
+  });
+});
+
+describe('IgdbClient token-endpoint classification (unit)', () => {
+  beforeEach(() => {
+    // Instant retries keep the 429 exhaustion test deterministic and fast.
+    jest.spyOn(globalThis, 'setTimeout').mockImplementation(((
+      callback: (...args: unknown[]) => void,
+    ) => {
+      callback();
+      return 0 as unknown as NodeJS.Timeout;
+    }) as typeof setTimeout);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  /** A client whose token endpoint is driven by `tokenResponse`. */
+  function clientWithTokenResponse(
+    tokenResponse: () => Promise<IgdbHttpResponse>,
+  ): { client: IgdbClient; http: FakeHttpClient } {
+    const http = new FakeHttpClient((request) =>
+      request.url === TOKEN_URL
+        ? tokenResponse()
+        : Promise.resolve(httpResponse(200, [])),
+    );
+    return {
+      client: new IgdbClient(http, config(), permissiveLimiter()),
+      http,
+    };
+  }
+
+  it('treats a token-endpoint HTTP 400 invalid client as a config error', async () => {
+    const { client, http } = clientWithTokenResponse(() =>
+      Promise.resolve(
+        httpResponse(400, { status: 400, message: 'invalid client' }),
+      ),
+    );
+
+    const error = await client.searchGames('halo').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(IgdbConfigError);
+    expect((error as IgdbError).retryable).toBe(false);
+    // Rejected at token acquisition; no games request is ever sent.
+    expect(http.requests.filter((r) => r.url === GAMES_URL)).toHaveLength(0);
+  });
+
+  it.each([401, 403])(
+    'treats a token-endpoint HTTP %i as a config error',
+    async (status) => {
+      const { client } = clientWithTokenResponse(() =>
+        Promise.resolve(httpResponse(status, { message: 'rejected' })),
+      );
+
+      const error = await client.searchGames('halo').catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(IgdbConfigError);
+      expect((error as IgdbError).retryable).toBe(false);
+    },
+  );
+
+  it.each([500, 503])(
+    'keeps a token-endpoint HTTP %i retryable/transient',
+    async (status) => {
+      const { client } = clientWithTokenResponse(() =>
+        Promise.resolve(httpResponse(status, { message: 'unavailable' })),
+      );
+
+      const error = await client.searchGames('halo').catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(IgdbError);
+      expect(error).not.toBeInstanceOf(IgdbConfigError);
+      expect((error as IgdbError).retryable).toBe(true);
+    },
+  );
+
+  it('keeps a token-endpoint 429 retryable after exhausting attempts', async () => {
+    const { client, http } = clientWithTokenResponse(() =>
+      Promise.resolve(httpResponse(429, { message: 'too many requests' })),
+    );
+
+    const error = await client.searchGames('halo').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(IgdbError);
+    expect(error).not.toBeInstanceOf(IgdbConfigError);
+    expect((error as IgdbError).retryable).toBe(true);
+    expect(http.requests.filter((r) => r.url === TOKEN_URL)).toHaveLength(
+      IGDB_MAX_ATTEMPTS,
+    );
+  });
+
+  it('keeps a token-endpoint network failure retryable/transient', async () => {
+    const { client } = clientWithTokenResponse(() =>
+      Promise.reject(new Error('ECONNRESET')),
+    );
+
+    const error = await client.searchGames('halo').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(IgdbError);
+    expect(error).not.toBeInstanceOf(IgdbConfigError);
+    expect((error as IgdbError).retryable).toBe(true);
+    expect((error as IgdbError).message).toBe('IGDB could not be reached');
+  });
+
+  it('maps a token 400 config error to a resolver config_error (-> 503)', async () => {
+    const { client } = clientWithTokenResponse(() =>
+      Promise.resolve(
+        httpResponse(400, { status: 400, message: 'invalid client' }),
+      ),
+    );
+    const resolver = new IgdbGameCatalogResolver(client);
+
+    const result = await resolver.search('halo');
+
+    expect(result.kind).toBe('config_error');
+    if (result.kind !== 'config_error') return;
+    expect(result.source).toBe('igdb');
+    expect(result.reason).toContain('IGDB token endpoint rejected the request');
+  });
+
+  it('treats a 2xx token response without an access token as a config error', async () => {
+    const { client, http } = clientWithTokenResponse(() =>
+      Promise.resolve(httpResponse(200, {})),
+    );
+
+    const error = await client.searchGames('halo').catch((e: unknown) => e);
+
+    expect(error).toBeInstanceOf(IgdbConfigError);
+    expect((error as IgdbError).retryable).toBe(false);
+    // Misconfigured token endpoint (2xx, no token): fail at token
+    // acquisition, so no games request is ever sent and no secret leaks.
+    expect(http.requests.filter((r) => r.url === GAMES_URL)).toHaveLength(0);
+    expect((error as IgdbError).message).toBe(
+      'IGDB did not return an access token',
+    );
+    expect((error as IgdbError).message).not.toContain('client-secret');
+    expect((error as IgdbError).message).not.toContain('client_secret');
+    expect((error as IgdbError).message).not.toContain('Bearer');
+  });
+
+  it('maps a 2xx token response without an access token to a config_error (-> 503)', async () => {
+    const { client } = clientWithTokenResponse(() =>
+      Promise.resolve(httpResponse(200, {})),
+    );
+    const resolver = new IgdbGameCatalogResolver(client);
+
+    const result = await resolver.search('halo');
+
+    expect(result.kind).toBe('config_error');
+    if (result.kind !== 'config_error') return;
+    expect(result.source).toBe('igdb');
+    expect(result.reason).toBe('IGDB did not return an access token');
   });
 });
 

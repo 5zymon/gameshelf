@@ -45,6 +45,17 @@ export type CatalogResolution =
   | { kind: 'config_error'; source: GameCatalogConfigSource; reason: string };
 
 /**
+ * Outcome of a manual-add title search:
+ * - `matches` — a ranked candidate list (possibly empty);
+ * - `transient` — the lookup failed and a retry may succeed (e.g. 429);
+ * - `config_error` — rejected/absent credentials.
+ */
+export type CatalogSearchResult =
+  | { kind: 'matches'; candidates: CatalogCandidate[] }
+  | { kind: 'transient'; reason: string }
+  | { kind: 'config_error'; source: GameCatalogConfigSource; reason: string };
+
+/**
  * One external game-database source in the ordered validation chain.
  * A source returns `matched`, `unrecognized` (no candidate in *this* source),
  * or `transient` (lookup failed, retry may succeed). It never throws: errors are
@@ -55,6 +66,8 @@ export interface GameCatalogSource {
   /** Stable label used in the aggregated "no source matched" reason. */
   readonly label: string;
   resolve(item: RecognizedItem): Promise<CatalogResolution>;
+  /** Ranked title search for manual add (human picks). Never throws. */
+  search(query: string): Promise<CatalogSearchResult>;
 }
 
 /** Nest DI token for the ordered source list (array order = validation order). */
@@ -68,6 +81,9 @@ export const GAME_CATALOG_SOURCES = 'GAME_CATALOG_SOURCES';
  */
 export abstract class GameCatalogResolver {
   abstract resolve(item: RecognizedItem): Promise<CatalogResolution>;
+
+  /** Ranked title search for manual add (human picks). Never throws. */
+  abstract search(query: string): Promise<CatalogSearchResult>;
 
   /**
    * Validates a batch of titles. The IGDB implementation overrides this with one

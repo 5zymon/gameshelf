@@ -48,6 +48,7 @@ export function seedGame(
     publisher?: string | null;
     genre?: string | null;
     playerCount?: number | null;
+    copyCount?: number;
     coverUrl?: string | null;
     sourceCoverUrl?: string | null;
     source?: 'IGDB' | 'MobyGames' | 'MANUAL';

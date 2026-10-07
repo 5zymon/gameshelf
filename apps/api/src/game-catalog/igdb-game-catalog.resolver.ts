@@ -4,6 +4,7 @@ import {
   type CatalogCandidate,
   type CatalogPlatform,
   type CatalogResolution,
+  type CatalogSearchResult,
   GameCatalogResolver,
   type GameCatalogSource,
 } from './game-catalog.resolver';
@@ -13,7 +14,8 @@ import {
   type IgdbGame,
   type IgdbMultiplayerMode,
 } from './igdb.client';
-import { selectConfidentMatch } from './title-match';
+import { rankTitleMatches, selectConfidentMatch } from './title-match';
+import { CATALOG_SEARCH_MAX_RESULTS } from './catalog-search.options';
 
 // Kept as this module's public surface for existing importers/tests; the actual
 // implementation lives with the rest of the title-matching logic.
@@ -45,6 +47,23 @@ export class IgdbGameCatalogResolver
       return this.errorResolution(error);
     }
     return this.toResolution(item.title, games);
+  }
+
+  /** Ranked title search for manual add; a human picks from the list. */
+  override async search(query: string): Promise<CatalogSearchResult> {
+    let games: IgdbGame[];
+    try {
+      games = await this.igdb.searchGames(query);
+    } catch (error) {
+      return this.searchErrorResolution(error);
+    }
+    return {
+      kind: 'matches',
+      candidates: rankTitleMatches(query, games)
+        .filter((match) => match.score > 0)
+        .slice(0, CATALOG_SEARCH_MAX_RESULTS)
+        .map((match) => toCandidate(match.game)),
+    };
   }
 
   /**
@@ -83,6 +102,16 @@ export class IgdbGameCatalogResolver
           ? error.message
           : 'The game database lookup failed',
     };
+  }
+
+  private searchErrorResolution(error: unknown): CatalogSearchResult {
+    if (error instanceof IgdbConfigError) {
+      return { kind: 'config_error', source: 'igdb', reason: error.message };
+    }
+    if (error instanceof IgdbError && error.retryable) {
+      return { kind: 'transient', reason: error.message };
+    }
+    return { kind: 'matches', candidates: [] };
   }
 
   private toResolution(

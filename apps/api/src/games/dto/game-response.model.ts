@@ -66,6 +66,12 @@ export class GameDetailModel {
   @ApiPropertyOptional({ nullable: true, example: 1 })
   playerCount!: number | null;
 
+  @ApiProperty({
+    example: 1,
+    description: 'Physical copies owned (identity is one row)',
+  })
+  copyCount!: number;
+
   @ApiPropertyOptional({
     nullable: true,
     example: '/api/covers/0123456789abcdef0123456789abcdef.jpg',

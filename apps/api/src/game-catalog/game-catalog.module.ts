@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { CatalogSearchService } from './catalog-search.service';
 import { ChainedGameCatalogResolver } from './chained-game-catalog.resolver';
 import {
   GAME_CATALOG_SOURCES,
@@ -76,9 +77,11 @@ export function catalogSourceList(
       ],
     },
     { provide: GameCatalogResolver, useClass: ChainedGameCatalogResolver },
+    CatalogSearchService,
   ],
   exports: [
     GameCatalogResolver,
+    CatalogSearchService,
     IgdbClient,
     IgdbRateLimiter,
     MobygamesClient,
