@@ -186,6 +186,7 @@ describe('IgdbGameCatalogResolver (unit)', () => {
         genre: 'Shooter',
         coverUrl: 'https://images.igdb.com/igdb/image/upload/t_thumb/halo.jpg',
         platforms: [{ igdbId: 11, name: 'Xbox', abbreviation: 'XBOX' }],
+        source: 'IGDB',
         raw: expect.anything() as unknown,
       },
     });

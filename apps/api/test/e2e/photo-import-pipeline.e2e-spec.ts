@@ -68,6 +68,7 @@ function candidate(title: string): CatalogCandidate {
     platforms: [
       { igdbId: PLATFORM_IGDB_ID, name: 'PlayStation 5', abbreviation: 'PS5' },
     ],
+    source: 'IGDB',
     raw: { title },
   };
 }

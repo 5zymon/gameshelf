@@ -173,6 +173,61 @@ describe('Anti-hallucination validation (e2e)', () => {
     expect(existsSync(join(photoDir, photoRef))).toBe(false);
   });
 
+  it('records MobyGames provenance when the fallback resolves a title IGDB missed', async () => {
+    const { id, photoRef } = await seedJob();
+    vision.recognize.mockResolvedValue({
+      items: [recognized('Obscure Gem')],
+      countVisible: 1,
+    });
+    igdbResolve.mockResolvedValue({
+      kind: 'unrecognized',
+      reason: 'No IGDB game matched the title',
+    });
+    fallbackResolve.mockResolvedValue({
+      kind: 'matched',
+      candidate: {
+        externalId: 777,
+        title: 'Obscure Gem',
+        releaseYear: 1999,
+        publisher: 'Indie Co',
+        genre: 'Puzzle',
+        coverUrl: null,
+        platforms: [
+          { igdbId: null, name: 'PlayStation 5', abbreviation: null },
+        ],
+        source: 'MobyGames',
+        raw: { game_id: 777 },
+      },
+    });
+
+    const result = await app
+      .get(PhotoImportHandler)
+      .handle(makeJob(id, photoRef));
+
+    expect(result).toEqual({
+      recognizedCount: 1,
+      importedCount: 1,
+      unrecognizedCount: 0,
+    });
+
+    const games = await test.prisma.game.findMany();
+    expect(games).toHaveLength(1);
+    expect(games[0]?.title).toBe('Obscure Gem');
+    expect(games[0]?.source).toBe('MobyGames');
+
+    expect(igdbResolve).toHaveBeenCalledTimes(1);
+    expect(fallbackResolve).toHaveBeenCalledTimes(1);
+    expect(firstCallOrder(igdbResolve)).toBeLessThan(
+      firstCallOrder(fallbackResolve),
+    );
+
+    const job = await test.prisma.importJob.findUniqueOrThrow({
+      where: { id },
+    });
+    expect(job.status).toBe('done');
+    expect(existsSync(join(photoDir, photoRef))).toBe(false);
+  });
+
   it('short-circuits a transient source and keeps the item pending for retry', async () => {
     const { id, photoRef } = await seedJob();
     vision.recognize.mockResolvedValue({

@@ -871,7 +871,7 @@ export class ImportJobsService {
             coverUrl: item.candidate.coverUrl,
             rawMetadata: JSON.stringify(item.candidate.raw),
             enrichedAt: new Date(),
-            source: 'IGDB',
+            source: item.candidate.source,
           },
         });
         const claim = await tx.recognizedItem.updateMany({

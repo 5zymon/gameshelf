@@ -24,4 +24,4 @@ export interface PhotoImportJobResult {
 }
 
 /** Which external integration's configuration error paused the queue (3.10). */
-export type ConfigErrorSource = 'llm' | 'igdb';
+export type ConfigErrorSource = 'llm' | 'igdb' | 'mobygames';

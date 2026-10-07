@@ -1,8 +1,8 @@
 ---
 type: Feature
 title: Queue Pause on Configuration Error
-description: A rejected/absent LLM or IGDB credential fails the current photo, durably pauses the single photo-import queue, surfaces the pause on batch progress, and resumes explicitly or when the LLM key is saved.
-tags: [import, worker, bullmq, igdb, vision, reliability]
+description: A rejected/absent LLM, IGDB, or MobyGames credential fails the current photo, durably pauses the single photo-import queue, surfaces the pause on batch progress, and resumes explicitly or when the LLM key is saved.
+tags: [import, worker, bullmq, igdb, mobygames, vision, reliability]
 status: draft
 generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-07T07:30:00Z }
 ---
@@ -33,11 +33,11 @@ resume on boot).
 failure paths share:
 
 - `ConfigurationImportError` — thrown by the pipeline when a catalog resolution
-  is `config_error`; carries `source: 'igdb' | 'llm'`.
-- `configErrorSource(error): 'llm' | 'igdb' | null` — returns the integration to
-  fix for a `ConfigurationImportError`, `IgdbConfigError`,
-  `VisionUnavailableError`, or an `unauthorized` `VisionProviderError`; `null`
-  for everything else.
+  is `config_error`; carries `source: 'igdb' | 'llm' | 'mobygames'`.
+- `configErrorSource(error): 'llm' | 'igdb' | 'mobygames' | null` — returns the
+  integration to fix for a `ConfigurationImportError`, `IgdbConfigError`,
+  `MobygamesConfigError`, `VisionUnavailableError`, or an `unauthorized`
+  `VisionProviderError`; `null` for everything else.
 
 `isRetryableImportError` consults `configErrorSource` first, so a configuration
 error is **never** retryable, and `photoImportFailureReason` returns the safe
@@ -56,6 +56,15 @@ IGDB makes the distinction structural:
   `ChainedGameCatalogResolver.resolve` short-circuits `config_error` exactly
   like `transient` (the fallback source is never consulted). `resolveBatch`
   reuses the same mapping.
+
+MobyGames follows the same split: `MobygamesConfigError extends MobygamesError`
+(`401`/`403` → config error), the resolver maps it to
+`{ kind: 'config_error', source: 'mobygames' }`, and the chain short-circuits it
+identically. Crucially, an **absent** `MOBYGAMES_API_KEY` is _not_ a config
+error: the fallback source is not registered at all, the chain stays `[igdb]`,
+and a title IGDB misses is simply `unrecognized` — no pause. Only a _configured
+but rejected_ key pauses the queue, which is why `.env.example` keeps the key
+commented. See [MobyGames Fallback](/mobygames-fallback.md).
 
 # Pipeline behaviour
 
@@ -130,6 +139,5 @@ never fails the settings write. See [LLM Settings API](/llm-settings-api.md).
 # Out of scope
 
 - The frontend "queue paused" banner (ticket 6.3).
-- The MobyGames client (ticket 4.5); `GameCatalogConfigSource` is `'igdb'` today.
 - Blocking `POST /import/upload` while the queue is paused.
 - Surfacing the pause on `/health/queue`.

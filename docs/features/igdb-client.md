@@ -230,8 +230,8 @@ The version-token guard treats numerals and roman numerals as installment
 markers, so a title whose only difference is the _system_ scores 0 and is
 reported `unrecognized`: `GTA 5` vs `GTA V`, `Final Fantasy 7` vs
 `Final Fantasy VII`. This is an intentional false negative in the safe
-direction — it never force-matches a different edition — and is relevant to the
-ticket 4.5 fallback.
+direction — it never force-matches a different edition — and applies equally to
+the [MobyGames fallback](/mobygames-fallback.md) (ticket 4.5).
 
 The guard operates on whitespace-separated tokens, so a digit glued to a word —
 a candidate literally named `Halo2` or `FIFA23` — is **not** treated as a
@@ -259,8 +259,9 @@ queue, `activeCount`), `igdb-health.service.spec.ts`,
 
 # Out of scope
 
-- MobyGames fallback (4.5); wiring `resolveBatch()` into the pipeline is
-  deferred (not part of 4.4).
+- The MobyGames fallback is a **separate** source in the same chain and its own
+  client/limiter — see [MobyGames Fallback](/mobygames-fallback.md). Wiring
+  `resolveBatch()` into the pipeline is deferred (not part of 4.4).
 - Multi-instance sharing: the limiter and token cache are per process, so the
   app assumes a single API instance (or accepts that each instance enforces its
   own limits).

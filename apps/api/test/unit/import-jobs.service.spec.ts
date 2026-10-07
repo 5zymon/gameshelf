@@ -1181,6 +1181,7 @@ describe('ImportJobsService (unit)', () => {
       genre: 'Shooter',
       coverUrl: 'https://images.igdb.com/halo.jpg',
       platforms: [],
+      source: 'IGDB' as const,
       raw: { id: 7 },
     };
 
@@ -1214,6 +1215,28 @@ describe('ImportJobsService (unit)', () => {
       expect(mock.recognizedItem.updateMany).toHaveBeenCalledWith({
         where: { id: 1, importJobId: 5, status: 'pending' },
         data: { status: 'imported', gameId: 42 },
+      });
+    });
+
+    it('creates the game with source MobyGames for a fallback candidate', async () => {
+      mock.game.create.mockResolvedValue({ id: 43 });
+      mock.recognizedItem.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.commitImportBatch(5, {
+        resolved: [
+          {
+            recognizedItemId: 1,
+            platformId: 3,
+            edition: null,
+            candidate: { ...candidate, source: 'MobyGames' as const },
+          },
+        ],
+        unrecognized: [],
+        transient: [],
+      });
+
+      expect(mock.game.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ source: 'MobyGames' }) as unknown,
       });
     });
 
