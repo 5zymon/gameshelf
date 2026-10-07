@@ -83,6 +83,7 @@ function candidate(title: string): CatalogCandidate {
     genre: null,
     coverUrl: null,
     platforms: [],
+    source: 'IGDB',
     raw: {},
   };
 }
@@ -447,6 +448,39 @@ describe('PhotoImportPipelineService (unit)', () => {
     expect(h.jobs.markFailed).toHaveBeenCalledWith(
       1,
       'IGDB rejected the credentials',
+      { recognizedCount: 1, importedCount: 0, unrecognizedCount: 0 },
+    );
+    // Nothing from the batch is committed: the title stays pending.
+    expect(h.games).toHaveLength(0);
+    expect(h.items.find((item) => item.rawTitle === 'A')?.status).toBe(
+      'pending',
+    );
+    expect(h.storage.delete).not.toHaveBeenCalled();
+  });
+
+  it('pauses the queue consistently on a mobygames config_error resolution', async () => {
+    const h = createHarness();
+    h.vision.recognize.mockResolvedValue({
+      items: [recognized('A')],
+      countVisible: 1,
+    });
+    h.resolver.resolve.mockResolvedValue({
+      kind: 'config_error',
+      source: 'mobygames',
+      reason: 'MobyGames rejected the credentials',
+    });
+
+    await expect(h.pipeline.run(makeJob(0, 3))).rejects.toThrow(
+      UnrecoverableError,
+    );
+
+    expect(h.queueControl.pauseForConfig).toHaveBeenCalledWith(
+      'mobygames',
+      'MobyGames rejected the credentials',
+    );
+    expect(h.jobs.markFailed).toHaveBeenCalledWith(
+      1,
+      'MobyGames rejected the credentials',
       { recognizedCount: 1, importedCount: 0, unrecognizedCount: 0 },
     );
     // Nothing from the batch is committed: the title stays pending.

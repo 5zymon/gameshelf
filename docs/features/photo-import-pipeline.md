@@ -16,7 +16,7 @@ after [Import Photo Upload API](/import-upload-api.md) queues it. The BullMQ
 1. calls the vision provider **once** for the photo;
 2. persists the recognized item list;
 3. validates each title against the ordered external-source validation chain
-   (IGDB today);
+   (IGDB, then the optional MobyGames fallback);
 4. saves confirmed games in one MySQL transaction per batch;
 5. records unrecognized titles as `unrecognized_items`;
 6. maintains the job counters and persists the result;
@@ -165,10 +165,11 @@ registration order (array order = validation order) and returns the first
 and therefore never saved as a `Game`; see
 [Anti-hallucination Validation](/anti-hallucination-validation.md) for the
 invariant, the `transient` short-circuit, and the `UnrecognizedItem` trace.
-Ticket 4.4 registers exactly one source — `IgdbGameCatalogResolver`
-(`label = 'IGDB'`) — so production validation is IGDB-only for now. Ticket 4.5
-appends a MobyGames source (`label = 'MobyGames'`) to the same array with no
-pipeline change.
+The chain registers `IgdbGameCatalogResolver` (`label = 'IGDB'`) first and, when
+`MOBYGAMES_API_KEY` is set, `MobygamesGameCatalogResolver`
+(`label = 'MobyGames'`) second; with no key the fallback source is not registered
+and validation is IGDB-only. Either way the pipeline is unchanged; see
+[MobyGames Fallback](/mobygames-fallback.md).
 
 The IGDB source:
 
@@ -193,6 +194,14 @@ The IGDB source:
   `IgdbConfigError`) becomes `config_error` and pauses the queue (ticket 3.10,
   [Queue Pause on Configuration Error](/queue-pause-on-config-error.md)); a
   malformed query becomes `unrecognized`, and no match becomes `unrecognized`.
+
+The MobyGames source mirrors this shape: `MobygamesClient` issues one
+`GET /v2/games?title=…&fuzzy=true&limit=10&include=…&api_key=…` per title through
+its own 1 req/s / 720 req/h limiter, which **waits** at a window boundary rather
+than rejecting or firing-then-`429`-retrying; a `401`/`403` becomes
+`config_error` (pausing the queue), `429`/`5xx`/network becomes `transient`, and
+no confident match becomes `unrecognized`. The source is present only when
+`MOBYGAMES_API_KEY` is set. See [MobyGames Fallback](/mobygames-fallback.md).
 
 Because `transient` means "unknown", the chain **stops** at the first
 `transient` instead of falling through (a real title must not be permanently
@@ -224,7 +233,8 @@ first `npm run platforms:sync`) shows up as review noise. The `reason` is a
 fixed, UI-translatable token rather than prose, so the UI can render a
 dedicated message and the value stays stable if wording changes.
 
-The MobyGames fallback (ticket 4.5) appends a source to the same chain. The IGDB
+The MobyGames fallback (ticket 4.5) appends a source to the same chain and is
+consulted only after IGDB returns `unrecognized`. The IGDB
 source retains its batched `resolveBatch()` (ticket 4.3), which resolves many
 titles in two phases — a batched `/v4/multiquery` id search (≤10 sub-queries per
 request) then a batched `/v4/games` hydration (≤500 ids per request). The chain
@@ -311,7 +321,7 @@ a failed job.
 
 # Out of scope
 
-- MobyGames concrete client and rate limiting (4.5); pipeline integration of
-  batched resolution (`resolveBatch`) is deferred (not part of 4.4).
+- Pipeline integration of batched resolution (`resolveBatch`) is deferred (not
+  part of 4.4).
 - Manual item resolution (pick candidate / manual add).
 - Frontend progress/flagged-item views.

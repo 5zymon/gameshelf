@@ -101,6 +101,7 @@ function toCandidate(game: IgdbGame): CatalogCandidate {
     genre: game.genres?.[0]?.name ?? null,
     coverUrl: normalizeCoverUrl(game.cover?.url ?? null),
     platforms: (game.platforms ?? []).map(toPlatform),
+    source: 'IGDB',
     raw: game,
   };
 }

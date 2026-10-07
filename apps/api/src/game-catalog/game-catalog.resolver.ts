@@ -8,6 +8,9 @@ export interface CatalogPlatform {
   abbreviation: string | null;
 }
 
+/** Which catalog produced a candidate; maps 1:1 onto the Prisma `GameSource` enum. */
+export type CatalogSource = 'IGDB' | 'MobyGames';
+
 /** A candidate game returned by the external database. */
 export interface CatalogCandidate {
   externalId: number;
@@ -17,12 +20,13 @@ export interface CatalogCandidate {
   genre: string | null;
   coverUrl: string | null;
   platforms: CatalogPlatform[];
+  source: CatalogSource;
   /** Raw upstream payload, archived into `Game.rawMetadata`. */
   raw: unknown;
 }
 
-/** Which catalog source reported a configuration error (IGDB today; 4.5 adds MobyGames). */
-export type GameCatalogConfigSource = 'igdb';
+/** Which catalog source reported a configuration error (IGDB or MobyGames). */
+export type GameCatalogConfigSource = 'igdb' | 'mobygames';
 
 /**
  * Outcome of validating one recognized title:

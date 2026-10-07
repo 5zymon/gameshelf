@@ -1,4 +1,5 @@
 import { IgdbConfigError } from '../../src/game-catalog/igdb.errors';
+import { MobygamesConfigError } from '../../src/game-catalog/mobygames.errors';
 import {
   VisionProviderError,
   VisionUnavailableError,
@@ -68,6 +69,14 @@ describe('photoImportFailureReason (unit)', () => {
       ),
     ).toBe('IGDB rejected the credentials');
   });
+
+  it('returns the message of a MobygamesConfigError', () => {
+    expect(
+      photoImportFailureReason(
+        new MobygamesConfigError('MobyGames rejected the credentials'),
+      ),
+    ).toBe('MobyGames rejected the credentials');
+  });
 });
 
 describe('configErrorSource (unit)', () => {
@@ -85,6 +94,14 @@ describe('configErrorSource (unit)', () => {
     expect(
       configErrorSource(new IgdbConfigError('IGDB rejected the credentials')),
     ).toBe('igdb');
+  });
+
+  it('classifies MobygamesConfigError as a mobygames config error', () => {
+    expect(
+      configErrorSource(
+        new MobygamesConfigError('MobyGames rejected the credentials'),
+      ),
+    ).toBe('mobygames');
   });
 
   it('classifies a ConfigurationImportError by its source', () => {
@@ -141,6 +158,11 @@ describe('isRetryableImportError (unit)', () => {
     expect(
       isRetryableImportError(
         new IgdbConfigError('IGDB rejected the credentials'),
+      ),
+    ).toBe(false);
+    expect(
+      isRetryableImportError(
+        new MobygamesConfigError('MobyGames rejected the credentials'),
       ),
     ).toBe(false);
     expect(

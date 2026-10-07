@@ -22,6 +22,7 @@ function candidate(title: string): CatalogCandidate {
     genre: null,
     coverUrl: null,
     platforms: [],
+    source: 'IGDB',
     raw: {},
   };
 }

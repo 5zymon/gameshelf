@@ -1,4 +1,5 @@
 import { IgdbConfigError } from '../game-catalog/igdb.errors';
+import { MobygamesConfigError } from '../game-catalog/mobygames.errors';
 import {
   VisionProviderError,
   VisionUnavailableError,
@@ -42,6 +43,9 @@ export function configErrorSource(error: unknown): ConfigErrorSource | null {
   }
   if (error instanceof IgdbConfigError) {
     return 'igdb';
+  }
+  if (error instanceof MobygamesConfigError) {
+    return 'mobygames';
   }
   if (error instanceof VisionUnavailableError) {
     return 'llm';
@@ -98,6 +102,9 @@ export function photoImportFailureReason(error: unknown): string {
     return error.message;
   }
   if (error instanceof IgdbConfigError) {
+    return error.message;
+  }
+  if (error instanceof MobygamesConfigError) {
     return error.message;
   }
   return GENERIC_FAILURE_REASON;

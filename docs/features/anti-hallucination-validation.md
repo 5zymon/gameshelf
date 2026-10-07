@@ -1,8 +1,8 @@
 ---
 type: Feature
 title: Anti-hallucination Validation
-description: No `Game` row is written without an external source confirming the recognized title — an ordered IGDB → fallback → unrecognized chain with a transient short-circuit and a MANUAL-only bypass.
-tags: [import, validation, igdb, catalog]
+description: No `Game` row is written without an external source confirming the recognized title — an ordered IGDB → MobyGames → unrecognized chain with a transient short-circuit and a MANUAL-only bypass.
+tags: [import, validation, igdb, mobygames, catalog]
 status: draft
 generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T16:35:37Z }
 ---
@@ -33,11 +33,12 @@ order) and stops at the first decisive outcome:
 | `unrecognized` | This source has no candidate — **fall through** to the next source.            |
 | `transient`    | Lookup failed and a retry may succeed — **stop** and return `transient` as-is. |
 
-The sequence is therefore **IGDB → optional fallback → unrecognized**. In
-production ticket 4.4 registers exactly one source, `IgdbGameCatalogResolver`
-(`label = 'IGDB'`), so validation is IGDB-only for now. Ticket 4.5 appends a
-MobyGames source (`label = 'MobyGames'`) to the same array; the chain and the
-pipeline are unchanged.
+The sequence is therefore **IGDB → MobyGames → unrecognized**. Production
+registers `IgdbGameCatalogResolver` (`label = 'IGDB'`) first and, when
+`MOBYGAMES_API_KEY` is set, `MobygamesGameCatalogResolver`
+(`label = 'MobyGames'`) second; with no key the fallback source is not registered
+at all, so validation is IGDB-only. The chain and the pipeline are unchanged
+either way; see [MobyGames Fallback](/mobygames-fallback.md).
 
 ## Why `transient` short-circuits
 
@@ -74,9 +75,10 @@ writing a second trace row, so the trailing records are idempotent under retry
 External validation only applies to titles the vision model recognized. A user
 who adds a game by hand through `POST /games` writes a `Game` directly, with the
 `Game.source` enum defaulting to `MANUAL` (`GameSource = IGDB | MobyGames |
-MANUAL`). Manual entry is the **only** path that bypasses the chain; an
-imported, externally matched row is tagged `IGDB` (`MobyGames` reserved for
-ticket 4.5). See the [Catalog API](/catalog-api.md).
+MANUAL`). Manual entry is the **only** path that bypasses the chain; an imported
+row is tagged with the source that matched it — `IGDB` or `MobyGames`
+([MobyGames Fallback](/mobygames-fallback.md)). See the
+[Catalog API](/catalog-api.md).
 
 # Tests
 
@@ -87,10 +89,10 @@ ticket 4.5). See the [Catalog API](/catalog-api.md).
   (`Zorblax Chronicles 9000`) missing from both sources yields zero `Game` rows,
   one `UnrecognizedItem` with the raw title and the aggregated reason, and a
   `needs_attention` job; a transient IGDB leaves the item `pending`, writes no
-  `Game`/`UnrecognizedItem`, and never calls the fallback.
+  `Game`/`UnrecognizedItem`, and never calls the fallback; a title IGDB misses
+  that MobyGames matches yields one `Game` with `source = MobyGames` and a
+  `done` job.
 
 # Out of scope
 
-- The concrete MobyGames HTTP client, API-key gate, and 1 req/s limiter (4.5).
-- Persisting `source = MobyGames` provenance on a fallback match (4.5).
 - Wiring the batched `resolveBatch()` into the pipeline (deferred; not 4.4).
