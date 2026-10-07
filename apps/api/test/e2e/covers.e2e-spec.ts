@@ -5,6 +5,7 @@ import type { Server } from 'node:http';
 import { resolve } from 'node:path';
 import { Queue } from 'bullmq';
 import type { Job } from 'bullmq';
+import sharp from 'sharp';
 import type { Response as SuperAgentResponse } from 'superagent';
 import supertest from 'supertest';
 import { CoverCacheService } from '../../src/covers/cover-cache.service';
@@ -12,6 +13,8 @@ import {
   CoverHttpClient,
   type CoverHttpResponse,
 } from '../../src/covers/cover-http.client';
+import { CoverPreviewService } from '../../src/covers/cover-preview.service';
+import { CoverRecoveryService } from '../../src/covers/cover-recovery.service';
 import type {
   CatalogCandidate,
   CatalogResolution,
@@ -37,7 +40,7 @@ const queuePrefix = process.env.REDIS_QUEUE_PREFIX ?? 'bull-e2e';
 const E2E_COVERS_DIR_SUFFIX = 'gameshelf-covers-e2e';
 const PLATFORM_IGDB_ID = 167;
 const COVER_URL = 'https://images.igdb.com/igdb/image/upload/t_thumb/halo.jpg';
-const COVER_BYTES = Buffer.from('fake-cover-bytes');
+let COVER_BYTES: Buffer;
 
 function clearCoversDir(dir: string): void {
   if (!resolve(dir).endsWith(E2E_COVERS_DIR_SUFFIX)) {
@@ -105,6 +108,16 @@ describe('Cover cache (e2e)', () => {
   let coverHttp: { get: jest.Mock<Promise<CoverHttpResponse>, [string]> };
 
   beforeAll(async () => {
+    COVER_BYTES = await sharp({
+      create: {
+        width: 600,
+        height: 600,
+        channels: 3,
+        background: { r: 200, g: 100, b: 50 },
+      },
+    })
+      .png()
+      .toBuffer();
     vision = {
       recognize: jest.fn((): Promise<VisionRecognitionResult> =>
         Promise.resolve({ items: [], countVisible: null }),
@@ -234,6 +247,48 @@ describe('Cover cache (e2e)', () => {
       'private, max-age=31536000, immutable',
     );
     expect(served.body as Buffer).toEqual(COVER_BYTES);
+
+    // A locally generated thumbnail is served from our own origin (WebP,
+    // smaller than the stored cover) — never from a CDN.
+    const thumb = await test.request
+      .get(`/covers/thumbs/${file}`)
+      .buffer(true)
+      .parse(binaryParser);
+    expect(thumb.status).toBe(200);
+    expect(thumb.headers['content-type']).toContain('image/webp');
+    expect(thumb.headers['x-content-type-options']).toBe('nosniff');
+    expect(thumb.headers.location).toBeUndefined();
+    expect((thumb.body as Buffer).length).toBeLessThan(COVER_BYTES.length);
+    const storedThumb = await app.get(CoverCacheService).readThumbnail(file);
+    expect(storedThumb?.mimeType).toBe('image/webp');
+  });
+
+  it('deletes the stored cover file and thumbnail with the game', async () => {
+    const { id, photoRef } = await seedJob();
+    vision.recognize.mockResolvedValue({
+      items: [recognized('Halo: Combat Evolved')],
+      countVisible: 1,
+    });
+    resolver.resolve.mockResolvedValue({
+      kind: 'matched',
+      candidate: candidate('Halo: Combat Evolved'),
+    });
+    coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
+
+    await app.get(PhotoImportHandler).handle(makeJob(id, photoRef));
+    const game = await test.prisma.game.findFirstOrThrow();
+    const file = (game.coverUrl ?? '').split('/').pop() ?? '';
+
+    const cache = app.get(CoverCacheService);
+    await expect(cache.has(file)).resolves.toBe(true);
+    await expect(cache.readThumbnail(file)).resolves.not.toBeNull();
+
+    await test.login();
+    const del = await test.request.delete(`/games/${String(game.id)}`);
+    expect(del.status).toBe(204);
+
+    await expect(cache.has(file)).resolves.toBe(false);
+    await expect(cache.readThumbnail(file)).resolves.toBeNull();
   });
 
   it('saves the game with a null coverUrl when the download fails', async () => {
@@ -259,11 +314,58 @@ describe('Cover cache (e2e)', () => {
     });
     const game = await test.prisma.game.findFirstOrThrow();
     expect(game.coverUrl).toBeNull();
+    // The external link is retained so the background retry can heal the cover.
+    expect(game.sourceCoverUrl).toBe(COVER_URL);
     expect(game.title).toBe('Halo: Combat Evolved');
     const job = await test.prisma.importJob.findUniqueOrThrow({
       where: { id },
     });
     expect(job.status).toBe('done');
     expect(job.importedCount).toBe(1);
+    // The cover failure never fails the import item (asserted above).
+
+    // A later background retry succeeds and restores the cover + thumbnail.
+    coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
+    const recovery = app.get(CoverRecoveryService);
+    await expect(recovery.refreshGame(game.id)).resolves.toBe(true);
+    const retried = await test.prisma.game.findUniqueOrThrow({
+      where: { id: game.id },
+    });
+    expect(retried.coverUrl).toMatch(/^\/api\/covers\/[a-f0-9]{32}\.jpg$/);
+    const restoredFile = (retried.coverUrl ?? '').split('/').pop() ?? '';
+    await expect(
+      app.get(CoverCacheService).readThumbnail(restoredFile),
+    ).resolves.not.toBeNull();
+  });
+
+  it('serves an unsaved candidate through a signed same-origin preview', async () => {
+    await test.login();
+    coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
+    const previewUrl = app.get(CoverPreviewService).previewUrl(COVER_URL);
+    if (previewUrl === null) {
+      throw new Error('expected a preview URL');
+    }
+    // The browser never learns the external host.
+    expect(previewUrl).not.toContain('images.igdb.com');
+    const query = previewUrl.slice(previewUrl.indexOf('?'));
+
+    const signed = await test.request
+      .get(`/covers/preview${query}`)
+      .buffer(true)
+      .parse(binaryParser);
+    expect(signed.status).toBe(200);
+    expect(signed.headers['content-type']).toContain('image/webp');
+    expect(signed.headers.location).toBeUndefined();
+    expect(coverHttp.get).toHaveBeenCalledWith(COVER_URL);
+
+    // Tampering with the signature or omitting it yields a 404, never a redirect.
+    const tampered = await test.request.get(
+      `/covers/preview${query.replace(/s=[^&]*/, 's=tampered')}`,
+    );
+    expect(tampered.status).toBe(404);
+    expect(tampered.headers.location).toBeUndefined();
+
+    const unsigned = await test.request.get('/covers/preview');
+    expect(unsigned.status).toBe(404);
   });
 });

@@ -1,16 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { CoverHttpClient } from './cover-http.client';
+import { makeThumbnail } from './cover-thumbnail';
 import {
   COVERS_DIR_ENV,
   COVER_EXTENSION_MIME,
   COVER_MIME_EXTENSION,
+  COVER_PREVIEW_HOSTS_ENV,
+  COVER_THUMBNAIL_EXTENSION,
+  COVER_THUMBNAIL_MIME_TYPE,
+  COVER_THUMB_URL_PREFIX,
   COVER_URL_PREFIX,
   DEFAULT_COVERS_DIR,
   MAX_COVER_BYTES,
+  isAllowedCoverHost,
 } from './covers.options';
 
 /** A stored cover file plus the content type inferred from its extension. */
@@ -21,6 +27,9 @@ export interface CachedCover {
 
 /** The only filenames `read` serves: a 32-hex hash and a known extension. */
 const SAFE_COVER_FILE = /^[a-f0-9]{32}\.(jpg|png|webp)$/;
+
+/** The only thumbnail filenames `readThumbnail` serves. */
+const SAFE_THUMB_FILE = /^[a-f0-9]{32}\.thumb\.webp$/;
 
 /** URL path extensions treated as cover hints (`.jpeg` normalizes to `.jpg`). */
 const URL_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
@@ -56,6 +65,32 @@ export class CoverCacheService {
     return `${COVER_URL_PREFIX}/${name}`;
   }
 
+  /** Same-origin URL the generated thumbnail for `name` is served at. */
+  servedThumbnailUrl(name: string): string {
+    return `${COVER_THUMB_URL_PREFIX}/${name}`;
+  }
+
+  /**
+   * Parses a served cover URL (`/api/covers/<file>`) back to its basename, or
+   * `null` when it is not a same-origin cover path (so a caller can never be
+   * tricked into unlinking an arbitrary file).
+   */
+  fileFromServedUrl(servedUrl: string): string | null {
+    if (!servedUrl.startsWith(`${COVER_URL_PREFIX}/`)) {
+      return null;
+    }
+    const name = servedUrl.slice(COVER_URL_PREFIX.length + 1);
+    return SAFE_COVER_FILE.test(name) ? name : null;
+  }
+
+  /** True when a stored file with this basename exists. */
+  async has(file: string): Promise<boolean> {
+    if (file.includes('/') || file.includes('..')) {
+      return false;
+    }
+    return this.exists(file);
+  }
+
   /**
    * Downloads `url` into the cache and returns its served path, or `null` when
    * there is nothing to cache (no URL, non-HTTP scheme, a failed/oversize/
@@ -75,6 +110,17 @@ export class CoverCacheService {
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return null;
     }
+    // SSRF guard: only allowlisted hosts are fetched. This is the seam that
+    // user/`catalog` cover URLs flow through, so a non-allowlisted (or private)
+    // host is rejected before any request is issued.
+    if (
+      !isAllowedCoverHost(
+        parsed.hostname,
+        this.config.get<string>(COVER_PREVIEW_HOSTS_ENV),
+      )
+    ) {
+      return null;
+    }
 
     const hash = createHash('sha256').update(url).digest('hex').slice(0, 32);
     const urlExt = extensionFromPath(parsed.pathname);
@@ -86,6 +132,7 @@ export class CoverCacheService {
     // file, so an extensionless/re-typed URL is not re-downloaded every call.
     const cached = await this.findCached(hash, urlExt);
     if (cached !== null) {
+      await this.ensureThumbnail(cached);
       return this.servedUrl(cached);
     }
 
@@ -114,6 +161,7 @@ export class CoverCacheService {
         await mkdir(this.directory, { recursive: true });
         await writeFile(join(this.directory, finalName), response.body);
       }
+      await this.ensureThumbnail(finalName);
       return this.servedUrl(finalName);
     } catch (error) {
       this.logger.warn(
@@ -150,6 +198,97 @@ export class CoverCacheService {
         );
       }
       return null;
+    }
+  }
+
+  /**
+   * Reads the generated WebP thumbnail for a full cover filename
+   * (`<hash>.<ext>` → `<hash>.thumb.webp`). Returns `null` when there is no
+   * thumbnail; traversal-safe by construction.
+   */
+  async readThumbnail(file: string): Promise<CachedCover | null> {
+    const thumb = thumbnailNameFor(file);
+    if (thumb === null) {
+      return null;
+    }
+    try {
+      const buffer = await readFile(join(this.directory, thumb));
+      return { buffer, mimeType: COVER_THUMBNAIL_MIME_TYPE };
+    } catch (error) {
+      if (!isEnoent(error)) {
+        this.logger.warn(
+          `Failed to read cover thumbnail "${thumb}": ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Best-effort: writes `<hash>.thumb.webp` for a stored full cover when it is
+   * missing. A non-image/undecodable cover, an invalid filename, or any fs
+   * error resolves to `false` rather than throwing.
+   */
+  async ensureThumbnail(file: string): Promise<boolean> {
+    const thumb = thumbnailNameFor(file);
+    if (thumb === null) {
+      return false;
+    }
+    try {
+      if (await this.exists(thumb)) {
+        return true;
+      }
+      const cover = await this.read(file);
+      if (cover === null) {
+        return false;
+      }
+      const buffer = await makeThumbnail(cover.buffer);
+      if (buffer === null) {
+        return false;
+      }
+      await mkdir(this.directory, { recursive: true });
+      await writeFile(join(this.directory, thumb), buffer);
+      return true;
+    } catch (error) {
+      this.logger.warn(
+        `Failed to generate cover thumbnail "${thumb}": ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Deletes a stored cover and its thumbnail by served URL. A non-cover path or
+   * an already-missing file is a no-op; any other unlink error is logged.
+   */
+  async removeByServedUrl(servedUrl: string | null): Promise<void> {
+    if (servedUrl === null) {
+      return;
+    }
+    const file = this.fileFromServedUrl(servedUrl);
+    if (file === null) {
+      return;
+    }
+    const thumb = thumbnailNameFor(file);
+    for (const name of [file, thumb]) {
+      if (name === null) {
+        continue;
+      }
+      try {
+        await unlink(join(this.directory, name));
+      } catch (error) {
+        if (!isEnoent(error)) {
+          this.logger.warn(
+            `Failed to remove cover file "${name}": ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          );
+        }
+      }
     }
   }
 
@@ -191,6 +330,18 @@ function extensionFromPath(pathname: string): string {
     return '';
   }
   return extension === '.jpeg' ? '.jpg' : extension;
+}
+
+/**
+ * The thumbnail basename for a full cover filename (`<hash>.<ext>`), validated
+ * against the strict thumbnail pattern, or `null` for an unsafe name.
+ */
+function thumbnailNameFor(file: string): string | null {
+  if (!SAFE_COVER_FILE.test(file)) {
+    return null;
+  }
+  const thumb = `${file.slice(0, 32)}.thumb${COVER_THUMBNAIL_EXTENSION}`;
+  return SAFE_THUMB_FILE.test(thumb) ? thumb : null;
 }
 
 function isEnoent(error: unknown): boolean {

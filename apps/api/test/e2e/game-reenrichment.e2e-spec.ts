@@ -199,6 +199,12 @@ describe('Game re-enrichment (e2e)', () => {
       title: 'Halo: Combat Evolved',
       releaseYear: 2001,
     });
+    // The candidate cover is a same-origin signed preview, never the external
+    // host.
+    expect(searchBody.candidates[0]?.coverUrl).toMatch(
+      /^\/api\/covers\/preview\?u=/,
+    );
+    expect(searchBody.candidates[0]?.coverUrl).not.toContain('images.igdb.com');
     // The archival raw payload is never exposed.
     expect(searchBody.candidates[0]?.raw).toBeUndefined();
 
@@ -236,6 +242,7 @@ describe('Game re-enrichment (e2e)', () => {
     expect(game.genre).toBe('Shooter');
     expect(game.playerCount).toBe(16);
     expect(game.coverUrl).toBe(servedCover(COVER_URL_A));
+    expect(game.sourceCoverUrl).toBe(COVER_URL_A);
     expect(game.source).toBe('IGDB');
     expect(game.externalId).toBe(1036);
     expect(game.enrichedAt).not.toBeNull();
@@ -246,6 +253,8 @@ describe('Game re-enrichment (e2e)', () => {
     expect(applyBody.game.platformId).toBe(platformId);
     expect(applyBody.game.edition).toBe('Standard');
     expect(applyBody.game.externalId).toBe(1036);
+    // The internal external-cover link is never serialized.
+    expect(applyBody.game).not.toHaveProperty('sourceCoverUrl');
   });
 
   it('reports still-unresolved without destroying existing metadata', async () => {
@@ -329,8 +338,34 @@ describe('Game re-enrichment (e2e)', () => {
     game = await test.prisma.game.findUniqueOrThrow({ where: { id: gameId } });
     expect(game.coverUrl).toBe(servedCover(COVER_URL_B));
     expect(game.coverUrl).not.toBe(servedCover(COVER_URL_A));
+    expect(game.sourceCoverUrl).toBe(COVER_URL_B);
     expect(coverHttp.get).toHaveBeenCalledWith(COVER_URL_A);
     expect(coverHttp.get).toHaveBeenCalledWith(COVER_URL_B);
+    // The replaced file is removed (ref-counted), the new one is present.
+    const cache = app.get(CoverCacheService);
+    const fileA = servedCover(COVER_URL_A).split('/').pop() ?? '';
+    const fileB = servedCover(COVER_URL_B).split('/').pop() ?? '';
+    await expect(cache.has(fileA)).resolves.toBe(false);
+    await expect(cache.has(fileB)).resolves.toBe(true);
+  });
+
+  it('keeps the existing cover when a re-enrichment download fails', async () => {
+    const { gameId } = await seedGameWith({ coverUrl: OLD_COVER });
+    resolver.resolve.mockResolvedValue(matched({ coverUrl: COVER_URL_A }));
+    coverHttp.get.mockRejectedValue(new Error('network down'));
+
+    const res = await test.request
+      .post(`/games/${String(gameId)}/enrich`)
+      .send({ candidate: { source: 'IGDB', externalId: 1036 } });
+    expect(res.status).toBe(200);
+
+    const game = await test.prisma.game.findUniqueOrThrow({
+      where: { id: gameId },
+    });
+    // The failed download never clobbers the existing cover; the source link is
+    // recorded so a retry can fetch the new one later.
+    expect(game.coverUrl).toBe(OLD_COVER);
+    expect(game.sourceCoverUrl).toBe(COVER_URL_A);
   });
 
   it('clears platformUnverified when the platform is fixed via PATCH', async () => {

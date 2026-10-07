@@ -1,26 +1,42 @@
+import type { ConfigService } from '@nestjs/config';
 import {
   FetchCoverHttpClient,
   type CoverHttpResponse,
 } from '../../src/covers/cover-http.client';
 import {
+  COVER_PREVIEW_HOSTS_ENV,
   COVER_REQUEST_TIMEOUT_MS,
   MAX_COVER_BYTES,
+  MAX_COVER_REDIRECTS,
 } from '../../src/covers/covers.options';
 
 const COVER_URL =
   'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg';
+const REDIRECT_URL =
+  'https://images.igdb.com/igdb/image/upload/t_thumb/redirected.jpg';
 
 const originalFetch = global.fetch;
+
+/** Config with an optional `COVER_PREVIEW_HOSTS` override. */
+function configFor(hosts?: string): ConfigService {
+  return {
+    get: (key: string) => (key === COVER_PREVIEW_HOSTS_ENV ? hosts : undefined),
+  } as unknown as ConfigService;
+}
 
 interface FakeResponseInit {
   ok?: boolean;
   status?: number;
   contentType?: string | null;
   contentLength?: string | null;
+  /** The `Location` header of a 3xx response. */
+  location?: string | null;
   body?: ReadableStream<Uint8Array> | null;
+  /** The final URL `response.url` reports (after redirects). */
+  url?: string;
 }
 
-/** A minimal `Response` look-alike: the client only reads these four members. */
+/** A minimal `Response` look-alike: the client only reads these members. */
 function fakeResponse(init: FakeResponseInit = {}): Response {
   const headers = new Headers();
   if (init.contentType !== undefined && init.contentType !== null) {
@@ -29,11 +45,15 @@ function fakeResponse(init: FakeResponseInit = {}): Response {
   if (init.contentLength !== undefined && init.contentLength !== null) {
     headers.set('content-length', init.contentLength);
   }
+  if (init.location !== undefined && init.location !== null) {
+    headers.set('location', init.location);
+  }
   return {
     ok: init.ok ?? true,
     status: init.status ?? 200,
     headers,
     body: init.body ?? null,
+    url: init.url ?? COVER_URL,
   } as unknown as Response;
 }
 
@@ -78,7 +98,7 @@ describe('FetchCoverHttpClient (unit)', () => {
   beforeEach(() => {
     fetchMock = jest.fn();
     global.fetch = fetchMock;
-    client = new FetchCoverHttpClient();
+    client = new FetchCoverHttpClient(configFor());
   });
 
   afterEach(() => {
@@ -180,5 +200,116 @@ describe('FetchCoverHttpClient (unit)', () => {
     );
 
     await expect(client.get(COVER_URL)).rejects.toThrow('socket hang up');
+  });
+
+  it('accepts an allowlisted host and issues the request', async () => {
+    fetchMock.mockResolvedValue(
+      fakeResponse({
+        contentType: 'image/jpeg',
+        body: chunkStream([Buffer.from('ab')]).stream,
+      }),
+    );
+
+    await expect(client.get(COVER_URL)).resolves.toMatchObject({ ok: true });
+    expect(fetchMock).toHaveBeenCalledWith(COVER_URL, expect.anything());
+  });
+
+  it('rejects a non-allowlisted host before issuing the request', async () => {
+    await expect(client.get('https://evil.example/x.jpg')).rejects.toThrow(
+      /not allowlisted/i,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-HTTP(S) URL before issuing the request', async () => {
+    await expect(client.get('ftp://images.igdb.com/x.jpg')).rejects.toThrow(
+      /not allowlisted/i,
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('honours the COVER_PREVIEW_HOSTS allowlist override', async () => {
+    const override = new FetchCoverHttpClient(configFor('cdn.example.com'));
+    fetchMock.mockResolvedValue(
+      fakeResponse({
+        url: 'https://cdn.example.com/a.jpg',
+        contentType: 'image/jpeg',
+        body: chunkStream([Buffer.from('ab')]).stream,
+      }),
+    );
+
+    await expect(
+      override.get('https://cdn.example.com/a.jpg'),
+    ).resolves.toMatchObject({ ok: true });
+    await expect(override.get(COVER_URL)).rejects.toThrow(/not allowlisted/i);
+  });
+
+  it('follows an allowlisted redirect and reads the final body', async () => {
+    const body = chunkStream([Buffer.from('ab')]);
+    fetchMock
+      .mockResolvedValueOnce(
+        fakeResponse({ status: 302, location: REDIRECT_URL }),
+      )
+      .mockResolvedValueOnce(
+        fakeResponse({
+          contentType: 'image/jpeg',
+          body: body.stream,
+        }),
+      );
+
+    const response = await client.get(COVER_URL);
+
+    expect(response.body).toEqual(Buffer.from('ab'));
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      COVER_URL,
+      expect.objectContaining({ redirect: 'manual' }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      REDIRECT_URL,
+      expect.anything(),
+    );
+  });
+
+  it('rejects an off-allowlist redirect without fetching the target', async () => {
+    const body = chunkStream([Buffer.from('ab')]);
+    fetchMock.mockResolvedValueOnce(
+      fakeResponse({
+        status: 302,
+        location: 'https://evil.example/x.jpg',
+        body: body.stream,
+      }),
+    );
+
+    await expect(client.get(COVER_URL)).rejects.toThrow(/allowlist/i);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(body.cancelled()).toBe(true);
+  });
+
+  it('rejects a redirect with no Location header', async () => {
+    fetchMock.mockResolvedValueOnce(fakeResponse({ status: 302 }));
+
+    await expect(client.get(COVER_URL)).rejects.toThrow(/Location/i);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a malformed redirect Location without fetching the target', async () => {
+    fetchMock.mockResolvedValueOnce(
+      fakeResponse({ status: 302, location: 'http://[not-a-host' }),
+    );
+
+    await expect(client.get(COVER_URL)).rejects.toThrow(/malformed/i);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts once the redirect hop cap is exceeded', async () => {
+    fetchMock.mockResolvedValue(
+      fakeResponse({ status: 302, location: COVER_URL }),
+    );
+
+    await expect(client.get(COVER_URL)).rejects.toThrow(/hops/i);
+    expect(fetchMock).toHaveBeenCalledTimes(MAX_COVER_REDIRECTS + 1);
   });
 });

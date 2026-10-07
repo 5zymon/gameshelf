@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CoversModule } from '../covers/covers.module';
 import { EnrichmentModule } from '../enrichment/enrichment.module';
 import { GameCatalogModule } from '../game-catalog/game-catalog.module';
 import { ImportJobsController } from './import-jobs.controller';
@@ -10,7 +11,7 @@ import { PhotoStorageService } from './photo-storage.service';
 import { PhotoSweepService } from './photo-sweep.service';
 
 @Module({
-  imports: [GameCatalogModule, EnrichmentModule],
+  imports: [GameCatalogModule, EnrichmentModule, CoversModule],
   controllers: [ImportJobsController, ImportUploadController],
   providers: [
     ImportJobsService,

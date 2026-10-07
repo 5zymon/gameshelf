@@ -1254,6 +1254,7 @@ describe('ImportJobsService (unit)', () => {
       genre: 'Shooter',
       playerCount: 16,
       coverUrl: '/api/covers/0123456789abcdef0123456789abcdef.jpg',
+      sourceCoverUrl: 'https://images.igdb.com/halo.jpg',
       rawMetadata: JSON.stringify({ id: 7 }),
       enrichedAt: new Date('2026-10-07T00:00:00.000Z'),
       source: 'IGDB' as const,

@@ -39,7 +39,9 @@ export class EnrichCandidateModel {
 
   @ApiPropertyOptional({
     nullable: true,
-    example: 'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
+    description:
+      'Same-origin signed preview URL (server-side passthrough); never an external host',
+    example: '/api/covers/preview?u=aHR0cHM6Ly9pbWFnZXMuaWdkYi5jb20v...&s=...',
   })
   coverUrl!: string | null;
 
@@ -50,12 +52,17 @@ export class EnrichCandidateModel {
   source!: CatalogSource;
 }
 
-/** Drops the archival `raw` payload — never exposed in a response body. */
+/**
+ * Drops the archival `raw` payload — never exposed in a response body — and
+ * replaces the candidate's external `coverUrl` with a same-origin signed preview
+ * URL (the external host never reaches the browser).
+ */
 export function toEnrichCandidateModel(
   candidate: CatalogCandidate,
+  coverUrl: string | null,
 ): EnrichCandidateModel {
   const { raw: _raw, ...rest } = candidate;
-  return rest;
+  return { ...rest, coverUrl };
 }
 
 /**

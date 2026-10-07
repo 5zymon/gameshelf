@@ -9,6 +9,10 @@ import type { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { GameCatalogResolver } from '../game-catalog/game-catalog.resolver';
 import { GameEnrichmentService } from '../enrichment/game-enrichment.service';
+import { CoverCacheService } from '../covers/cover-cache.service';
+import { CoverMaintenanceService } from '../covers/cover-maintenance.service';
+import { CoverPreviewService } from '../covers/cover-preview.service';
+import { COVER_URL_PREFIX } from '../covers/covers.options';
 import {
   buildReenrichmentUpdate,
   mergeEditedFields,
@@ -28,7 +32,17 @@ import {
 } from './dto/game-response.model';
 import { ListGamesQueryDto } from './dto/list-games-query.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
-import { PLATFORM_SELECT, toGameDetail } from './game-detail.mapper';
+import {
+  PLATFORM_SELECT,
+  toGameDetail,
+  toGameListItem,
+} from './game-detail.mapper';
+
+/** The persisted cover columns a manual cover input resolves to. */
+interface CoverWrite {
+  coverUrl: string | null;
+  sourceCoverUrl: string | null;
+}
 
 @Injectable()
 export class GamesService {
@@ -36,6 +50,9 @@ export class GamesService {
     private readonly prisma: PrismaService,
     private readonly catalog: GameCatalogResolver,
     private readonly enrichment: GameEnrichmentService,
+    private readonly covers: CoverCacheService,
+    private readonly preview: CoverPreviewService,
+    private readonly maintenance: CoverMaintenanceService,
   ) {}
 
   async list(query: ListGamesQueryDto): Promise<ListGamesResponseModel> {
@@ -71,7 +88,7 @@ export class GamesService {
       }),
     ]);
     return {
-      items,
+      items: items.map((item) => toGameListItem(item)),
       meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
       filters: {
         platforms,
@@ -98,6 +115,7 @@ export class GamesService {
     const editedNow = TRACKED_METADATA_FIELDS.filter(
       (field) => dto[field] !== undefined,
     );
+    const cover = await this.resolveManualCover(dto.coverUrl);
     const game = await this.prisma.game.create({
       data: {
         title: dto.title,
@@ -107,7 +125,8 @@ export class GamesService {
         publisher: dto.publisher ?? null,
         genre: dto.genre ?? null,
         playerCount: dto.playerCount ?? null,
-        coverUrl: dto.coverUrl ?? null,
+        coverUrl: cover.coverUrl,
+        sourceCoverUrl: cover.sourceCoverUrl,
         ...(editedNow.length > 0 && {
           userEditedFields: serializeEditedFields(editedNow),
         }),
@@ -132,7 +151,12 @@ export class GamesService {
     }
     const existing = await this.prisma.game.findUnique({
       where: { id },
-      select: { id: true, userEditedFields: true },
+      select: {
+        id: true,
+        userEditedFields: true,
+        coverUrl: true,
+        sourceCoverUrl: true,
+      },
     });
     if (!existing) {
       throw new NotFoundException(`Game with id ${String(id)} not found`);
@@ -145,6 +169,18 @@ export class GamesService {
     const editedNow = TRACKED_METADATA_FIELDS.filter(
       (field) => dto[field] !== undefined,
     );
+    // A cover provided as an external URL is downloaded and kept same-origin;
+    // an explicit `null` clears both the local file and the stored source link.
+    let coverWrite: CoverWrite | null = null;
+    if (dto.coverUrl !== undefined) {
+      // `@IsOptional` lets an explicit `null` through at runtime even though the
+      // static type is `string | undefined` — an explicit null clears the cover.
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
+      const explicitNull = dto.coverUrl === null;
+      coverWrite = explicitNull
+        ? { coverUrl: null, sourceCoverUrl: null }
+        : await this.resolveManualCover(dto.coverUrl, existing);
+    }
     const game = await this.prisma.game.update({
       where: { id },
       data: {
@@ -155,7 +191,10 @@ export class GamesService {
         ...(dto.publisher !== undefined && { publisher: dto.publisher }),
         ...(dto.genre !== undefined && { genre: dto.genre }),
         ...(dto.playerCount !== undefined && { playerCount: dto.playerCount }),
-        ...(dto.coverUrl !== undefined && { coverUrl: dto.coverUrl }),
+        ...(coverWrite !== null && {
+          coverUrl: coverWrite.coverUrl,
+          sourceCoverUrl: coverWrite.sourceCoverUrl,
+        }),
         // Fixing the platform confirms it, so clear any "unverified" flag.
         ...(dto.platformId !== undefined && { platformUnverified: false }),
         ...(editedNow.length > 0 && {
@@ -166,6 +205,9 @@ export class GamesService {
       },
       include: { platform: { select: PLATFORM_SELECT } },
     });
+    if (coverWrite !== null && existing.coverUrl !== game.coverUrl) {
+      await this.maintenance.removeIfUnreferenced(existing.coverUrl, id);
+    }
     return toGameDetail(game);
   }
 
@@ -183,12 +225,19 @@ export class GamesService {
     id: number,
     dto: EnrichGameDto,
   ): Promise<EnrichGameResponseModel> {
-    const game = await this.findOne(id);
+    const raw = await this.prisma.game.findUnique({
+      where: { id },
+      include: { platform: { select: PLATFORM_SELECT } },
+    });
+    if (!raw) {
+      throw new NotFoundException(`Game with id ${String(id)} not found`);
+    }
+    const game = toGameDetail(raw);
 
     const resolution = await this.catalog.resolve({
-      title: game.title,
-      edition: game.edition,
-      platform: game.platform.name,
+      title: raw.title,
+      edition: raw.edition,
+      platform: raw.platform.name,
       confidence: 1,
     });
 
@@ -206,7 +255,12 @@ export class GamesService {
     }
 
     const candidate = resolution.candidate;
-    const candidateModel = toEnrichCandidateModel(candidate);
+    // The candidate has no stored file yet, so its cover is proxied through a
+    // signed same-origin URL — the external host never reaches the browser.
+    const candidateModel = toEnrichCandidateModel(
+      candidate,
+      this.preview.previewUrl(candidate.coverUrl),
+    );
 
     // Search step: report the candidate, mutate nothing.
     if (dto.candidate === undefined) {
@@ -232,14 +286,29 @@ export class GamesService {
 
     const enriched = await this.enrichment.enrichCandidate(
       candidate,
-      game.platformId,
-      game.edition,
+      raw.platformId,
+      raw.edition,
     );
     const updateData = buildReenrichmentUpdate({
-      existing: game,
+      existing: raw,
       enriched,
-      editedFields: toEditedFields(game.userEditedFields),
+      editedFields: toEditedFields(raw.userEditedFields),
     });
+
+    // `enrichCandidate` downloaded the candidate cover up front, but the merge
+    // policy refuses to write `coverUrl` when the field was hand-edited (or the
+    // candidate cover equals the current one). When the downloaded file was not
+    // adopted and is not the file the game already uses, remove it so a skipped
+    // re-enrichment cannot orphan a cover file. Ref-counted: a shared/live
+    // cover is never deleted.
+    const candidateCover = enriched.coverUrl;
+    if (
+      candidateCover !== null &&
+      candidateCover !== raw.coverUrl &&
+      !(updateData !== null && updateData.coverUrl === candidateCover)
+    ) {
+      await this.maintenance.removeIfUnreferenced(candidateCover, id);
+    }
 
     const updated =
       updateData === null
@@ -251,6 +320,12 @@ export class GamesService {
               include: { platform: { select: PLATFORM_SELECT } },
             }),
           );
+
+    // Ref-counted deletion: drop the replaced file only when no other game
+    // still points at it (e.g. a sibling imported from the same candidate).
+    if (raw.coverUrl !== updated.coverUrl) {
+      await this.maintenance.removeIfUnreferenced(raw.coverUrl, id);
+    }
 
     return {
       status: 'matched',
@@ -264,12 +339,40 @@ export class GamesService {
   async remove(id: number): Promise<void> {
     const existing = await this.prisma.game.findUnique({
       where: { id },
-      select: { id: true },
+      select: { id: true, coverUrl: true },
     });
     if (!existing) {
       throw new NotFoundException(`Game with id ${String(id)} not found`);
     }
     await this.prisma.game.delete({ where: { id } });
+    await this.maintenance.removeIfUnreferenced(existing.coverUrl);
+  }
+
+  /**
+   * Resolves a manual `coverUrl` input to the persisted columns: a same-origin
+   * `/api/covers/...` path is kept as-is, any other URL is downloaded into the
+   * local cache (with the external URL stored as `sourceCoverUrl` for retries),
+   * and an omitted/blank value clears both. A failed download leaves
+   * `coverUrl: null` and the source link set, so the sweep can retry it.
+   *
+   * On an update, re-submitting the game's **current** local cover path keeps
+   * the existing `sourceCoverUrl` (so re-pasting a path does not drop the
+   * recovery link); only an explicit `null` clears it.
+   */
+  private async resolveManualCover(
+    input: string | null | undefined,
+    previous?: { coverUrl: string | null; sourceCoverUrl: string | null },
+  ): Promise<CoverWrite> {
+    if (input === undefined || input === null || input.trim() === '') {
+      return { coverUrl: null, sourceCoverUrl: null };
+    }
+    if (input.startsWith(`${COVER_URL_PREFIX}/`)) {
+      const preserved =
+        previous?.coverUrl === input ? previous.sourceCoverUrl : null;
+      return { coverUrl: input, sourceCoverUrl: preserved };
+    }
+    const served = await this.covers.cacheFromUrl(input);
+    return { coverUrl: served, sourceCoverUrl: input };
   }
 
   private buildWhere(query: ListGamesQueryDto): Prisma.GameWhereInput {

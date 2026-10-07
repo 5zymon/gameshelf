@@ -1,8 +1,10 @@
 import type { ConfigService } from '@nestjs/config';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import sharp from 'sharp';
 import { CoverCacheService } from '../../src/covers/cover-cache.service';
 import {
   type CoverHttpClient,
@@ -10,6 +12,7 @@ import {
 } from '../../src/covers/cover-http.client';
 import {
   COVERS_DIR_ENV,
+  COVER_PREVIEW_HOSTS_ENV,
   DEFAULT_COVERS_DIR,
   MAX_COVER_BYTES,
 } from '../../src/covers/covers.options';
@@ -28,9 +31,16 @@ function imageResponse(
   return { ok: true, status: 200, contentType, body };
 }
 
-function configFor(directory: string | undefined): ConfigService {
+function configFor(
+  directory: string | undefined,
+  previewHosts?: string,
+): ConfigService {
   return {
-    get: (key: string) => (key === COVERS_DIR_ENV ? directory : undefined),
+    get: (key: string) => {
+      if (key === COVERS_DIR_ENV) return directory;
+      if (key === COVER_PREVIEW_HOSTS_ENV) return previewHosts;
+      return undefined;
+    },
   } as unknown as ConfigService;
 }
 
@@ -40,11 +50,11 @@ interface Harness {
   dir: string;
 }
 
-function createHarness(dir: string): Harness {
+function createHarness(dir: string, previewHosts?: string): Harness {
   const http = {
     get: jest.fn<Promise<CoverHttpResponse>, [string]>(),
   };
-  const service = new CoverCacheService(configFor(dir), http);
+  const service = new CoverCacheService(configFor(dir, previewHosts), http);
   return { service, http, dir };
 }
 
@@ -83,7 +93,7 @@ describe('CoverCacheService (unit)', () => {
 
   it('reuses a cached cover when the URL has no extension', async () => {
     const h = createHarness(dir);
-    const extensionless = 'https://cdn.example.com/covers/abc123';
+    const extensionless = 'https://cdn.mobygames.com/covers/abc123';
     h.http.get.mockResolvedValue(imageResponse(Buffer.from('jpeg-bytes')));
 
     const first = await h.service.cacheFromUrl(extensionless);
@@ -96,7 +106,7 @@ describe('CoverCacheService (unit)', () => {
 
   it('reuses a cached cover when the URL extension disagrees with the content type', async () => {
     const h = createHarness(dir);
-    const url = 'https://cdn.example.com/covers/picture.png';
+    const url = 'https://cdn.mobygames.com/covers/picture.png';
     // The response is JPEG, so the file is written as `<hash>.jpg` even though
     // the URL says `.png`; the second call must still find it.
     h.http.get.mockResolvedValue(imageResponse(Buffer.from('jpeg-bytes')));
@@ -124,6 +134,27 @@ describe('CoverCacheService (unit)', () => {
       h.service.cacheFromUrl('ftp://example.com/cover.jpg'),
     ).resolves.toBeNull();
     expect(h.http.get).not.toHaveBeenCalled();
+  });
+
+  it('returns null for a non-allowlisted host without calling the client', async () => {
+    const h = createHarness(dir);
+
+    await expect(
+      h.service.cacheFromUrl('https://evil.example/cover.jpg'),
+    ).resolves.toBeNull();
+    expect(h.http.get).not.toHaveBeenCalled();
+  });
+
+  it('honours an explicit COVER_PREVIEW_HOSTS override', async () => {
+    const h = createHarness(dir, 'cdn.example.com');
+    const url = 'https://cdn.example.com/cover.jpg';
+    h.http.get.mockResolvedValue(imageResponse(Buffer.from('jpeg-bytes')));
+
+    await expect(h.service.cacheFromUrl(url)).resolves.toBe(
+      `/api/covers/${hashOf(url)}.jpg`,
+    );
+    // A default-allowed host is rejected when the override replaces it.
+    await expect(h.service.cacheFromUrl(COVER_URL)).resolves.toBeNull();
   });
 
   it('returns null for a non-image content type and writes nothing', async () => {
@@ -189,5 +220,97 @@ describe('CoverCacheService (unit)', () => {
     );
 
     expect(service.directory).toBe(dir);
+  });
+
+  describe('thumbnails', () => {
+    async function realPng(): Promise<Buffer> {
+      return sharp({
+        create: {
+          width: 64,
+          height: 64,
+          channels: 3,
+          background: { r: 10, g: 20, b: 30 },
+        },
+      })
+        .png()
+        .toBuffer();
+    }
+
+    it('generates a local WebP thumbnail on download and serves it', async () => {
+      const h = createHarness(dir);
+      h.http.get.mockResolvedValue(imageResponse(await realPng(), 'image/png'));
+
+      const served = await h.service.cacheFromUrl(COVER_URL);
+      const file = served?.split('/').pop() ?? '';
+
+      const thumb = await h.service.readThumbnail(file);
+      expect(thumb).not.toBeNull();
+      expect(thumb?.mimeType).toBe('image/webp');
+      // WebP magic number ("RIFF"…"WEBP") proves it was rendered locally.
+      expect(thumb?.buffer.subarray(0, 4).toString('ascii')).toBe('RIFF');
+      expect(thumb?.buffer.subarray(8, 12).toString('ascii')).toBe('WEBP');
+      const meta = await sharp(thumb?.buffer).metadata();
+      expect(meta.width).toBeLessThanOrEqual(300);
+
+      await expect(h.service.has(file)).resolves.toBe(true);
+      expect(h.service.servedThumbnailUrl(file)).toBe(
+        `/api/covers/thumbs/${file}`,
+      );
+    });
+
+    it('ensureThumbnail returns false for undecodable bytes and true for a real image', async () => {
+      const h = createHarness(dir);
+      h.http.get.mockResolvedValue(imageResponse(Buffer.from('not-an-image')));
+      const served = await h.service.cacheFromUrl(COVER_URL);
+      const file = served?.split('/').pop() ?? '';
+
+      await expect(h.service.ensureThumbnail(file)).resolves.toBe(false);
+
+      // Replace the stored file with a decodable one and retry.
+      await writeFile(join(dir, file), await realPng());
+      await expect(h.service.ensureThumbnail(file)).resolves.toBe(true);
+      await expect(h.service.ensureThumbnail('../escape.jpg')).resolves.toBe(
+        false,
+      );
+    });
+
+    it('removeByServedUrl deletes the cover and its thumbnail', async () => {
+      const h = createHarness(dir);
+      h.http.get.mockResolvedValue(imageResponse(await realPng(), 'image/png'));
+      const served = await h.service.cacheFromUrl(COVER_URL);
+      const file = served?.split('/').pop() ?? '';
+      expect(await h.service.readThumbnail(file)).not.toBeNull();
+
+      await h.service.removeByServedUrl(served);
+
+      await expect(h.service.has(file)).resolves.toBe(false);
+      await expect(h.service.readThumbnail(file)).resolves.toBeNull();
+      // A non-cover / missing path is a silent no-op.
+      await expect(
+        h.service.removeByServedUrl('/api/covers/../../etc/passwd'),
+      ).resolves.toBeUndefined();
+      await expect(h.service.removeByServedUrl(null)).resolves.toBeUndefined();
+    });
+
+    it('fileFromServedUrl only accepts a same-origin cover path', () => {
+      const h = createHarness(dir);
+      const name = `${'a'.repeat(32)}.jpg`;
+      expect(h.service.fileFromServedUrl(`/api/covers/${name}`)).toBe(name);
+      expect(
+        h.service.fileFromServedUrl('https://evil.example/x.jpg'),
+      ).toBeNull();
+      expect(
+        h.service.fileFromServedUrl('/api/covers/not-a-hash.jpg'),
+      ).toBeNull();
+      expect(h.service.fileFromServedUrl('/api/covers/../x.jpg')).toBeNull();
+    });
+
+    it('readThumbnail rejects unsafe names', async () => {
+      const h = createHarness(dir);
+      await expect(h.service.readThumbnail('../x.jpg')).resolves.toBeNull();
+      await expect(
+        h.service.readThumbnail('not-a-hash.jpg'),
+      ).resolves.toBeNull();
+    });
   });
 });
