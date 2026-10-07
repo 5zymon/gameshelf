@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { ConfigService } from '@nestjs/config';
 import {
   isMobygamesConfigured,
@@ -19,6 +21,17 @@ type GetMock = jest.Mock<
   Promise<MobygamesHttpResponse>,
   [MobygamesHttpRequest]
 >;
+
+/**
+ * Loads a recorded MobyGames response envelope from `test/fixtures/mobygames`.
+ * `search-halo-response.json` is a full `/v2/games` object wrapping the same
+ * sanitised payload as `mobygames/halo-game.json`; consumed only by this test.
+ */
+function mobygamesFixture(name: string): unknown {
+  return JSON.parse(
+    readFileSync(join(__dirname, '..', 'fixtures', 'mobygames', name), 'utf8'),
+  ) as unknown;
+}
 
 function config(values: Record<string, string | undefined>): ConfigService {
   return {
@@ -324,5 +337,29 @@ describe('FetchMobygamesHttpClient (unit)', () => {
     expect((error as MobygamesError).message).toBe(
       'MobyGames could not be reached',
     );
+  });
+});
+
+describe('MobygamesClient recorded fixtures (integration)', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('parses a recorded /v2/games response and maps candidates', async () => {
+    const fetchSpy = jest.spyOn(globalThis, 'fetch');
+    // Envelope derived from `mobygames/halo-game.json` (same sanitised payload,
+    // full recorded `/v2/games` response shape). Consumed only by this test.
+    const payload = mobygamesFixture('search-halo-response.json') as {
+      games: unknown[];
+    };
+    const get = jest
+      .fn<Promise<MobygamesHttpResponse>, [MobygamesHttpRequest]>()
+      .mockResolvedValue(response({ json: () => Promise.resolve(payload) }));
+    const client = makeClient(get);
+
+    await expect(client.searchGames('Halo: Combat Evolved')).resolves.toEqual(
+      payload.games,
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 });

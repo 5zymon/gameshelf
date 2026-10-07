@@ -1,0 +1,24 @@
+[
+  {
+    "id": 167,
+    "name": "PlayStation 5",
+    "abbreviation": "PS5",
+    "alternative_name": "PS5",
+    "platform_family": 1,
+    "slug": "ps5"
+  },
+  {
+    "id": 11,
+    "name": "Xbox",
+    "abbreviation": "XBOX",
+    "platform_family": 11,
+    "slug": "xbox"
+  },
+  {
+    "id": 6,
+    "name": "PC (Microsoft Windows)",
+    "abbreviation": "PC",
+    "platform_family": 3,
+    "slug": "win"
+  }
+]

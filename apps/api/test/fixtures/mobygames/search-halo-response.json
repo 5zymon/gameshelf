@@ -1,0 +1,42 @@
+{
+  "games": [
+    {
+      "game_id": 1201,
+      "title": "Halo: Combat Evolved",
+      "genres": [{ "id": 4, "name": "Action" }],
+      "platforms": [
+        {
+          "platform_id": 3,
+          "name": "Xbox",
+          "release_date": "2001-11-15",
+          "releases": [
+            {
+              "release_date": "2001-11-15",
+              "companies": [
+                {
+                  "company_id": 237,
+                  "company_name": "Microsoft Game Studios",
+                  "role": "Published by"
+                },
+                {
+                  "company_id": 238,
+                  "company_name": "Bungie",
+                  "role": "Developed by"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "covers": [
+        {
+          "images": [
+            {
+              "image_url": "https://cdn.mobygames.com/covers/4074-halo-combat-evolved-xbox-front-cover.jpg"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
