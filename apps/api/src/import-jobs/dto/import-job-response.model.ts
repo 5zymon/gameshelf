@@ -286,4 +286,48 @@ export class ImportBatchProgressModel {
     description: 'Every photo reached a terminal status',
   })
   allCompleted!: boolean;
+
+  @ApiProperty({
+    description:
+      'True when the photo-import queue is paused by a configuration error (ticket 3.10)',
+    example: false,
+  })
+  paused!: boolean;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Why the queue is paused (the source config error)',
+    example: 'IGDB rejected the credentials',
+  })
+  pauseReason!: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    enum: ['llm', 'igdb'],
+    description: 'Which integration to fix before resuming',
+    example: 'igdb',
+  })
+  pauseSource!: string | null;
+}
+
+/** Global photo-import queue pause state (ticket 3.10). */
+export class ImportQueueStateModel {
+  @ApiProperty({ example: false })
+  paused!: boolean;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 'IGDB rejected the credentials',
+  })
+  reason!: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    enum: ['llm', 'igdb'],
+    example: 'igdb',
+  })
+  source!: string | null;
+
+  @ApiPropertyOptional({ nullable: true, format: 'date-time' })
+  pausedAt!: Date | null;
 }

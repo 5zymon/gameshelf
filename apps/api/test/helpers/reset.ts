@@ -1,6 +1,7 @@
 import type { PrismaService } from '../../src/prisma/prisma.service';
 
 const TABLES = [
+  'import_queue_state',
   'recognized_items',
   'llm_settings',
   'unrecognized_items',

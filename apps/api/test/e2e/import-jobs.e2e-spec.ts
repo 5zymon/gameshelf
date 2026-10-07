@@ -1,7 +1,13 @@
+import type { Server } from 'node:http';
+import { getQueueToken } from '@nestjs/bullmq';
 import { ConflictException, NotFoundException } from '@nestjs/common';
+import type { Queue } from 'bullmq';
+import request from 'supertest';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 import { resetDatabase } from '../helpers/reset';
 import { ImportJobsService } from '../../src/import-jobs/import-jobs.service';
+import { PHOTO_IMPORT_QUEUE } from '../../src/queue/queue.constants';
+import { QueueControlService } from '../../src/queue/queue-control.service';
 
 interface UnrecognizedItemBody {
   id: number;
@@ -44,6 +50,9 @@ interface ImportBatchProgressBody {
   completedCount: number;
   pendingCount: number;
   allCompleted: boolean;
+  paused: boolean;
+  pauseReason: string | null;
+  pauseSource: string | null;
 }
 
 interface ImportJobDetailBody extends ImportJobBody {
@@ -58,14 +67,20 @@ interface ImportJobsListBody {
 describe('ImportJobs API (e2e)', () => {
   let test: TestApp;
   let importJobs: ImportJobsService;
+  let queue: Queue;
+  let queueControl: QueueControlService;
 
   beforeAll(async () => {
     test = await createTestApp();
     importJobs = test.app.get(ImportJobsService);
+    queue = test.app.get<Queue>(getQueueToken(PHOTO_IMPORT_QUEUE));
+    queueControl = test.app.get(QueueControlService);
   });
 
   beforeEach(async () => {
     await resetDatabase(test.prisma);
+    // A pause left by a failed test must never leak into the next one.
+    await queue.resume();
     await test.login();
   });
 
@@ -620,7 +635,32 @@ describe('ImportJobs API (e2e)', () => {
         completedCount: 4,
         pendingCount: 2,
         allCompleted: false,
+        paused: false,
+        pauseReason: null,
+        pauseSource: null,
       });
+    });
+
+    it('reports the paused state and its reason', async () => {
+      await importJobs.createJob({ batchId: 'batch-paused' });
+      try {
+        await queueControl.pauseForConfig(
+          'igdb',
+          'IGDB rejected the credentials',
+        );
+
+        const res = await test.request.get('/import-jobs/batches/batch-paused');
+
+        expect(res.status).toBe(200);
+        const body = res.body as ImportBatchProgressBody;
+        expect(body).toMatchObject({
+          paused: true,
+          pauseReason: 'IGDB rejected the credentials',
+          pauseSource: 'igdb',
+        });
+      } finally {
+        await queueControl.resume();
+      }
     });
 
     it('returns 404 for an unknown batch', async () => {
@@ -691,6 +731,35 @@ describe('ImportJobs API (e2e)', () => {
         where: { id: job.id },
       });
       expect(row.status).toBe('failed');
+    });
+  });
+
+  describe('POST /import-jobs/resume', () => {
+    it('resumes a paused queue and is idempotent', async () => {
+      await queueControl.pauseForConfig(
+        'igdb',
+        'IGDB rejected the credentials',
+      );
+      expect(await queue.isPaused()).toBe(true);
+
+      const res = await test.request.post('/import-jobs/resume');
+
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        paused: false,
+        reason: null,
+        source: null,
+      });
+      expect(await queue.isPaused()).toBe(false);
+
+      const again = await test.request.post('/import-jobs/resume');
+      expect(again.status).toBe(200);
+      expect(again.body).toMatchObject({ paused: false });
+    });
+
+    it('requires authentication (401)', async () => {
+      const server = test.app.getHttpServer() as Server;
+      await request.agent(server).post('/import-jobs/resume').expect(401);
     });
   });
 

@@ -19,6 +19,7 @@ import {
   ApiOperation,
   ApiParam,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { DismissImportJobDto } from './dto/dismiss-import-job.dto';
 import { DismissUnrecognizedItemDto } from './dto/dismiss-unrecognized-item.dto';
@@ -27,6 +28,7 @@ import { ImportJobIdParamDto } from './dto/import-job-id-param.dto';
 import {
   ImportBatchProgressModel,
   ImportJobDetailModel,
+  ImportQueueStateModel,
   ListImportJobsResponseModel,
   UnrecognizedItemModel,
 } from './dto/import-job-response.model';
@@ -93,6 +95,19 @@ export class ImportJobsController {
   })
   retry(@Param() params: ImportJobIdParamDto): Promise<ImportJobDetailModel> {
     return this.importJobsService.retryJob(params.id);
+  }
+
+  @Post('resume')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Resume the paused photo-import queue',
+    description:
+      'Clears the stored pause reason. Idempotent: a running queue stays running.',
+  })
+  @ApiOkResponse({ type: ImportQueueStateModel })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  resume(): Promise<ImportQueueStateModel> {
+    return this.importJobsService.resumeQueue();
   }
 
   @Get(':id/unrecognized')

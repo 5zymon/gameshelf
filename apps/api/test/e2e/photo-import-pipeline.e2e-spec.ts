@@ -2,7 +2,7 @@ import { getQueueToken } from '@nestjs/bullmq';
 import type { INestApplication } from '@nestjs/common';
 import { existsSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Queue } from 'bullmq';
+import { Queue, UnrecoverableError } from 'bullmq';
 import type { Job } from 'bullmq';
 import type {
   CatalogCandidate,
@@ -117,6 +117,8 @@ describe('Photo import pipeline (e2e)', () => {
   beforeEach(async () => {
     await resetDatabase(test.prisma);
     await queue.obliterate({ force: true });
+    // A paused queue must never leak between tests (ticket 3.10).
+    await queue.resume();
     clearPhotoDir(photoDir);
     vision.recognize.mockReset();
     vision.recognize.mockResolvedValue({ items: [], countVisible: null });
@@ -349,6 +351,38 @@ describe('Photo import pipeline (e2e)', () => {
     expect(game.title).toBe('Validated Title');
     expect(game.source).toBe('IGDB');
     expect(game.enrichedAt).not.toBeNull();
+  });
+
+  it('fails the current photo and pauses the queue on an IGDB config error', async () => {
+    const { id, photoRef } = await seedJob();
+    vision.recognize.mockResolvedValue({
+      items: [recognized('A')],
+      countVisible: 1,
+    });
+    resolver.resolve.mockResolvedValue({
+      kind: 'config_error',
+      source: 'igdb',
+      reason: 'IGDB rejected the credentials',
+    });
+
+    await expect(
+      app.get(PhotoImportHandler).handle(makeJob(id, photoRef, 0, 3)),
+    ).rejects.toThrow(UnrecoverableError);
+
+    const job = await test.prisma.importJob.findUniqueOrThrow({
+      where: { id },
+    });
+    expect(job.status).toBe('failed');
+    expect(job.errorMessage).toBe('IGDB rejected the credentials');
+    expect(await queue.isPaused()).toBe(true);
+    const state = await test.prisma.importQueueState.findUnique({
+      where: { id: 1 },
+    });
+    expect(state).toMatchObject({ paused: true, source: 'igdb' });
+    // The photo is kept for a retry after the configuration is fixed.
+    expect(existsSync(join(photoDir, photoRef))).toBe(true);
+    // Nothing from the batch was committed.
+    expect(await test.prisma.game.count()).toBe(0);
   });
 
   describe('ticket 3.9 retry-semantics (ADR-002 gaps)', () => {

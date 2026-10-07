@@ -20,6 +20,7 @@ import {
 } from '../../src/import-jobs/photo-import-pipeline.service';
 import type { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
 import { RetryableImportError } from '../../src/queue/photo-import.failure';
+import type { QueueControlService } from '../../src/queue/queue-control.service';
 import type { PhotoImportJobData } from '../../src/queue/photo-import.types';
 import type {
   RecognizedItem,
@@ -53,6 +54,7 @@ interface Harness {
   storage: { read: jest.Mock; delete: jest.Mock };
   vision: { recognize: jest.Mock };
   resolver: { resolve: jest.Mock; resolveBatch: jest.Mock };
+  queueControl: { pauseForConfig: jest.Mock };
 }
 
 function makeJob(
@@ -215,12 +217,16 @@ function createHarness(): Harness {
     ),
     resolveBatch: jest.fn(),
   };
+  const queueControl: Harness['queueControl'] = {
+    pauseForConfig: jest.fn(() => Promise.resolve()),
+  };
 
   const pipeline = new PhotoImportPipelineService(
     jobs as unknown as ImportJobsService,
     storage as unknown as PhotoStorageService,
     vision as unknown as VisionService,
     resolver,
+    queueControl as unknown as QueueControlService,
   );
   return {
     pipeline,
@@ -232,6 +238,7 @@ function createHarness(): Harness {
     storage,
     vision,
     resolver,
+    queueControl,
   };
 }
 
@@ -393,6 +400,91 @@ describe('PhotoImportPipelineService (unit)', () => {
     );
     expect(h.state.status).toBe('failed');
     expect(h.storage.delete).not.toHaveBeenCalled();
+  });
+
+  it('marks failed and pauses for an unauthorized vision error without retrying', async () => {
+    const h = createHarness();
+    h.vision.recognize.mockRejectedValue(
+      new VisionProviderError('unauthorized'),
+    );
+
+    await expect(h.pipeline.run(makeJob(0, 3))).rejects.toThrow(
+      UnrecoverableError,
+    );
+
+    expect(h.jobs.markFailed).toHaveBeenCalledWith(
+      1,
+      'The provider rejected the API key',
+      { recognizedCount: 0, importedCount: 0, unrecognizedCount: 0 },
+    );
+    expect(h.queueControl.pauseForConfig).toHaveBeenCalledWith(
+      'llm',
+      'The provider rejected the API key',
+    );
+    expect(h.storage.delete).not.toHaveBeenCalled();
+  });
+
+  it('marks failed and pauses on an IGDB config_error resolution', async () => {
+    const h = createHarness();
+    h.vision.recognize.mockResolvedValue({
+      items: [recognized('A')],
+      countVisible: 1,
+    });
+    h.resolver.resolve.mockResolvedValue({
+      kind: 'config_error',
+      source: 'igdb',
+      reason: 'IGDB rejected the credentials',
+    });
+
+    await expect(h.pipeline.run(makeJob(0, 3))).rejects.toThrow(
+      UnrecoverableError,
+    );
+
+    expect(h.queueControl.pauseForConfig).toHaveBeenCalledWith(
+      'igdb',
+      'IGDB rejected the credentials',
+    );
+    expect(h.jobs.markFailed).toHaveBeenCalledWith(
+      1,
+      'IGDB rejected the credentials',
+      { recognizedCount: 1, importedCount: 0, unrecognizedCount: 0 },
+    );
+    // Nothing from the batch is committed: the title stays pending.
+    expect(h.games).toHaveLength(0);
+    expect(h.items.find((item) => item.rawTitle === 'A')?.status).toBe(
+      'pending',
+    );
+    expect(h.storage.delete).not.toHaveBeenCalled();
+  });
+
+  it('does not pause on an ordinary permanent vision error', async () => {
+    const h = createHarness();
+    h.vision.recognize.mockRejectedValue(
+      new VisionProviderError('bad_response'),
+    );
+
+    await expect(h.pipeline.run(makeJob(0, 3))).rejects.toThrow(
+      UnrecoverableError,
+    );
+
+    expect(h.queueControl.pauseForConfig).not.toHaveBeenCalled();
+  });
+
+  it('a pause failure never masks the config error', async () => {
+    const h = createHarness();
+    h.vision.recognize.mockRejectedValue(
+      new VisionProviderError('unauthorized'),
+    );
+    h.queueControl.pauseForConfig.mockRejectedValue(new Error('redis down'));
+    const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+
+    await expect(h.pipeline.run(makeJob(0, 3))).rejects.toThrow(
+      UnrecoverableError,
+    );
+
+    expect(h.jobs.markFailed).toHaveBeenCalled();
+    expect(error).toHaveBeenCalled();
+    error.mockRestore();
   });
 
   it('persists partial counters when a permanent failure follows a committed batch', async () => {

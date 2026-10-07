@@ -5,6 +5,7 @@ import { PhotoImportHandler } from './photo-import.handler';
 import { PhotoImportProcessor } from './photo-import.processor';
 import { PHOTO_IMPORT_QUEUE } from './queue.constants';
 import { photoImportDefaultJobOptions } from './queue.options';
+import { QueueControlService } from './queue-control.service';
 import { QueueHealthController } from './queue-health.controller';
 import { QueueHealthService } from './queue-health.service';
 
@@ -13,7 +14,8 @@ import { QueueHealthService } from './queue-health.service';
  * `@InjectQueue(PHOTO_IMPORT_QUEUE)` without importing this module everywhere.
  * Exporting BullModule re-exports the registered queue. `ImportJobsModule`
  * supplies the pipeline the handler delegates to (no cycle: ImportJobsModule
- * never imports QueueModule).
+ * never imports QueueModule). The global control surface (`QueueControlService`,
+ * ticket 3.10) pauses/resumes the queue on a configuration error.
  */
 @Global()
 @Module({
@@ -25,7 +27,12 @@ import { QueueHealthService } from './queue-health.service';
     ImportJobsModule,
   ],
   controllers: [QueueHealthController],
-  providers: [PhotoImportHandler, PhotoImportProcessor, QueueHealthService],
-  exports: [BullModule],
+  providers: [
+    PhotoImportHandler,
+    PhotoImportProcessor,
+    QueueHealthService,
+    QueueControlService,
+  ],
+  exports: [BullModule, QueueControlService],
 })
 export class QueueModule {}

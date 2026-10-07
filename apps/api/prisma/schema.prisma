@@ -205,3 +205,19 @@ model LlmSetting {
 
   @@map("llm_settings")
 }
+
+// Global photo-import queue pause state (ticket 3.10). Singleton row (`id = 1`).
+// The operational pause lives in Redis (BullMQ `queue.pause()`); this row
+// records WHY so the progress API can report a reason and it survives a
+// restart. `paused` mirrors the last known state for the Redis-unavailable
+// fallback; BullMQ remains authoritative when reachable.
+model ImportQueueState {
+  id        Int       @id @default(autoincrement())
+  paused    Boolean   @default(false)
+  reason    String?   @db.Text
+  source    String?   @db.VarChar(16)
+  pausedAt  DateTime? @map("paused_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@map("import_queue_state")
+}

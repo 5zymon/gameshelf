@@ -1,8 +1,11 @@
+import { IgdbConfigError } from '../../src/game-catalog/igdb.errors';
 import {
   VisionProviderError,
   VisionUnavailableError,
 } from '../../src/settings/vision/vision.errors';
 import {
+  ConfigurationImportError,
+  configErrorSource,
   isRetryableImportError,
   photoImportFailureReason,
   RetryableImportError,
@@ -49,6 +52,60 @@ describe('photoImportFailureReason (unit)', () => {
       photoImportFailureReason(new RetryableImportError('temporarily down')),
     ).toBe('temporarily down');
   });
+
+  it('uses the message of a ConfigurationImportError', () => {
+    expect(
+      photoImportFailureReason(
+        new ConfigurationImportError('igdb', 'IGDB rejected the credentials'),
+      ),
+    ).toBe('IGDB rejected the credentials');
+  });
+
+  it('uses the message of an IgdbConfigError', () => {
+    expect(
+      photoImportFailureReason(
+        new IgdbConfigError('IGDB rejected the credentials'),
+      ),
+    ).toBe('IGDB rejected the credentials');
+  });
+});
+
+describe('configErrorSource (unit)', () => {
+  it('classifies an unauthorized VisionProviderError as an LLM config error', () => {
+    expect(configErrorSource(new VisionProviderError('unauthorized'))).toBe(
+      'llm',
+    );
+  });
+
+  it('classifies VisionUnavailableError as an LLM config error', () => {
+    expect(configErrorSource(new VisionUnavailableError())).toBe('llm');
+  });
+
+  it('classifies IgdbConfigError as an IGDB config error', () => {
+    expect(
+      configErrorSource(new IgdbConfigError('IGDB rejected the credentials')),
+    ).toBe('igdb');
+  });
+
+  it('classifies a ConfigurationImportError by its source', () => {
+    expect(configErrorSource(new ConfigurationImportError('igdb', 'x'))).toBe(
+      'igdb',
+    );
+    expect(configErrorSource(new ConfigurationImportError('llm', 'x'))).toBe(
+      'llm',
+    );
+  });
+
+  it('returns null for a permanent non-config vision error', () => {
+    expect(
+      configErrorSource(new VisionProviderError('bad_response')),
+    ).toBeNull();
+  });
+
+  it('returns null for an ordinary error', () => {
+    expect(configErrorSource(new Error('boom'))).toBeNull();
+    expect(configErrorSource('nope')).toBeNull();
+  });
 });
 
 describe('isRetryableImportError (unit)', () => {
@@ -73,5 +130,21 @@ describe('isRetryableImportError (unit)', () => {
   it('treats an unknown error as non-retryable', () => {
     expect(isRetryableImportError(new Error('boom'))).toBe(false);
     expect(isRetryableImportError('nope')).toBe(false);
+  });
+
+  it('treats a configuration error as non-retryable', () => {
+    expect(
+      isRetryableImportError(
+        new ConfigurationImportError('igdb', 'IGDB rejected the credentials'),
+      ),
+    ).toBe(false);
+    expect(
+      isRetryableImportError(
+        new IgdbConfigError('IGDB rejected the credentials'),
+      ),
+    ).toBe(false);
+    expect(
+      isRetryableImportError(new VisionProviderError('unauthorized')),
+    ).toBe(false);
   });
 });

@@ -17,11 +17,13 @@ import { findPlatformMatch } from '../platforms/platform-match';
 import type { PhotoImportJobData } from '../queue/photo-import.types';
 import { RetryableImportError } from '../queue/photo-import.failure';
 import { PHOTO_IMPORT_QUEUE } from '../queue/queue.constants';
+import { QueueControlService } from '../queue/queue-control.service';
 import { ListImportJobsQueryDto } from './dto/list-import-jobs-query.dto';
 import {
   ImportBatchProgressModel,
   ImportJobDetailModel,
   ImportJobModel,
+  ImportQueueStateModel,
   ListImportJobsResponseModel,
   UnrecognizedItemModel,
 } from './dto/import-job-response.model';
@@ -139,6 +141,7 @@ export class ImportJobsService {
     private readonly prisma: PrismaService,
     @InjectQueue(PHOTO_IMPORT_QUEUE)
     private readonly queue: Queue<PhotoImportJobData>,
+    private readonly queueControl: QueueControlService,
   ) {}
 
   // ---------- read API ----------
@@ -244,6 +247,7 @@ export class ImportJobsService {
     const queued = byStatus.queued ?? 0;
     const processing = byStatus.processing ?? 0;
     const pendingCount = queued + processing;
+    const pause = await this.queueControl.getState();
     return {
       batchId,
       total,
@@ -256,6 +260,9 @@ export class ImportJobsService {
       completedCount: total - pendingCount,
       pendingCount,
       allCompleted: pendingCount === 0,
+      paused: pause.paused,
+      pauseReason: pause.reason,
+      pauseSource: pause.source,
     };
   }
 
@@ -440,6 +447,21 @@ export class ImportJobsService {
       );
     }
     return this.findOne(id);
+  }
+
+  /**
+   * Resume the paused photo-import queue (ticket 3.10) and clear the stored
+   * reason. Idempotent: resuming an already-running queue is a 200 no-op.
+   */
+  async resumeQueue(): Promise<ImportQueueStateModel> {
+    await this.queueControl.resume();
+    const state = await this.queueControl.getState();
+    return {
+      paused: state.paused,
+      reason: state.reason,
+      source: state.source,
+      pausedAt: state.pausedAt,
+    };
   }
 
   // ---------- pipeline surface (called by tickets 3.2 / 3.5) ----------

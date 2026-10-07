@@ -13,10 +13,18 @@ export class IgdbError extends Error {
   }
 }
 
+/** Rejected/absent IGDB configuration (credentials), not a data error. */
+export class IgdbConfigError extends IgdbError {
+  constructor(message: string) {
+    super(false, message);
+    this.name = 'IgdbConfigError';
+  }
+}
+
 /** Maps an upstream HTTP status to a safe IGDB error. */
 export function igdbErrorFromStatus(status: number): IgdbError {
   if (status === 401 || status === 403) {
-    return new IgdbError(false, 'IGDB rejected the credentials');
+    return new IgdbConfigError('IGDB rejected the credentials');
   }
   if (status === 429) {
     return new IgdbError(true, 'IGDB rate-limited the request');

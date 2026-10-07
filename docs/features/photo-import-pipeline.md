@@ -67,6 +67,9 @@ try:
     outcome = 'done' | 'needs_attention'
 catch error:
   counts = summarizeRecognizedItems()            # partial work so far (pending counts as recognized)
+  if configErrorSource(error) != null:           # rejected/absent LLM or IGDB credential (3.10)
+      markFailed(reason, counts); pauseForConfig(source, reason)
+      throw UnrecoverableError
   if not retryable OR last attempt: markFailed(reason, counts); outcome = 'failed'
   else: outcome = 'retry_scheduled'
   throw error (UnrecoverableError when permanent)
@@ -127,6 +130,14 @@ Key properties:
   BullMQ's `UnrecoverableError` after `markFailed`, so BullMQ does not schedule
   the remaining attempts. A `RetryableImportError` is re-thrown unchanged so
   retries proceed.
+- **Configuration errors pause the queue.** A rejected/absent LLM or IGDB
+  credential (ticket 3.10) is a distinct `config_error` outcome, not an ordinary
+  permanent failure: `resolveBatch` throws `ConfigurationImportError` **before**
+  committing the batch, `run` marks the current photo `failed`, calls
+  `QueueControlService.pauseForConfig(source, reason)`, and throws
+  `UnrecoverableError`. The single queue is left paused so no further photo
+  starts, and `configErrorSource()` makes the error non-retryable. See
+  [Queue Pause on Configuration Error](/queue-pause-on-config-error.md).
 - **Photo lifecycle.** The photo is deleted after the job reaches a terminal
   _completed_ state — both `done` and `needs_attention`, including zero-item
   recognition. A `failed` job keeps its photo while it is retryable. The
@@ -177,14 +188,20 @@ The IGDB source:
   is never treated as a typo, so it stays unresolved rather than matching the
   wrong game;
 - a non-`429` 5xx/network/timeout — or a `429` whose internal retries are
-  exhausted — becomes `transient` and is retried by the job; a 401/403 or
+  exhausted — becomes `transient` and is retried by the job; a 401/403 (or
+  missing `IGDB_CLIENT_ID`/`IGDB_CLIENT_SECRET`, both raised as
+  `IgdbConfigError`) becomes `config_error` and pauses the queue (ticket 3.10,
+  [Queue Pause on Configuration Error](/queue-pause-on-config-error.md)); a
   malformed query becomes `unrecognized`, and no match becomes `unrecognized`.
 
 Because `transient` means "unknown", the chain **stops** at the first
 `transient` instead of falling through (a real title must not be permanently
 dropped while a source is merely throttled/down); only an `unrecognized` outcome
-moves on to the next source. Once every source has returned `unrecognized`, the
-chain emits one aggregated reason preserving each source's label, e.g.
+moves on to the next source. A `config_error` (rejected/absent credentials)
+short-circuits the chain the same way, so a broken source is never masked by a
+fallback and the queue pause happens immediately. Once every source has returned
+`unrecognized`, the chain emits one aggregated reason preserving each source's
+label, e.g.
 `No game matched the title in any source — IGDB: No IGDB game matched the title`.
 
 A matched candidate is mapped to a local `Platform` row: the candidate's IGDB
