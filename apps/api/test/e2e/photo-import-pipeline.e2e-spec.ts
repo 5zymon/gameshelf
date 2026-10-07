@@ -565,4 +565,82 @@ describe('Photo import pipeline (e2e)', () => {
       expect(existsSync(join(photoDir, photoRef))).toBe(false);
     });
   });
+
+  describe('ticket 4.8 declared vs recognized count', () => {
+    it('ends done with no flags when items are recognized and nothing was declared', async () => {
+      const { id, photoRef } = await seedJob();
+      vision.recognize.mockResolvedValue({
+        items: [recognized('A'), recognized('B'), recognized('C')],
+        countVisible: 3,
+      });
+      resolver.resolve.mockImplementation((item: RecognizedItem) =>
+        Promise.resolve({ kind: 'matched', candidate: candidate(item.title) }),
+      );
+
+      const result = await app
+        .get(PhotoImportHandler)
+        .handle(makeJob(id, photoRef));
+
+      expect(result).toEqual({
+        recognizedCount: 3,
+        importedCount: 3,
+        unrecognizedCount: 0,
+      });
+      const job = await test.prisma.importJob.findUniqueOrThrow({
+        where: { id },
+      });
+      expect(job.status).toBe('done');
+      expect(job.declaredCount).toBeNull();
+
+      await test.login();
+      const res = await test.request.get(`/import-jobs/${String(id)}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        status: 'done',
+        declaredCount: null,
+        recognizedCount: 3,
+        needsAttention: false,
+        declaredCountMismatch: false,
+      });
+      expect(existsSync(join(photoDir, photoRef))).toBe(false);
+    });
+
+    it('ignores the model advisory count when computing the flag', async () => {
+      const { id, photoRef } = await seedJob(2);
+      vision.recognize.mockResolvedValue({
+        items: [recognized('A'), recognized('B')],
+        countVisible: 0,
+      });
+      resolver.resolve.mockImplementation((item: RecognizedItem) =>
+        Promise.resolve({ kind: 'matched', candidate: candidate(item.title) }),
+      );
+
+      const result = await app
+        .get(PhotoImportHandler)
+        .handle(makeJob(id, photoRef));
+
+      expect(result).toEqual({
+        recognizedCount: 2,
+        importedCount: 2,
+        unrecognizedCount: 0,
+      });
+      const job = await test.prisma.importJob.findUniqueOrThrow({
+        where: { id },
+      });
+      expect(job.status).toBe('done');
+      expect(job.declaredCount).toBe(2);
+      expect(job.recognizedCount).toBe(2);
+
+      await test.login();
+      const res = await test.request.get(`/import-jobs/${String(id)}`);
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        status: 'done',
+        declaredCount: 2,
+        recognizedCount: 2,
+        needsAttention: false,
+        declaredCountMismatch: false,
+      });
+    });
+  });
 });

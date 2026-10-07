@@ -38,7 +38,7 @@ export class ImportJobModel {
   @ApiProperty({
     example: 2,
     description:
-      'Flagged items: unrecognized + unreadable (ADR-002 result contract)',
+      'Flagged items: recognized titles whose status is unrecognized',
   })
   unrecognizedCount!: number;
 
