@@ -41,13 +41,13 @@ The page (a server component) reads `searchParams`, validates `page` to an integ
 # Notes
 
 - `next/image` is deliberately **not** used. `coverThumbUrl` is already a locally thumbnailed, width-bounded WebP (ticket 4.10), and the covers route sits behind the global `SessionGuard`; a plain same-origin `<img>` sends the first-party session cookie directly, whereas the `/_next/image` optimiser hop is unnecessary and the cookie forwarding is less direct. No `images.remotePatterns` configuration is needed. The `@next/next/no-img-element` warning is suppressed inline with this reasoning.
-- Tiles are intentionally non-interactive: game detail links arrive in ticket 5.4, so no hover/scale transitions are applied here.
+- Tiles are `next/link` `Link`s to `/games/[id]` (ticket 5.4); the cover frame gains a restrained `group-hover:border-accent/70` affordance (`motion-reduce:transition-none`).
 - `alt=""` on the cover is intentional — the title is always visible adjacent text in the tile, avoiding a duplicate announcement.
 
 # Out of scope
 
 - Filters / search / URL-synced filter bar — delivered in ticket 5.3; see [Catalog Filters & Search](/catalog-filters.md).
-- Game detail, edit, and delete, and making tiles links (ticket 5.4).
+- Game detail, edit, and delete (ticket 5.4); see [Game Detail View with Edit, Delete & Re-enrich](/game-detail.md).
 - The real manual-add form; only the `/games/new` placeholder exists here (ticket 5.5).
 - Loading skeletons, error boundaries/retry, focus management, and further responsive polish (ticket 5.6).
 - i18n (ticket 7.2) and platform management (ticket 7.1).
