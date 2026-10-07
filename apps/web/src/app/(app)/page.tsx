@@ -1,38 +1,132 @@
+import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { getGames } from '@/lib/api/server';
+import { CatalogPagination } from '@/components/catalog-pagination';
+import { GameCard } from '@/components/game-card';
+import type { ListGamesQuery } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 
-export default async function CatalogPage(): Promise<React.ReactElement> {
-  const games = await getGames();
+const PAGE_SIZE = 24;
+
+type CatalogSearchParams = Record<string, string | string[] | undefined>;
+
+function parsePage(value: string | string[] | undefined): number {
+  const raw = Array.isArray(value) ? value[0] : value;
+  if (raw === undefined) return 1;
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed >= 1 ? parsed : 1;
+}
+
+/** Preserves every current query param (forward-compatible with 5.3 filters) but `page`. */
+function pageHref(searchParams: CatalogSearchParams, target: number): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(searchParams)) {
+    if (key === 'page') continue;
+    const values = Array.isArray(value)
+      ? value
+      : value === undefined
+        ? []
+        : [value];
+    for (const v of values) params.append(key, v);
+  }
+  if (target > 1) params.set('page', String(target));
+  const query = params.toString();
+  return query === '' ? '/' : `/?${query}`;
+}
+
+export default async function CatalogPage({
+  searchParams,
+}: {
+  searchParams: Promise<CatalogSearchParams>;
+}): Promise<React.ReactElement> {
+  const params = await searchParams;
+  const page = parsePage(params.page);
+  const query: ListGamesQuery = { page, limit: PAGE_SIZE };
+  const games = await getGames(query);
   if (games === null) redirect('/login');
-  const { items } = games;
+
+  const { items, meta } = games;
+  if (meta.total === 0) return <EmptyCatalog />;
+
+  const first = (meta.page - 1) * meta.limit + 1;
+  const last = first + items.length - 1;
+
   return (
     <section className="space-y-6">
-      <div>
+      <header>
         <p className="text-xs uppercase tracking-widest text-accent">Catalog</p>
-        <h1 className="text-3xl font-semibold tracking-tight">Your shelf</h1>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          Your shelf
+        </h1>
         <p className="mt-1 text-sm text-muted">
-          Showing {items.length} game{items.length === 1 ? '' : 's'}
+          {items.length === 0
+            ? `No games on page ${String(meta.page)}`
+            : `Showing ${String(first)}–${String(last)} of ${String(meta.total)} games`}
         </p>
-      </div>
+      </header>
+
       {items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-edge p-10 text-center text-muted">
-          No games yet.
+          That page has no games.{' '}
+          <Link
+            href="/"
+            className="text-accent underline-offset-4 hover:underline hover:text-accent-strong"
+          >
+            Back to the first page
+          </Link>
         </p>
       ) : (
-        <ul className="grid gap-3 sm:grid-cols-2">
-          {items.map((game) => (
-            <li
-              key={game.id}
-              className="rounded-xl border border-edge bg-shelf p-4"
-            >
-              <p className="font-medium text-fog">{game.title}</p>
-              <p className="text-sm text-muted">{game.platform.name}</p>
-            </li>
+        <ul className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-5">
+          {items.map((game, index) => (
+            <GameCard key={game.id} game={game} priority={index < 4} />
           ))}
         </ul>
       )}
+
+      <CatalogPagination
+        page={meta.page}
+        totalPages={meta.totalPages}
+        prevHref={meta.page > 1 ? pageHref(params, meta.page - 1) : null}
+        nextHref={
+          meta.page < meta.totalPages ? pageHref(params, meta.page + 1) : null
+        }
+      />
+    </section>
+  );
+}
+
+function EmptyCatalog(): React.ReactElement {
+  return (
+    <section className="space-y-6">
+      <header>
+        <p className="text-xs uppercase tracking-widest text-accent">Catalog</p>
+        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          Your shelf
+        </h1>
+      </header>
+      <div className="rounded-2xl border border-dashed border-edge px-6 py-16 text-center">
+        <h2 className="text-lg font-medium text-fog">
+          Nothing on the shelf yet
+        </h2>
+        <p className="mx-auto mt-2 max-w-md text-sm text-muted">
+          Add a game by hand, or import photos of your shelf to fill it in.
+        </p>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          <Link
+            href="/games/new"
+            className="rounded-md bg-accent px-4 py-2 font-medium text-ink hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong"
+          >
+            Add a game
+          </Link>
+          <Link
+            href="/import"
+            className="rounded-md border border-edge px-4 py-2 font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            Import from photos
+          </Link>
+        </div>
+      </div>
     </section>
   );
 }
