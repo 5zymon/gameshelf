@@ -12,6 +12,8 @@ export interface EnrichedGameData {
   genre: string | null;
   playerCount: number | null;
   coverUrl: string | null;
+  /** External catalog cover URL (internal; drives the background retry). */
+  sourceCoverUrl: string | null;
   rawMetadata: string;
   enrichedAt: Date;
   source: CatalogCandidate['source'];
@@ -47,6 +49,7 @@ export function mapCandidateToGameData(
     genre: candidate.genre,
     playerCount: candidate.playerCount,
     coverUrl,
+    sourceCoverUrl: candidate.coverUrl,
     rawMetadata: JSON.stringify(candidate.raw),
     enrichedAt: input.fetchedAt ?? new Date(),
     source: candidate.source,

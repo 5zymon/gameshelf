@@ -56,7 +56,7 @@ Response (`EnrichGameResponseModel`):
       "publisher": "Bungie",
       "genre": "Shooter",
       "playerCount": 16,
-      "coverUrl": "https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg",
+      "coverUrl": "/api/covers/preview?u=aHR0cHM6Ly9pbWFnZXMuaWdkYi5jb20v...&s=...",
       "platforms": [{ "igdbId": 11, "name": "Xbox", "abbreviation": "XBOX" }],
     },
   ],
@@ -65,7 +65,10 @@ Response (`EnrichGameResponseModel`):
 ```
 
 The archival `raw` upstream payload is never exposed; the candidate model drops
-it (`toEnrichCandidateModel`).
+it (`toEnrichCandidateModel`). The candidate's external cover URL is also
+replaced by a signed same-origin preview URL
+([Local Cover Cache](/local-cover-cache.md)), so the external host never reaches
+the browser.
 
 # Status / error matrix
 
@@ -96,7 +99,10 @@ candidate into a `Prisma.GameUpdateInput`, or `null` when nothing changes:
    candidate provides a **non-null** value, the value differs, and the field is
    not hand-edited. A null candidate field leaves the existing value intact.
 3. `coverUrl`: same rule (`/api/covers/<file>` via the shared cover cache). A
-   candidate without a cover never clears an existing one.
+   candidate without a cover never clears an existing one. `sourceCoverUrl`
+   (the external link, internal) is written when it differs too — even when the
+   download failed — so the background sweep / `covers:redownload` can retry it
+   ([Local Cover Cache](/local-cover-cache.md)).
 4. `source` and `externalId` are written when they differ — this is what turns
    an unlinked `MANUAL` game into a linked one.
 5. `platformUnverified` is set to `false` when it was `true`.
@@ -160,16 +166,20 @@ import create-path now writes it too (additive). `rawMetadata` remains archival.
   idempotent no-op, hand-edited preservation, and 404; plus the create/update
   provenance and `platformUnverified` behavior.
 - `game-reenrichment.e2e-spec.ts` (e2e): re-resolve a corrected title and apply
-  fresh metadata with no duplicate and protected fields unchanged; still-
-  unresolved leaves metadata intact; hand-edited publisher survives; a changed
-  cover replaces the cached one; `PATCH` and re-enrichment clear
-  `platformUnverified`; an unlinked `MANUAL` game becomes linked; a second
-  identical apply writes nothing; and the 404/400/503/409 error matrix.
+  fresh metadata with no duplicate and protected fields unchanged; the candidate
+  cover is a same-origin preview with no external host; `sourceCoverUrl` is
+  persisted; still-unresolved leaves metadata intact; hand-edited publisher
+  survives; a changed cover replaces the cached one and the replaced file is
+  unlinked; a failed re-enrichment download does not clobber the existing cover;
+  `PATCH` and re-enrichment clear `platformUnverified`; an unlinked `MANUAL` game
+  becomes linked; a second identical apply writes nothing; and the
+  404/400/503/409 error matrix.
 
 # Out of scope
 
 - Setting `platformUnverified = true` (only the clearing behavior is added).
 - Clearing provenance (`userEditedFields` is only ever unioned).
-- Orphan cover deletion when a cover is replaced (the 4.10 remainder).
-- Thumbnails / a background cover retry queue / a re-download CLI.
 - Frontend UI for the search/pick flow.
+
+Cover thumbnails, background retry, the re-download CLI, and ref-counted orphan
+cleanup are specified in [Local Cover Cache](/local-cover-cache.md).

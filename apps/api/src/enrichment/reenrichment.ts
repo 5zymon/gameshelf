@@ -87,6 +87,7 @@ export interface ReenrichmentExisting {
   genre: string | null;
   playerCount: number | null;
   coverUrl: string | null;
+  sourceCoverUrl: string | null;
   rawMetadata: string | null;
   source: string;
   externalId: number | null;
@@ -151,6 +152,15 @@ export function buildReenrichmentUpdate(
     enriched.coverUrl !== existing.coverUrl
   ) {
     data.coverUrl = enriched.coverUrl;
+  }
+  // Persist the external link even when the download failed (coverUrl stays
+  // null), so the background sweep / `covers:redownload` can retry it later.
+  if (
+    !edited.has('coverUrl') &&
+    enriched.sourceCoverUrl !== null &&
+    enriched.sourceCoverUrl !== existing.sourceCoverUrl
+  ) {
+    data.sourceCoverUrl = enriched.sourceCoverUrl;
   }
   if (enriched.source !== existing.source) {
     data.source = enriched.source;

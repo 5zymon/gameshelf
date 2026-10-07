@@ -114,6 +114,11 @@ browser <img src="/api/covers/<file>"> ──rewrite /api──▶ API GET /cove
   falls back to `~/.gameshelf/covers`. See the root `README.md` and
   `.env.example`.
 
+Locally generated thumbnails, the signed same-origin preview for unsaved
+candidates, background retry, ref-counted deletion/replacement, and the
+`covers:redownload` command are specified in
+[Local Cover Cache](/local-cover-cache.md).
+
 # Where it runs
 
 `ImportJobsService.commitImportBatch` resolves every cover **outside** the DB
@@ -128,17 +133,16 @@ Rows created before this feature landed may still hold an **external**
 `coverUrl` — there is no backfill. The browser's `img-src 'self'`
 [CSP](/single-origin-frontend-api.md) blocks those external images, so once the
 UI renders covers an old game shows no cover until it is re-enriched (ticket 4.7)
-or backfilled (ticket 4.10). New and re-enriched games store the same-origin
+or repaired from a stored link by [Local Cover Cache](/local-cover-cache.md)
+(ticket 4.10). New and re-enriched games store the same-origin
 `/api/covers/<file>` path.
 
-# Out of scope (ticket 4.10 remainder)
+# Out of scope
 
-- Local thumbnail generation / size variants (IGDB cover URLs are `t_thumb`).
-- A background retry queue for failed cover downloads.
-- A re-download CLI command.
-- Search-result thumbnail passthrough.
-- Cover deletion on game delete and replacement on re-enrichment (orphan
-  cleanup).
+The catalog grid UI that renders covers (ticket 5.2) and backfilling covers for
+rows created before the cache existed. The cache's thumbnail generation,
+same-origin preview passthrough, background retry, deletion/replacement, and
+re-download command are specified in [Local Cover Cache](/local-cover-cache.md).
 
 # Tests
 
@@ -151,13 +155,15 @@ or backfilled (ticket 4.10). New and re-enriched games store the same-origin
 - `cover-cache.service.spec.ts` (unit): download + deterministic same-origin
   path, second-call reuse (no re-download), reuse for an extensionless URL and
   when the URL extension disagrees with the content type, `null`/blank/non-HTTP
-  URLs, non-image content type, empty/oversize body, client failure → `null`,
+  URLs, a non-allowlisted host (`COVER_PREVIEW_HOSTS` rejection/override),
+  non-image content type, empty/oversize body, client failure → `null`,
   `read` round-trip, traversal rejection / missing file, default directory.
 - `cover-http.client.spec.ts` (unit): the real `FetchCoverHttpClient` against a
   stubbed `fetch` — streamed body buffered, declared-oversize `Content-Length`
   short-circuited without reading, a chunked body cancelled once it crosses
-  `MAX_COVER_BYTES`, the 10 s abort signal propagated and its abort rejected, and
-  a mid-stream error rejected.
+  `MAX_COVER_BYTES`, the 10 s abort signal propagated and its abort rejected,
+  a mid-stream error rejected, and host-allowlist enforcement (non-allowlisted
+  host rejected before fetching, post-redirect final URL re-checked).
 - `igdb-game-catalog.resolver.spec.ts` / `mobygames-game-catalog.resolver.spec.ts`
   (unit): `playerCount` derived from `multiplayer_modes` for the IGDB fixture
   (16) and always `null` for the MobyGames fixture.

@@ -19,6 +19,7 @@ function existing(
     genre: null,
     playerCount: null,
     coverUrl: null,
+    sourceCoverUrl: null,
     rawMetadata: null,
     source: 'MANUAL',
     externalId: null,
@@ -38,6 +39,8 @@ function enriched(overrides: Partial<EnrichedGameData> = {}): EnrichedGameData {
     genre: 'Shooter',
     playerCount: 16,
     coverUrl: '/api/covers/abc.jpg',
+    sourceCoverUrl:
+      'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
     rawMetadata: JSON.stringify({ id: 1036 }),
     enrichedAt: new Date('2026-10-07T00:00:00.000Z'),
     source: 'IGDB',
@@ -102,6 +105,8 @@ describe('buildReenrichmentUpdate', () => {
         genre: 'Shooter',
         playerCount: 16,
         coverUrl: '/api/covers/abc.jpg',
+        sourceCoverUrl:
+          'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
         source: 'IGDB',
         externalId: 1036,
       }),
@@ -123,6 +128,8 @@ describe('buildReenrichmentUpdate', () => {
       genre: 'Shooter',
       playerCount: 16,
       coverUrl: '/api/covers/abc.jpg',
+      sourceCoverUrl:
+        'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
       source: 'IGDB',
       externalId: 1036,
       rawMetadata: JSON.stringify({ id: 1036 }),
@@ -147,6 +154,7 @@ describe('buildReenrichmentUpdate', () => {
         genre: null,
         playerCount: null,
         coverUrl: null,
+        sourceCoverUrl: null,
         source: 'IGDB',
         externalId: 7,
       }),
@@ -206,9 +214,35 @@ describe('buildReenrichmentUpdate', () => {
         source: 'IGDB',
         externalId: 1036,
       }),
-      enriched: enriched({ coverUrl: null }),
+      enriched: enriched({ coverUrl: null, sourceCoverUrl: null }),
     });
     expect(kept).not.toHaveProperty('coverUrl');
+  });
+
+  it('stores the external source link when a fresh download failed', () => {
+    const data = buildReenrichmentUpdate({
+      existing: existing({ source: 'IGDB', externalId: 1036 }),
+      enriched: enriched({ coverUrl: null }),
+    });
+
+    expect(data).toMatchObject({
+      sourceCoverUrl:
+        'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
+    });
+    expect(data).not.toHaveProperty('coverUrl');
+  });
+
+  it('stores both the local cover and the external source link', () => {
+    const data = buildReenrichmentUpdate({
+      existing: existing({ source: 'IGDB', externalId: 1036 }),
+      enriched: enriched(),
+    });
+
+    expect(data).toMatchObject({
+      coverUrl: '/api/covers/abc.jpg',
+      sourceCoverUrl:
+        'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
+    });
   });
 
   it('clears the platform-unverified flag when otherwise unchanged', () => {
@@ -219,6 +253,8 @@ describe('buildReenrichmentUpdate', () => {
         genre: 'Shooter',
         playerCount: 16,
         coverUrl: '/api/covers/abc.jpg',
+        sourceCoverUrl:
+          'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
         source: 'IGDB',
         externalId: 1036,
         platformUnverified: true,
@@ -241,6 +277,8 @@ describe('buildReenrichmentUpdate', () => {
         genre: 'Shooter',
         playerCount: 16,
         coverUrl: '/api/covers/abc.jpg',
+        sourceCoverUrl:
+          'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
         source: 'IGDB',
         externalId: 1036,
       }),

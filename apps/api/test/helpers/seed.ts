@@ -33,6 +33,7 @@ export function seedGame(
     genre?: string | null;
     playerCount?: number | null;
     coverUrl?: string | null;
+    sourceCoverUrl?: string | null;
     source?: 'IGDB' | 'MobyGames' | 'MANUAL';
     enrichedAt?: Date | null;
     rawMetadata?: string | null;

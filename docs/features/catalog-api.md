@@ -41,6 +41,7 @@ Response shape (additive — `items`/`meta` unchanged from the base listing):
       "title": "Hollow Knight",
       "edition": null,
       "coverUrl": null,
+      "coverThumbUrl": null,
       "platform": { "id": 1, "name": "PC", "slug": "pc" }
     }
   ],
@@ -51,6 +52,12 @@ Response shape (additive — `items`/`meta` unchanged from the base listing):
   }
 }
 ```
+
+`coverUrl` is always a same-origin `/api/covers/<file>` path (or `null`).
+`coverThumbUrl` is the locally generated thumbnail (`/api/covers/thumbs/<file>`)
+and is `null` whenever `coverUrl` is. Both are served from the app's own origin;
+the internal external-cover link is never serialized. See
+[Local Cover Cache](/local-cover-cache.md).
 
 # AND semantics
 

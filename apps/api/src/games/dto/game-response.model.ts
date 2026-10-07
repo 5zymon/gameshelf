@@ -29,6 +29,13 @@ export class GameListItemModel {
   })
   coverUrl!: string | null;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Locally generated thumbnail (same origin)',
+    example: '/api/covers/thumbs/0123456789abcdef0123456789abcdef.jpg',
+  })
+  coverThumbUrl!: string | null;
+
   @ApiProperty({ type: GamePlatformModel })
   platform!: GamePlatformModel;
 }
@@ -64,6 +71,14 @@ export class GameDetailModel {
     example: '/api/covers/0123456789abcdef0123456789abcdef.jpg',
   })
   coverUrl!: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'Locally generated thumbnail (same origin, WebP). Null when no cover.',
+    example: '/api/covers/thumbs/0123456789abcdef0123456789abcdef.jpg',
+  })
+  coverThumbUrl!: string | null;
 
   @ApiPropertyOptional({
     nullable: true,

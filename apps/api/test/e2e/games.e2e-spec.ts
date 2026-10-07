@@ -1,6 +1,20 @@
+import { createHash } from 'node:crypto';
+import {
+  CoverHttpClient,
+  type CoverHttpResponse,
+} from '../../src/covers/cover-http.client';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 import { resetDatabase } from '../helpers/reset';
 import { seedGame, seedPlatform } from '../helpers/seed';
+
+/** A same-origin cover path the API would store for an external URL. */
+function servedCover(url: string): string {
+  const hash = createHash('sha256').update(url).digest('hex').slice(0, 32);
+  return `/api/covers/${hash}.jpg`;
+}
+
+const EXTERNAL_COVER =
+  'https://images.igdb.com/igdb/image/upload/t_thumb/hk.jpg';
 
 interface PlatformRef {
   id: number;
@@ -13,6 +27,7 @@ interface GameListItem {
   title: string;
   edition: string | null;
   coverUrl: string | null;
+  coverThumbUrl: string | null;
   platform: PlatformRef;
 }
 
@@ -37,13 +52,18 @@ interface GamesListBody {
 
 describe('Games API (e2e)', () => {
   let test: TestApp;
+  let coverHttp: { get: jest.Mock<Promise<CoverHttpResponse>, [string]> };
 
   beforeAll(async () => {
-    test = await createTestApp();
+    coverHttp = { get: jest.fn<Promise<CoverHttpResponse>, [string]>() };
+    test = await createTestApp([
+      { provide: CoverHttpClient, useValue: coverHttp },
+    ]);
   });
 
   beforeEach(async () => {
     await resetDatabase(test.prisma);
+    coverHttp.get.mockReset();
     await test.login();
   });
 
@@ -342,7 +362,7 @@ describe('Games API (e2e)', () => {
         publisher: 'Team Cherry',
         genre: 'Metroidvania',
         playerCount: 1,
-        coverUrl: 'https://example.com/hk.jpg',
+        coverUrl: servedCover(EXTERNAL_COVER),
       });
 
       const res = await test.request.get(`/games/${String(game.id)}`);
@@ -357,7 +377,10 @@ describe('Games API (e2e)', () => {
       expect(body.publisher).toBe('Team Cherry');
       expect(body.genre).toBe('Metroidvania');
       expect(body.playerCount).toBe(1);
-      expect(body.coverUrl).toBe('https://example.com/hk.jpg');
+      expect(body.coverUrl).toBe(servedCover(EXTERNAL_COVER));
+      expect(body.coverUrl).toMatch(/^\/api\/covers\//);
+      // The internal source link is never serialized.
+      expect(body).not.toHaveProperty('sourceCoverUrl');
       expect(body.rawMetadata).toBeNull();
       expect(body.enrichedAt).toBeNull();
       expect(body.source).toBe('MANUAL');
@@ -410,6 +433,13 @@ describe('Games API (e2e)', () => {
 
     it('creates a full game with every optional field', async () => {
       const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+      const bytes = Buffer.from('fake-cover-bytes');
+      coverHttp.get.mockResolvedValue({
+        ok: true,
+        status: 200,
+        contentType: 'image/jpeg',
+        body: bytes,
+      });
 
       const res = await test.request.post('/games').send({
         title: 'Hollow Knight',
@@ -419,7 +449,7 @@ describe('Games API (e2e)', () => {
         publisher: 'Team Cherry',
         genre: 'Metroidvania',
         playerCount: 1,
-        coverUrl: 'https://example.com/hk.jpg',
+        coverUrl: EXTERNAL_COVER,
       });
 
       expect(res.status).toBe(201);
@@ -429,7 +459,56 @@ describe('Games API (e2e)', () => {
       expect(body.publisher).toBe('Team Cherry');
       expect(body.genre).toBe('Metroidvania');
       expect(body.playerCount).toBe(1);
-      expect(body.coverUrl).toBe('https://example.com/hk.jpg');
+      // The external cover is downloaded and served from our own origin.
+      expect(coverHttp.get).toHaveBeenCalledWith(EXTERNAL_COVER);
+      expect(body.coverUrl).toBe(servedCover(EXTERNAL_COVER));
+      expect(body.coverThumbUrl).toBe(
+        `/api/covers/thumbs/${servedCover(EXTERNAL_COVER).split('/').pop() ?? ''}`,
+      );
+      expect(body).not.toHaveProperty('sourceCoverUrl');
+    });
+
+    it('saves a placeholder (null cover) when the cover download fails', async () => {
+      const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+      const failingCover =
+        'https://images.igdb.com/igdb/image/upload/t_thumb/missing-cover.jpg';
+      coverHttp.get.mockRejectedValue(new Error('network down'));
+
+      const res = await test.request
+        .post('/games')
+        .send({ title: 'HK', platformId: p.id, coverUrl: failingCover });
+
+      expect(res.status).toBe(201);
+      const body = res.body as GameDetail;
+      expect(body.coverUrl).toBeNull();
+      expect(body).not.toHaveProperty('sourceCoverUrl');
+      // The external link is stored internally so the sweep can retry it.
+      const row = await test.prisma.game.findFirstOrThrow();
+      expect(row.sourceCoverUrl).toBe(failingCover);
+    });
+
+    it('rejects a non-allowlisted cover host and stores a placeholder', async () => {
+      const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+      const evilCover = 'https://evil.example/cover.jpg';
+      // The stub would happily serve bytes; the allowlist must prevent the
+      // request from ever reaching it.
+      coverHttp.get.mockResolvedValue({
+        ok: true,
+        status: 200,
+        contentType: 'image/jpeg',
+        body: Buffer.from('should-not-be-fetched'),
+      });
+
+      const res = await test.request
+        .post('/games')
+        .send({ title: 'HK', platformId: p.id, coverUrl: evilCover });
+
+      expect(res.status).toBe(201);
+      expect(coverHttp.get).not.toHaveBeenCalled();
+      const body = res.body as GameDetail;
+      expect(body.coverUrl).toBeNull();
+      const row = await test.prisma.game.findFirstOrThrow();
+      expect(row.sourceCoverUrl).toBe(evilCover);
     });
 
     it('rejects an unknown platformId with 400', async () => {
@@ -554,6 +633,115 @@ describe('Games API (e2e)', () => {
         name: 'PlayStation 5',
         slug: 'ps5',
       });
+    });
+
+    it('downloads and keeps an external cover same-origin on update', async () => {
+      const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+      const game = await seedGame(test.prisma, {
+        title: 'HK',
+        platformId: p.id,
+      });
+      // A URL distinct from the POST fixture: the shared e2e cache dir may
+      // already hold that one, which would skip the download.
+      const updatedCover =
+        'https://images.igdb.com/igdb/image/upload/t_thumb/hk-update.jpg';
+      coverHttp.get.mockResolvedValue({
+        ok: true,
+        status: 200,
+        contentType: 'image/jpeg',
+        body: Buffer.from('updated-cover-bytes'),
+      });
+
+      const res = await test.request
+        .patch(`/games/${String(game.id)}`)
+        .send({ coverUrl: updatedCover });
+
+      expect(res.status).toBe(200);
+      expect(coverHttp.get).toHaveBeenCalledWith(updatedCover);
+      const body = res.body as GameDetail;
+      expect(body.coverUrl).toBe(servedCover(updatedCover));
+      // The external link is internal-only and drives the sweep.
+      expect(body).not.toHaveProperty('sourceCoverUrl');
+      const row = await test.prisma.game.findUniqueOrThrow({
+        where: { id: game.id },
+      });
+      expect(row.coverUrl).toBe(servedCover(updatedCover));
+      expect(row.sourceCoverUrl).toBe(updatedCover);
+    });
+
+    it('saves a placeholder on update when the cover download fails', async () => {
+      const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+      const game = await seedGame(test.prisma, {
+        title: 'HK',
+        platformId: p.id,
+      });
+      const failingCover =
+        'https://images.igdb.com/igdb/image/upload/t_thumb/missing.jpg';
+      coverHttp.get.mockRejectedValue(new Error('network down'));
+
+      const res = await test.request
+        .patch(`/games/${String(game.id)}`)
+        .send({ coverUrl: failingCover });
+
+      expect(res.status).toBe(200);
+      const body = res.body as GameDetail;
+      expect(body.coverUrl).toBeNull();
+      expect(body).not.toHaveProperty('sourceCoverUrl');
+      const row = await test.prisma.game.findUniqueOrThrow({
+        where: { id: game.id },
+      });
+      expect(row.coverUrl).toBeNull();
+      expect(row.sourceCoverUrl).toBe(failingCover);
+    });
+
+    it('rejects a non-allowlisted cover host on update and saves a placeholder', async () => {
+      const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+      const game = await seedGame(test.prisma, {
+        title: 'HK',
+        platformId: p.id,
+      });
+      coverHttp.get.mockResolvedValue({
+        ok: true,
+        status: 200,
+        contentType: 'image/jpeg',
+        body: Buffer.from('should-not-be-fetched'),
+      });
+
+      const res = await test.request
+        .patch(`/games/${String(game.id)}`)
+        .send({ coverUrl: 'https://evil.example/cover.jpg' });
+
+      expect(res.status).toBe(200);
+      expect(coverHttp.get).not.toHaveBeenCalled();
+      const body = res.body as GameDetail;
+      expect(body.coverUrl).toBeNull();
+      const row = await test.prisma.game.findUniqueOrThrow({
+        where: { id: game.id },
+      });
+      expect(row.sourceCoverUrl).toBe('https://evil.example/cover.jpg');
+    });
+
+    it('preserves the source link when the current local path is re-submitted', async () => {
+      const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+      const local = servedCover(EXTERNAL_COVER);
+      const game = await seedGame(test.prisma, {
+        title: 'HK',
+        platformId: p.id,
+        coverUrl: local,
+        sourceCoverUrl: EXTERNAL_COVER,
+      });
+
+      const res = await test.request
+        .patch(`/games/${String(game.id)}`)
+        .send({ coverUrl: local });
+
+      expect(res.status).toBe(200);
+      expect(coverHttp.get).not.toHaveBeenCalled();
+      const row = await test.prisma.game.findUniqueOrThrow({
+        where: { id: game.id },
+      });
+      expect(row.coverUrl).toBe(local);
+      expect(row.sourceCoverUrl).toBe(EXTERNAL_COVER);
     });
 
     it('is a no-op for an empty body', async () => {

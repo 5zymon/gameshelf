@@ -83,6 +83,10 @@ model Game {
   genre       String?    @db.VarChar(255)
   playerCount Int?       @map("player_count")
   coverUrl    String?    @map("cover_url") @db.VarChar(2083)
+  // External catalog cover URL (IGDB/MobyGames). Internal only: used by the
+  // background retry and `covers:redownload` to re-fetch a missing local file.
+  // Never serialized in a response (covers are always served same-origin).
+  sourceCoverUrl String? @map("source_cover_url") @db.VarChar(2083)
   rawMetadata String?    @map("raw_metadata") @db.MediumText
   enrichedAt  DateTime?  @map("enriched_at")
   source      GameSource @default(MANUAL)

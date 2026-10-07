@@ -62,6 +62,11 @@ tasks:
     cmds:
       - npm run db:migrate:check
 
+  covers:redownload:
+    desc: Re-download every missing game cover from its stored game-database link (needs a running MySQL)
+    cmds:
+      - npm run covers:redownload
+
   fix:
     desc: Apply ESLint autofixes and Prettier formatting
     cmds:

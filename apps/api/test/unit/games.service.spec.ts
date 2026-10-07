@@ -39,7 +39,12 @@ interface GamesServiceHarness {
   mock: GamesPrismaMock;
   catalog: { resolve: jest.Mock };
   enrichment: { enrichCandidate: jest.Mock };
+  covers: { cacheFromUrl: jest.Mock; fileFromServedUrl: jest.Mock };
+  preview: { previewUrl: jest.Mock };
+  maintenance: { removeIfUnreferenced: jest.Mock };
 }
+
+const PREVIEW_URL = '/api/covers/preview?u=b64&s=sig';
 
 function createService(): GamesServiceHarness {
   const mock: GamesPrismaMock = {
@@ -58,15 +63,29 @@ function createService(): GamesServiceHarness {
   };
   const catalog = { resolve: jest.fn() };
   const enrichment = { enrichCandidate: jest.fn() };
+  const covers = {
+    cacheFromUrl: jest.fn(() => Promise.resolve(null as string | null)),
+    fileFromServedUrl: jest.fn(() => null as string | null),
+  };
+  const preview = { previewUrl: jest.fn(() => PREVIEW_URL as string | null) };
+  const maintenance = {
+    removeIfUnreferenced: jest.fn(() => Promise.resolve()),
+  };
   return {
     service: new GamesService(
       mock as unknown as PrismaService,
       catalog as unknown as GameCatalogResolver,
       enrichment as unknown as GameEnrichmentService,
+      covers as never,
+      preview as never,
+      maintenance as never,
     ),
     mock,
     catalog,
     enrichment,
+    covers,
+    preview,
+    maintenance,
   };
 }
 
@@ -75,9 +94,13 @@ describe('GamesService (unit)', () => {
   let mock: GamesPrismaMock;
   let catalog: { resolve: jest.Mock };
   let enrichment: { enrichCandidate: jest.Mock };
+  let covers: { cacheFromUrl: jest.Mock; fileFromServedUrl: jest.Mock };
+  let preview: { previewUrl: jest.Mock };
+  let maintenance: { removeIfUnreferenced: jest.Mock };
 
   beforeEach(() => {
-    ({ service, mock, catalog, enrichment } = createService());
+    ({ service, mock, catalog, enrichment, covers, preview, maintenance } =
+      createService());
   });
 
   describe('list', () => {
@@ -256,6 +279,34 @@ describe('GamesService (unit)', () => {
 
       expect(result.filters.editions).toEqual(['GOTY']);
     });
+
+    it('adds a same-origin coverThumbUrl to each item', async () => {
+      const coverUrl = `/api/covers/${'c'.repeat(32)}.jpg`;
+      mock.game.findMany
+        .mockResolvedValueOnce([
+          {
+            id: 1,
+            title: 'HK',
+            edition: null,
+            coverUrl,
+            platform: { id: 1, name: 'PC', slug: 'pc' },
+          },
+        ])
+        .mockResolvedValueOnce([]);
+      mock.game.count.mockResolvedValue(1);
+      mock.platform.findMany.mockResolvedValue([]);
+
+      const result = await service.list({});
+
+      expect(result.items[0]).toEqual({
+        id: 1,
+        title: 'HK',
+        edition: null,
+        coverUrl,
+        coverThumbUrl: `/api/covers/thumbs/${'c'.repeat(32)}.jpg`,
+        platform: { id: 1, name: 'PC', slug: 'pc' },
+      });
+    });
   });
 
   describe('findOne', () => {
@@ -273,7 +324,11 @@ describe('GamesService (unit)', () => {
         where: { id: 7 },
         include: { platform: { select: PLATFORM_SELECT } },
       });
-      expect(result).toEqual({ ...game, userEditedFields: [] });
+      expect(result).toEqual({
+        ...game,
+        coverThumbUrl: null,
+        userEditedFields: [],
+      });
     });
 
     it('throws 404 for an unknown id', async () => {
@@ -307,16 +362,24 @@ describe('GamesService (unit)', () => {
           genre: null,
           playerCount: null,
           coverUrl: null,
+          sourceCoverUrl: null,
         },
         include: { platform: { select: PLATFORM_SELECT } },
       });
-      expect(result).toEqual({ ...created, userEditedFields: [] });
+      expect(result).toEqual({
+        ...created,
+        coverThumbUrl: null,
+        userEditedFields: [],
+      });
     });
 
     it('passes every provided field through and records provenance', async () => {
       mock.platform.findUnique.mockResolvedValue({ id: 2 });
       const created = { id: 1 };
       mock.game.create.mockResolvedValue(created);
+      covers.cacheFromUrl.mockResolvedValue(
+        `/api/covers/${'a'.repeat(32)}.jpg`,
+      );
       const dto: CreateGameDto = {
         title: 'HK',
         platformId: 2,
@@ -330,6 +393,11 @@ describe('GamesService (unit)', () => {
 
       await service.create(dto);
 
+      // An external cover URL is downloaded and kept same-origin; the external
+      // URL is stored internally for retries, never in the response.
+      expect(covers.cacheFromUrl).toHaveBeenCalledWith(
+        'https://example.com/hk.jpg',
+      );
       expect(mock.game.create).toHaveBeenCalledWith({
         data: {
           title: 'HK',
@@ -339,11 +407,51 @@ describe('GamesService (unit)', () => {
           publisher: 'Team Cherry',
           genre: 'Metroidvania',
           playerCount: 1,
-          coverUrl: 'https://example.com/hk.jpg',
+          coverUrl: `/api/covers/${'a'.repeat(32)}.jpg`,
+          sourceCoverUrl: 'https://example.com/hk.jpg',
           userEditedFields: serializeEditedFields(TRACKED_METADATA_FIELDS),
         },
         include: { platform: { select: PLATFORM_SELECT } },
       });
+    });
+
+    it('keeps a same-origin cover path as-is without a download', async () => {
+      mock.platform.findUnique.mockResolvedValue({ id: 2 });
+      mock.game.create.mockResolvedValue({ id: 1 });
+      const local = `/api/covers/${'b'.repeat(32)}.png`;
+
+      await service.create({ title: 'HK', platformId: 2, coverUrl: local });
+
+      expect(covers.cacheFromUrl).not.toHaveBeenCalled();
+      expect(mock.game.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            coverUrl: local,
+            sourceCoverUrl: null,
+          }) as unknown,
+        }),
+      );
+    });
+
+    it('keeps a failed cover download as a placeholder with a source link', async () => {
+      mock.platform.findUnique.mockResolvedValue({ id: 2 });
+      mock.game.create.mockResolvedValue({ id: 1 });
+      covers.cacheFromUrl.mockResolvedValue(null);
+
+      await service.create({
+        title: 'HK',
+        platformId: 2,
+        coverUrl: 'https://example.com/hk.jpg',
+      });
+
+      expect(mock.game.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            coverUrl: null,
+            sourceCoverUrl: 'https://example.com/hk.jpg',
+          }) as unknown,
+        }),
+      );
     });
 
     it('rejects with 400 when the platform does not exist', async () => {
@@ -411,7 +519,113 @@ describe('GamesService (unit)', () => {
         data: { title: 'New' },
         include: { platform: { select: PLATFORM_SELECT } },
       });
-      expect(result).toEqual({ ...updated, userEditedFields: [] });
+      expect(result).toEqual({
+        ...updated,
+        coverThumbUrl: null,
+        userEditedFields: [],
+      });
+    });
+
+    it('downloads and keeps an external cover same-origin on update', async () => {
+      mock.game.findUnique.mockResolvedValue({ id: 3, coverUrl: null });
+      const local = `/api/covers/${'d'.repeat(32)}.jpg`;
+      covers.cacheFromUrl.mockResolvedValue(local);
+      mock.game.update.mockResolvedValue({ id: 3, coverUrl: local });
+
+      await service.update(3, { coverUrl: 'https://example.com/new.jpg' });
+
+      expect(covers.cacheFromUrl).toHaveBeenCalledWith(
+        'https://example.com/new.jpg',
+      );
+      expect(mock.game.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            coverUrl: local,
+            sourceCoverUrl: 'https://example.com/new.jpg',
+          }) as unknown,
+        }),
+      );
+      expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(null, 3);
+    });
+
+    it('clears the cover and source link with an explicit null', async () => {
+      mock.game.findUnique.mockResolvedValue({
+        id: 3,
+        coverUrl: `/api/covers/${'e'.repeat(32)}.jpg`,
+      });
+      mock.game.update.mockResolvedValue({ id: 3, coverUrl: null });
+
+      await service.update(3, {
+        coverUrl: null,
+      } as unknown as UpdateGameDto);
+
+      expect(covers.cacheFromUrl).not.toHaveBeenCalled();
+      expect(mock.game.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            coverUrl: null,
+            sourceCoverUrl: null,
+          }) as unknown,
+        }),
+      );
+      // The replaced file is removed (ref-counted).
+      expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(
+        `/api/covers/${'e'.repeat(32)}.jpg`,
+        3,
+      );
+    });
+
+    it('preserves the stored source link when the current local path is re-submitted', async () => {
+      const local = `/api/covers/${'a'.repeat(32)}.jpg`;
+      const source =
+        'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg';
+      mock.game.findUnique.mockResolvedValue({
+        id: 3,
+        coverUrl: local,
+        sourceCoverUrl: source,
+      });
+      mock.game.update.mockResolvedValue({ id: 3, coverUrl: local });
+
+      await service.update(3, { coverUrl: local });
+
+      expect(covers.cacheFromUrl).not.toHaveBeenCalled();
+      expect(mock.game.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            coverUrl: local,
+            sourceCoverUrl: source,
+          }) as unknown,
+        }),
+      );
+      // The cover did not change, so nothing is removed.
+      expect(maintenance.removeIfUnreferenced).not.toHaveBeenCalled();
+    });
+
+    it('clears the source link when a different local path is submitted', async () => {
+      const oldLocal = `/api/covers/${'a'.repeat(32)}.jpg`;
+      const newLocal = `/api/covers/${'b'.repeat(32)}.jpg`;
+      mock.game.findUnique.mockResolvedValue({
+        id: 3,
+        coverUrl: oldLocal,
+        sourceCoverUrl:
+          'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
+      });
+      mock.game.update.mockResolvedValue({ id: 3, coverUrl: newLocal });
+
+      await service.update(3, { coverUrl: newLocal });
+
+      expect(mock.game.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            coverUrl: newLocal,
+            sourceCoverUrl: null,
+          }) as unknown,
+        }),
+      );
+      expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(
+        oldLocal,
+        3,
+      );
     });
 
     it('changes the platform when platformId is provided and clears the unverified flag', async () => {
@@ -493,6 +707,8 @@ describe('GamesService (unit)', () => {
       genre: 'Shooter',
       playerCount: 16,
       coverUrl: '/api/covers/0123456789abcdef0123456789abcdef.jpg',
+      sourceCoverUrl:
+        'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
       rawMetadata: JSON.stringify({ id: 1036 }),
       enrichedAt: new Date('2026-10-07T00:00:00.000Z'),
       source: 'IGDB' as const,
@@ -510,6 +726,7 @@ describe('GamesService (unit)', () => {
         genre: null,
         playerCount: null,
         coverUrl: null,
+        sourceCoverUrl: null as string | null,
         rawMetadata: null,
         enrichedAt: null,
         source: 'MANUAL',
@@ -547,14 +764,20 @@ describe('GamesService (unit)', () => {
         publisher: 'Bungie',
         genre: 'Shooter',
         playerCount: 16,
-        coverUrl:
-          'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
+        coverUrl: PREVIEW_URL,
         platforms: [{ igdbId: 11, name: 'Xbox', abbreviation: 'XBOX' }],
         source: 'IGDB',
       });
+      // The external host is replaced by a signed same-origin preview URL.
+      expect(preview.previewUrl).toHaveBeenCalledWith(candidate.coverUrl);
       // The raw archive payload must never leak into a response.
       expect(result.candidates[0]).not.toHaveProperty('raw');
-      expect(result.game).toEqual({ ...row, userEditedFields: [] });
+      const { sourceCoverUrl: _sourceCoverUrl, ...gameResponse } = row;
+      expect(result.game).toEqual({
+        ...gameResponse,
+        coverThumbUrl: null,
+        userEditedFields: [],
+      });
       expect(enrichment.enrichCandidate).not.toHaveBeenCalled();
       expect(mock.game.update).not.toHaveBeenCalled();
     });
@@ -596,6 +819,7 @@ describe('GamesService (unit)', () => {
             genre: 'Shooter',
             playerCount: 16,
             coverUrl: enriched.coverUrl,
+            sourceCoverUrl: enriched.sourceCoverUrl,
             source: 'IGDB',
             externalId: 1036,
             rawMetadata: enriched.rawMetadata,
@@ -607,6 +831,9 @@ describe('GamesService (unit)', () => {
       expect(result.applied).toBe(true);
       expect(result.game.publisher).toBe('Bungie');
       expect(result.game.externalId).toBe(1036);
+      // The previous (null) cover is unchanged, so the maintenance hook is a
+      // no-op.
+      expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(null, 5);
     });
 
     it('reports unrecognized without writing', async () => {
@@ -623,7 +850,12 @@ describe('GamesService (unit)', () => {
       expect(result.reason).toBe('No game matched the title in any source');
       expect(result.candidates).toEqual([]);
       expect(result.applied).toBe(false);
-      expect(result.game).toEqual({ ...row, userEditedFields: [] });
+      const { sourceCoverUrl: _sourceCoverUrl, ...gameResponse } = row;
+      expect(result.game).toEqual({
+        ...gameResponse,
+        coverThumbUrl: null,
+        userEditedFields: [],
+      });
       expect(mock.game.update).not.toHaveBeenCalled();
     });
 
@@ -676,6 +908,7 @@ describe('GamesService (unit)', () => {
         genre: 'Shooter',
         playerCount: 16,
         coverUrl: enriched.coverUrl,
+        sourceCoverUrl: enriched.sourceCoverUrl,
         rawMetadata: enriched.rawMetadata,
         enrichedAt: enriched.enrichedAt,
         source: 'IGDB',
@@ -724,12 +957,63 @@ describe('GamesService (unit)', () => {
             genre: 'Shooter',
             playerCount: 16,
             coverUrl: enriched.coverUrl,
+            sourceCoverUrl: enriched.sourceCoverUrl,
             source: 'IGDB',
             externalId: 1036,
             rawMetadata: enriched.rawMetadata,
             enrichedAt: enriched.enrichedAt,
           },
         }),
+      );
+    });
+
+    it('removes the downloaded candidate cover when provenance blocks adopting it', async () => {
+      const oldCover = `/api/covers/${'b'.repeat(32)}.jpg`;
+      const row = gameRow({
+        coverUrl: oldCover,
+        userEditedFields: '["coverUrl"]',
+      });
+      mock.game.findUnique.mockResolvedValue(row);
+      catalog.resolve.mockResolvedValue({ kind: 'matched', candidate });
+      enrichment.enrichCandidate.mockResolvedValue(enriched);
+      mock.game.update.mockResolvedValue({
+        ...row,
+        releaseYear: 2001,
+        publisher: 'Bungie',
+        genre: 'Shooter',
+        playerCount: 16,
+      });
+
+      await service.enrich(5, {
+        candidate: { source: 'IGDB', externalId: 1036 },
+      });
+
+      // The hand-edited cover is not written, so the downloaded candidate file
+      // is orphaned and must be removed (ref-counted). Exact data equality
+      // proves `coverUrl`/`sourceCoverUrl` were omitted.
+      expect(mock.game.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 5 },
+          data: {
+            releaseYear: 2001,
+            publisher: 'Bungie',
+            genre: 'Shooter',
+            playerCount: 16,
+            source: 'IGDB',
+            externalId: 1036,
+            rawMetadata: enriched.rawMetadata,
+            enrichedAt: enriched.enrichedAt,
+          },
+        }),
+      );
+      expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(
+        enriched.coverUrl,
+        5,
+      );
+      // The still-referenced existing cover is never removed.
+      expect(maintenance.removeIfUnreferenced).not.toHaveBeenCalledWith(
+        oldCover,
+        5,
       );
     });
 
@@ -754,12 +1038,14 @@ describe('GamesService (unit)', () => {
     });
 
     it('deletes the game when it exists', async () => {
-      mock.game.findUnique.mockResolvedValue({ id: 3 });
+      const coverUrl = `/api/covers/${'f'.repeat(32)}.jpg`;
+      mock.game.findUnique.mockResolvedValue({ id: 3, coverUrl });
       mock.game.delete.mockResolvedValue({ id: 3 });
 
       await service.remove(3);
 
       expect(mock.game.delete).toHaveBeenCalledWith({ where: { id: 3 } });
+      expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(coverUrl);
     });
   });
 });

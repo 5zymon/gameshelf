@@ -53,26 +53,27 @@ npm run dev
 
 Other useful scripts (all run from the root):
 
-| Command                    | Description                                                    |
-| -------------------------- | -------------------------------------------------------------- |
-| `npm run dev`              | Start API + web in watch mode                                  |
-| `npm run dev:api`          | Start only the NestJS API                                      |
-| `npm run dev:web`          | Start only the Next.js frontend                                |
-| `npm run build`            | Build both workspaces                                          |
-| `npm run db:migrate`       | Local migration (Prisma, shadow DB)                            |
-| `npm run platforms:sync`   | Fetch and reconcile the canonical IGDB platform list locally   |
-| `npm run db:deploy`        | Apply committed migrations                                     |
-| `npm run db:migrate:check` | Fail if schema and deployed DB diverge                         |
-| `npm run db:generate`      | Regenerate the Prisma client                                   |
-| `npm run db:studio`        | Open Prisma Studio                                             |
-| `npm run user:create`      | Create an account from the terminal (prompts for the password) |
-| `npm run user:passwd`      | Reset an account's password from the terminal (prompts for it) |
-| `npm run typecheck`        | Type-check both workspaces                                     |
-| `npm run test`             | Run the API test suite (unit + e2e)                            |
-| `npm run lint`             | Lint both workspaces                                           |
-| `npm run lint:fix`         | Lint both workspaces and autofix                               |
-| `npm run format`           | Format the whole repo with Prettier                            |
-| `npm run format:check`     | Check formatting without writing                               |
+| Command                     | Description                                                    |
+| --------------------------- | -------------------------------------------------------------- |
+| `npm run dev`               | Start API + web in watch mode                                  |
+| `npm run dev:api`           | Start only the NestJS API                                      |
+| `npm run dev:web`           | Start only the Next.js frontend                                |
+| `npm run build`             | Build both workspaces                                          |
+| `npm run db:migrate`        | Local migration (Prisma, shadow DB)                            |
+| `npm run platforms:sync`    | Fetch and reconcile the canonical IGDB platform list locally   |
+| `npm run covers:redownload` | Re-download every missing game cover from its stored link      |
+| `npm run db:deploy`         | Apply committed migrations                                     |
+| `npm run db:migrate:check`  | Fail if schema and deployed DB diverge                         |
+| `npm run db:generate`       | Regenerate the Prisma client                                   |
+| `npm run db:studio`         | Open Prisma Studio                                             |
+| `npm run user:create`       | Create an account from the terminal (prompts for the password) |
+| `npm run user:passwd`       | Reset an account's password from the terminal (prompts for it) |
+| `npm run typecheck`         | Type-check both workspaces                                     |
+| `npm run test`              | Run the API test suite (unit + e2e)                            |
+| `npm run lint`              | Lint both workspaces                                           |
+| `npm run lint:fix`          | Lint both workspaces and autofix                               |
+| `npm run format`            | Format the whole repo with Prettier                            |
+| `npm run format:check`      | Check formatting without writing                               |
 
 ### Code quality and git hooks
 
@@ -375,7 +376,7 @@ Queued jobs live in Redis, so they survive an API restart: stop the API, enqueue
 
 Each photo job inherits `attempts: 3` and exponential backoff (`IMPORT_RETRY_BACKOFF_MS`) from the registered queue's `defaultJobOptions`, so upload and retry enqueue paths cannot drift. A transient failure (e.g. an external 429) throws a retryable error, the `import_jobs` row stays `processing`, and the retry re-runs only the titles that are still unresolved — the vision provider is called at most once per photo (a `vision_completed_at` marker plus a transaction make the recognition write one-shot). A job is marked `failed` only on a non-retryable error or on the final attempt. Confirmed games are saved in one MySQL transaction per batch (batch size 10), so a worker killed mid-job leaves the earlier batches committed.
 
-**Metadata and covers.** Each confirmed candidate is mapped to a `Game` by the reusable `GameEnrichmentService` (title, canonical platform, vision-only edition, year, publisher, genre, player count, provenance, and the raw archival payload); a source field that is absent stays empty rather than being invented. The candidate's external cover is downloaded once **outside** the DB transaction into the local cache (`COVERS_DIR`, default `~/.gameshelf/covers`) and the saved `coverUrl` becomes a same-origin `/api/covers/<file>` served by the API — never an external host. A failed download leaves `coverUrl` null without failing the import item. See `docs/features/game-metadata-enrichment.md`.
+**Metadata and covers.** Each confirmed candidate is mapped to a `Game` by the reusable `GameEnrichmentService` (title, canonical platform, vision-only edition, year, publisher, genre, player count, provenance, and the raw archival payload); a source field that is absent stays empty rather than being invented. The candidate's external cover is downloaded once **outside** the DB transaction into the local cache (`COVERS_DIR`, default `~/.gameshelf/covers`) and the saved `coverUrl` becomes a same-origin `/api/covers/<file>` served by the API — never an external host. A catalog thumbnail is generated locally with `sharp` (WebP, width ≤300) and served at `/api/covers/thumbs/<file>`, and `GET /games` exposes both as `coverUrl` and `coverThumbUrl`. A failed download leaves `coverUrl` null without failing the import item, keeps the external URL internally as `sourceCoverUrl`, and a 15-minute `@Interval` sweep retries it (no second queue, ADR-002). Re-enrichment search candidates are passed through a signed same-origin `/api/covers/preview` route so the external host never reaches the browser. Replacing a cover or deleting a game removes the stored file only when no other game references it, and `npm run covers:redownload` repopulates every missing cover from its stored `sourceCoverUrl` (e.g. after the cover directory is wiped). Manual `coverUrl` inputs to `POST /games`/`PATCH /games/:id` are downloaded and kept same-origin too. See `docs/features/local-cover-cache.md` and `docs/features/game-metadata-enrichment.md`.
 
 **Re-enrichment.** `POST /games/:id/enrich` re-runs the same IGDB → MobyGames → unresolved chain against a game's current (corrected) title: with no body it returns the candidate(s) and mutates nothing, and with a `{ "candidate": { "source", "externalId" } }` body it applies fresh metadata to the **existing** row — never a duplicate. The merge only fills a field the candidate provides, never changes `title`/`platformId`/`edition`, and never overwrites a hand-edited (provenance-tracked) field; `source`+`externalId` link the game and `platformUnverified` is cleared. A second identical apply writes nothing. See `docs/features/game-reenrichment.md`.
 
@@ -413,39 +414,42 @@ Measured on the compiled app: **~0.1 s** to exit after the fix, versus **still r
 
 All variables live in a single root `.env` file (see `.env.example`):
 
-| Variable              | Used by    | Purpose                                                                                                                                                                            |
-| --------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NODE_ENV`            | both       | Runtime environment                                                                                                                                                                |
-| `API_PORT`            | `apps/api` | API listen port (default `3001`)                                                                                                                                                   |
-| `API_HOST`            | `apps/api` | API bind address                                                                                                                                                                   |
-| `WEB_PORT`            | `apps/web` | Web dev server port (default `3000`)                                                                                                                                               |
-| `NEXT_PUBLIC_API_URL` | `apps/web` | Internal API origin for the `/api` rewrite and SSR (never called by the browser)                                                                                                   |
-| `MYSQL_HOST`          | `apps/api` | MySQL host (default `localhost`)                                                                                                                                                   |
-| `MYSQL_PORT`          | `apps/api` | MySQL port (default `3306`)                                                                                                                                                        |
-| `MYSQL_DATABASE`      | `apps/api` | Database name (default `gameshelf`)                                                                                                                                                |
-| `MYSQL_USER`          | `apps/api` | App database user (default `gameshelf`)                                                                                                                                            |
-| `MYSQL_PASSWORD`      | `apps/api` | App database user password                                                                                                                                                         |
-| `MYSQL_ROOT_PASSWORD` | compose    | MySQL root password (compose only)                                                                                                                                                 |
-| `DATABASE_URL`        | `apps/api` | Prisma connection string (utf8mb4)                                                                                                                                                 |
-| `DATABASE_SHADOW_URL` | `apps/api` | Prisma shadow DB (migrate dev only)                                                                                                                                                |
-| `REDIS_HOST`          | `apps/api` | Redis host (default `localhost`)                                                                                                                                                   |
-| `REDIS_PORT`          | `apps/api` | Redis port (default `6379`)                                                                                                                                                        |
-| `REDIS_QUEUE_PREFIX`  | `apps/api` | BullMQ key namespace (default `bull`)                                                                                                                                              |
-| `REDIS_URL`           | `apps/api` | Redis connection string (present for convenience; **not read** by the app — the queue uses `REDIS_HOST`/`REDIS_PORT`)                                                              |
-| `SESSION_SECRET`      | `apps/api` | HMAC-SHA256 key for session tokens (≥32 chars)                                                                                                                                     |
-| `SESSION_TTL_MINUTES` | `apps/api` | Sliding session lifetime in minutes (default `10080`; no "never")                                                                                                                  |
-| `GEMINI_API_KEY`      | `apps/api` | Gemini API key (fallback when no encrypted DB key is stored)                                                                                                                       |
-| `OPENAI_API_KEY`      | `apps/api` | OpenAI API key (fallback when no encrypted DB key is stored)                                                                                                                       |
-| `LLM_PROVIDER`        | `apps/api` | Active provider when no DB row exists: `gemini`/`openai` (default `gemini`)                                                                                                        |
-| `LLM_MODEL`           | `apps/api` | Model override for the active provider (blank = provider default)                                                                                                                  |
-| `LLM_SETTINGS_SECRET` | `apps/api` | Key-derivation secret for the stored API key's AES-256-GCM key (falls back to `SESSION_SECRET`)                                                                                    |
-| `ANTHROPIC_API_KEY`   | `apps/api` | Reserved for a future provider; **not read** by the current code                                                                                                                   |
-| `IMPORT_PHOTOS_DIR`   | `apps/api` | Ephemeral upload directory (default `<OS temp>/gameshelf-import-photos`); the pipeline deletes a photo after its job completes and a sweep removes leftovers (see Photo Lifecycle) |
-| `COVERS_DIR`          | `apps/api` | Durable cover-cache directory (default `~/.gameshelf/covers`); the import maps a saved game's `coverUrl` to a same-origin `/api/covers/<file>` served from here                    |
-| `IGDB_CLIENT_ID`      | `apps/api` | IGDB credentials                                                                                                                                                                   |
-| `IGDB_CLIENT_SECRET`  | `apps/api` | IGDB credentials                                                                                                                                                                   |
-| `IGDB_TOKEN_URL`      | `apps/api` | Optional OAuth token endpoint override (default `https://id.twitch.tv/oauth2/token`)                                                                                               |
-| `MOBYGAMES_API_KEY`   | `apps/api` | Optional MobyGames fallback key; blank = fallback disabled, IGDB-only                                                                                                              |
+| Variable                        | Used by    | Purpose                                                                                                                                                                            |
+| ------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NODE_ENV`                      | both       | Runtime environment                                                                                                                                                                |
+| `API_PORT`                      | `apps/api` | API listen port (default `3001`)                                                                                                                                                   |
+| `API_HOST`                      | `apps/api` | API bind address                                                                                                                                                                   |
+| `WEB_PORT`                      | `apps/web` | Web dev server port (default `3000`)                                                                                                                                               |
+| `NEXT_PUBLIC_API_URL`           | `apps/web` | Internal API origin for the `/api` rewrite and SSR (never called by the browser)                                                                                                   |
+| `MYSQL_HOST`                    | `apps/api` | MySQL host (default `localhost`)                                                                                                                                                   |
+| `MYSQL_PORT`                    | `apps/api` | MySQL port (default `3306`)                                                                                                                                                        |
+| `MYSQL_DATABASE`                | `apps/api` | Database name (default `gameshelf`)                                                                                                                                                |
+| `MYSQL_USER`                    | `apps/api` | App database user (default `gameshelf`)                                                                                                                                            |
+| `MYSQL_PASSWORD`                | `apps/api` | App database user password                                                                                                                                                         |
+| `MYSQL_ROOT_PASSWORD`           | compose    | MySQL root password (compose only)                                                                                                                                                 |
+| `DATABASE_URL`                  | `apps/api` | Prisma connection string (utf8mb4)                                                                                                                                                 |
+| `DATABASE_SHADOW_URL`           | `apps/api` | Prisma shadow DB (migrate dev only)                                                                                                                                                |
+| `REDIS_HOST`                    | `apps/api` | Redis host (default `localhost`)                                                                                                                                                   |
+| `REDIS_PORT`                    | `apps/api` | Redis port (default `6379`)                                                                                                                                                        |
+| `REDIS_QUEUE_PREFIX`            | `apps/api` | BullMQ key namespace (default `bull`)                                                                                                                                              |
+| `REDIS_URL`                     | `apps/api` | Redis connection string (present for convenience; **not read** by the app — the queue uses `REDIS_HOST`/`REDIS_PORT`)                                                              |
+| `SESSION_SECRET`                | `apps/api` | HMAC-SHA256 key for session tokens (≥32 chars)                                                                                                                                     |
+| `SESSION_TTL_MINUTES`           | `apps/api` | Sliding session lifetime in minutes (default `10080`; no "never")                                                                                                                  |
+| `GEMINI_API_KEY`                | `apps/api` | Gemini API key (fallback when no encrypted DB key is stored)                                                                                                                       |
+| `OPENAI_API_KEY`                | `apps/api` | OpenAI API key (fallback when no encrypted DB key is stored)                                                                                                                       |
+| `LLM_PROVIDER`                  | `apps/api` | Active provider when no DB row exists: `gemini`/`openai` (default `gemini`)                                                                                                        |
+| `LLM_MODEL`                     | `apps/api` | Model override for the active provider (blank = provider default)                                                                                                                  |
+| `LLM_SETTINGS_SECRET`           | `apps/api` | Key-derivation secret for the stored API key's AES-256-GCM key (falls back to `SESSION_SECRET`)                                                                                    |
+| `ANTHROPIC_API_KEY`             | `apps/api` | Reserved for a future provider; **not read** by the current code                                                                                                                   |
+| `IMPORT_PHOTOS_DIR`             | `apps/api` | Ephemeral upload directory (default `<OS temp>/gameshelf-import-photos`); the pipeline deletes a photo after its job completes and a sweep removes leftovers (see Photo Lifecycle) |
+| `COVERS_DIR`                    | `apps/api` | Durable cover-cache directory (default `~/.gameshelf/covers`); saves a same-origin `/api/covers/<file>` and serves generated thumbnails at `/api/covers/thumbs/<file>`             |
+| `COVER_PREVIEW_HOSTS`           | `apps/api` | Comma list of hosts the local cover cache and the signed `/api/covers/preview` passthrough may fetch (default `images.igdb.com,www.mobygames.com,mobygames.com`)                   |
+| `COVER_PREVIEW_SECRET`          | `apps/api` | HMAC key for preview URLs (falls back to `SESSION_SECRET`)                                                                                                                         |
+| `COVER_RETRY_SWEEP_INTERVAL_MS` | `apps/api` | Background cover-retry interval in ms (default `900000`)                                                                                                                           |
+| `IGDB_CLIENT_ID`                | `apps/api` | IGDB credentials                                                                                                                                                                   |
+| `IGDB_CLIENT_SECRET`            | `apps/api` | IGDB credentials                                                                                                                                                                   |
+| `IGDB_TOKEN_URL`                | `apps/api` | Optional OAuth token endpoint override (default `https://id.twitch.tv/oauth2/token`)                                                                                               |
+| `MOBYGAMES_API_KEY`             | `apps/api` | Optional MobyGames fallback key; blank = fallback disabled, IGDB-only                                                                                                              |
 
 ## Repository layout
 
