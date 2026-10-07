@@ -104,6 +104,11 @@ Consequences:
   header, and calls the API origin directly — so `getCurrentUser()` and
   `getGames()` see the same session the browser has.
 
+The strict `'self'`-only Content Security Policy, the build-time self-hosted
+fonts, and the zero-external-request guarantee that complete this single-origin
+setup are documented in
+[Single-Origin Frontend & API with Strict CSP](/single-origin-frontend-api.md).
+
 # Cookie-only guarantee (no token storage)
 
 Authentication is **cookie-only**. The session token lives in the
@@ -235,3 +240,7 @@ curl -s -o /dev/null -w 'api/setup/status -> %{http_code}\n' http://localhost:30
   script above instead.
 - Pagination UI — the catalog requests `limit=24` and renders that page only.
 - Any change to the rewrite/env design or the SSR cookie-forwarding behavior.
+  (The Content Security Policy, font self-hosting, and the zero-external-request
+  guarantee are owned by
+  [Single-Origin Frontend & API with Strict CSP](/single-origin-frontend-api.md),
+  which supersedes this exclusion for those concerns.)

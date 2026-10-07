@@ -15,6 +15,8 @@ nextEnv.loadEnvConfig(
   true,
 );
 
+// Server-side target of the `/api` rewrite (and of SSR in `lib/api.ts`). This
+// is never a browser URL: the browser only ever calls the web origin.
 const apiOrigin = (
   process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
 ).replace(/\/+$/, '');

@@ -18,4 +18,5 @@ okf_version: '0.2'
 - [LLM Settings API](/llm-settings-api.md) - `GET`/`PUT /settings/llm` and `POST /settings/llm/test`: runtime provider/model/key config, encrypted-at-rest key, and the import gate.
 - [Platforms API](/platforms-api.md) - platform CRUD with game counts, 409 duplicate/delete rules, and the canonical IGDB platform list synced locally by `npm run platforms:sync`.
 - [Web Auth UI](/web-auth-ui.md) - browser login/setup flows, the authenticated navigation shell (catalog/platforms/import/settings), layered server-side route protection, the same-origin `/api` rewrite, and the cookie-only (no token) auth guarantee, with a manual acceptance script.
+- [Single-Origin Frontend & API with Strict CSP](/single-origin-frontend-api.md) - one origin via the `/api` rewrite, first-party session cookie, nonce-based `'self'`-only CSP, and build-time self-hosted fonts.
 - [User CLI](/user-cli.md) - operator-run `user:create`/`user:passwd` commands that reuse `UsersService`, prompt for the password without echoing it, and need no email infrastructure.

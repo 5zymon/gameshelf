@@ -109,5 +109,7 @@ to equalize response time and avoid a user-enumeration timing oracle.
   endpoint is documented in [First-run Setup](/first-run-setup.md).
 - Rate limiting.
 - CSRF tokens (relying on `SameSite=Lax`) and account lockout.
-- CORS credentials configuration (web integration, ticket 2.5).
+- CORS is intentionally absent: the browser only ever calls the web origin, and
+  the `/api` rewrite is server-to-server (see
+  [Single-Origin Frontend & API with Strict CSP](/single-origin-frontend-api.md)).
 - Web client wiring and multi-level roles/permissions.
