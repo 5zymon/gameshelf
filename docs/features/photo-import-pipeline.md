@@ -223,22 +223,28 @@ label, e.g.
 A matched candidate is mapped to a local `Platform` row: the candidate's IGDB
 id first, then an anchored, equality-only match over the candidate's
 name/abbreviation and the raw platform string against every platform's
-name/abbreviation/alternative name (case-, diacritic-, punctuation-, and
-whitespace-insensitive, so `PS5` and `PlayStation 5` resolve to the same row;
-near-misses never match). Matching makes **no** IGDB platform-list call and
-never creates a platform — the list is refreshed out of band with
-`npm run platforms:sync` ([Platforms API](/platforms-api.md)). When no platform
-matches, the item is flagged **unrecognized** with the stable reason token
-`platform_not_in_catalog` (exported as `PLATFORM_NOT_IN_CATALOG_REASON`).
+name/abbreviation/alternative name **and aliases** (case-, diacritic-,
+punctuation-, and whitespace-insensitive, so `PS5` and `PlayStation 5` resolve
+to the same row; aliases carry old/merged-away names; near-misses never match).
+Matching makes **no** IGDB platform-list call — the list is refreshed out of
+band with `npm run platforms:sync` ([Platforms API](/platforms-api.md)). When
+no platform matches, the import **creates** one for the first usable of the
+raw platform name, the candidate name, or the candidate abbreviation, flagged
+`addedByImport` for review (spec §4.2.3/§4.6.6). The normalized name is
+deduplicated against reference, custom, and previously import-created
+platforms and their aliases, and the queue is sequential, so two items with the
+same unknown name in one import share exactly one new platform. The item is
+flagged **unrecognized** with the stable reason token `platform_not_in_catalog`
+(exported as `PLATFORM_NOT_IN_CATALOG_REASON`) only when there is no usable
+platform name at all.
 
-Trade-off: the status machine has no separate "needs platform sync" state, so a
-catalog match whose platform is not in the local table is treated as an
-unrecognized item and surfaces as `needs_attention` for user review. This is
-deliberate — the alternative would be silently dropping a real game — but it
-means a platform list that has not been synced yet (for example before the
-first `npm run platforms:sync`) shows up as review noise. The `reason` is a
-fixed, UI-translatable token rather than prose, so the UI can render a
-dedicated message and the value stays stable if wording changes.
+Trade-off: an import-created platform is committed immediately during
+resolution, outside the batch transaction, so a batch that later fails can
+leave a flagged, game-less platform behind. It is still reviewable,
+confirmable, and mergeable, which matches "keep the import unattended". The
+`platform_not_in_catalog` `reason` is a fixed, UI-translatable token rather
+than prose, so the UI can render a dedicated message and the value stays
+stable if wording changes.
 
 The MobyGames fallback (ticket 4.5) appends a source to the same chain and is
 consulted only after IGDB returns `unrecognized`. The IGDB

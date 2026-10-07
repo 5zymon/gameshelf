@@ -13,6 +13,8 @@ export interface PlatformMatchCandidate {
   name: string;
   abbreviation: string | null;
   alternativeName: string | null;
+  /** Extra match keys: the old name after a rename, merged-away names. */
+  aliases?: readonly string[];
 }
 
 /**
@@ -49,6 +51,7 @@ export function findPlatformMatch<T extends PlatformMatchCandidate>(
       platform.name,
       platform.abbreviation,
       platform.alternativeName,
+      ...(platform.aliases ?? []),
     ]) {
       if (raw === null) {
         continue;

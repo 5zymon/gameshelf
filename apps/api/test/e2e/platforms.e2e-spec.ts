@@ -10,6 +10,8 @@ interface PlatformBody {
   platformFamily: number | null;
   igdbId: number | null;
   slug: string;
+  addedByImport: boolean;
+  hidden: boolean;
   gameCount: number;
 }
 
@@ -55,6 +57,23 @@ describe('Platforms API (e2e)', () => {
       expect(body[0]?.id).toBe(pc.id);
       expect(body[1]?.id).toBe(ps5.id);
     });
+
+    it('orders import-created platforms first, then by name', async () => {
+      await seedPlatform(test.prisma, { name: 'AAA', slug: 'aaa' });
+      const imported = await seedPlatform(test.prisma, {
+        name: 'ZZZ',
+        slug: 'zzz',
+        addedByImport: true,
+      });
+
+      const res = await test.request.get('/platforms');
+
+      expect(res.status).toBe(200);
+      const body = res.body as PlatformBody[];
+      expect(body.map((p) => p.name)).toEqual(['ZZZ', 'AAA']);
+      expect(body[0]?.id).toBe(imported.id);
+      expect(body[0]?.addedByImport).toBe(true);
+    });
   });
 
   describe('GET /platforms/:id', () => {
@@ -78,6 +97,8 @@ describe('Platforms API (e2e)', () => {
         platformFamily: null,
         igdbId: 130,
         slug: 'ps5',
+        addedByImport: false,
+        hidden: false,
         gameCount: 1,
       });
     });
@@ -109,6 +130,8 @@ describe('Platforms API (e2e)', () => {
       expect(body.alternativeName).toBeNull();
       expect(body.igdbId).toBeNull();
       expect(body.slug).toBe('playstation-5');
+      expect(body.addedByImport).toBe(false);
+      expect(body.hidden).toBe(false);
       expect(body.gameCount).toBe(0);
     });
 
@@ -242,6 +265,26 @@ describe('Platforms API (e2e)', () => {
       expect(body.igdbId).toBeNull();
     });
 
+    it('toggles hidden on a reference platform', async () => {
+      const p = await seedPlatform(test.prisma, {
+        name: 'PC',
+        slug: 'pc',
+        igdbId: 6,
+      });
+
+      const hide = await test.request
+        .patch(`/platforms/${String(p.id)}`)
+        .send({ name: 'PC', hidden: true });
+      expect(hide.status).toBe(200);
+      expect((hide.body as PlatformBody).hidden).toBe(true);
+
+      const show = await test.request
+        .patch(`/platforms/${String(p.id)}`)
+        .send({ name: 'PC', hidden: false });
+      expect(show.status).toBe(200);
+      expect((show.body as PlatformBody).hidden).toBe(false);
+    });
+
     it('returns 404 for an unknown platform', async () => {
       const res = await test.request
         .patch('/platforms/999999')
@@ -272,8 +315,102 @@ describe('Platforms API (e2e)', () => {
     });
   });
 
+  describe('POST /platforms/:id/confirm', () => {
+    it('clears the added-by-import flag', async () => {
+      const p = await seedPlatform(test.prisma, {
+        name: 'PlayStaton 5',
+        slug: 'playstaton-5',
+        addedByImport: true,
+      });
+
+      const res = await test.request.post(`/platforms/${String(p.id)}/confirm`);
+
+      expect(res.status).toBe(200);
+      const body = res.body as PlatformBody;
+      expect(body.addedByImport).toBe(false);
+      expect(body.name).toBe('PlayStaton 5');
+    });
+
+    it('returns 404 for an unknown platform', async () => {
+      const res = await test.request.post('/platforms/999999/confirm');
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe('POST /platforms/:id/merge', () => {
+    it('moves games, aliases the source name, and deletes the source', async () => {
+      const target = await seedPlatform(test.prisma, {
+        name: 'PlayStation 5',
+        slug: 'ps5',
+      });
+      const source = await seedPlatform(test.prisma, {
+        name: 'PlayStaton 5',
+        slug: 'playstaton-5',
+        addedByImport: true,
+      });
+      await seedGame(test.prisma, { title: 'A', platformId: source.id });
+      await seedGame(test.prisma, { title: 'B', platformId: source.id });
+
+      const res = await test.request
+        .post(`/platforms/${String(source.id)}/merge`)
+        .send({ targetId: target.id });
+
+      expect(res.status).toBe(200);
+      const body = res.body as PlatformBody;
+      expect(body.id).toBe(target.id);
+      expect(body.gameCount).toBe(2);
+
+      const gone = await test.request.get(`/platforms/${String(source.id)}`);
+      expect(gone.status).toBe(404);
+
+      const aliases = await test.prisma.platformAlias.findMany({
+        where: { platformId: target.id },
+      });
+      expect(aliases.map((a) => a.name)).toContain('PlayStaton 5');
+    });
+
+    it('rejects merging a platform into itself with 400', async () => {
+      const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+
+      const res = await test.request
+        .post(`/platforms/${String(p.id)}/merge`)
+        .send({ targetId: p.id });
+
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 404 for an unknown source or target', async () => {
+      const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+      await seedPlatform(test.prisma, { name: 'PS5', slug: 'ps5' });
+
+      const noSource = await test.request
+        .post('/platforms/999999/merge')
+        .send({ targetId: p.id });
+      expect(noSource.status).toBe(404);
+
+      const noTarget = await test.request
+        .post(`/platforms/${String(p.id)}/merge`)
+        .send({ targetId: 999999 });
+      expect(noTarget.status).toBe(404);
+    });
+
+    it('validates a missing/invalid targetId with 400', async () => {
+      const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+
+      const missing = await test.request
+        .post(`/platforms/${String(p.id)}/merge`)
+        .send({});
+      expect(missing.status).toBe(400);
+
+      const invalid = await test.request
+        .post(`/platforms/${String(p.id)}/merge`)
+        .send({ targetId: 0 });
+      expect(invalid.status).toBe(400);
+    });
+  });
+
   describe('DELETE /platforms/:id', () => {
-    it('deletes a platform without games (204) and it is gone afterwards', async () => {
+    it('deletes a custom platform without games (204) and it is gone afterwards', async () => {
       const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
 
       const del = await test.request.delete(`/platforms/${String(p.id)}`);
@@ -281,6 +418,23 @@ describe('Platforms API (e2e)', () => {
 
       const get = await test.request.get(`/platforms/${String(p.id)}`);
       expect(get.status).toBe(404);
+    });
+
+    it('hides a reference platform without games instead of deleting it', async () => {
+      const p = await seedPlatform(test.prisma, {
+        name: 'PC',
+        slug: 'pc',
+        igdbId: 6,
+      });
+
+      const del = await test.request.delete(`/platforms/${String(p.id)}`);
+      expect(del.status).toBe(204);
+
+      const get = await test.request.get(`/platforms/${String(p.id)}`);
+      expect(get.status).toBe(200);
+      const body = get.body as PlatformBody;
+      expect(body.hidden).toBe(true);
+      expect(body.igdbId).toBe(6);
     });
 
     it('refuses with 409 while games reference the platform', async () => {

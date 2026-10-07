@@ -175,8 +175,13 @@ count the mismatch trigger stays off, and a clean recognition reports
 this computation — it does not set or clear a flag.
 
 `unrecognizedCount` counts the flagged `recognized_items` rows: those whose
-validation status is `unrecognized` (a title no catalog source confirmed, or a
-match whose platform is not in the local table). There is **no** separate
+validation status is `unrecognized` (a title no catalog source confirmed, or an
+item with no usable platform name). A named platform that matches no existing
+platform does **not** flag the item: the platform is created by the import and
+the game is imported (spec §4.2.3/§4.6.6; see
+[Platforms API](/platforms-api.md#import-created-platforms)). The
+`platform_not_in_catalog` reason now means only "the item has no usable
+platform name", not "the platform was not synced". There is **no** separate
 `unreadable` status, enum, or column, and no placeholder row is ever written.
 The recognition prompt (`VISION_INSTRUCTION_PROMPT`) instructs the model to
 identify an item from its cover art when the printed text cannot be read, so a

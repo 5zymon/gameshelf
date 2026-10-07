@@ -136,6 +136,29 @@ describe('findPlatformMatch (unit)', () => {
     expect(findPlatformMatch([a, b], ['Shared'])).toBeNull();
   });
 
+  it('matches through an alias', () => {
+    const ps5 = candidate({
+      id: 1,
+      name: 'PlayStation 5',
+      aliases: ['PlayStaton 5'],
+    });
+
+    expect(findPlatformMatch([ps5], ['PlayStaton 5'])).toBe(ps5);
+  });
+
+  it('never matches an alias key shared by two distinct platforms', () => {
+    const a = candidate({ id: 1, name: 'Alpha', aliases: ['Shared'] });
+    const b = candidate({ id: 2, name: 'Beta', aliases: ['Shared'] });
+
+    expect(findPlatformMatch([a, b], ['Shared'])).toBeNull();
+  });
+
+  it('treats a platform without aliases as a valid candidate (regression)', () => {
+    const ps5 = candidate({ id: 1, name: 'PlayStation 5' });
+
+    expect(findPlatformMatch([ps5], ['PlayStation 5'])).toBe(ps5);
+  });
+
   it('skips null, undefined, and blank inputs', () => {
     const platform = candidate({ id: 1, name: 'Alpha' });
 

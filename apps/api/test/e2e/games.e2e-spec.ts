@@ -633,6 +633,12 @@ describe('Games API (e2e)', () => {
         name: 'PlayStation 5',
         slug: 'ps5',
       });
+
+      // The per-platform counts follow the reassignment (req 3, §5 Platforms).
+      const from = await test.request.get(`/platforms/${String(pc.id)}`);
+      expect((from.body as { gameCount: number }).gameCount).toBe(0);
+      const to = await test.request.get(`/platforms/${String(ps5.id)}`);
+      expect((to.body as { gameCount: number }).gameCount).toBe(1);
     });
 
     it('downloads and keeps an external cover same-origin on update', async () => {

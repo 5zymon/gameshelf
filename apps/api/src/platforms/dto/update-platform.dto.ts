@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsInt,
   IsNotEmpty,
   IsOptional,
@@ -55,4 +56,12 @@ export class UpdatePlatformDto {
   @IsInt()
   @Min(1)
   igdbId?: number | null;
+
+  @ApiPropertyOptional({
+    description: 'Hide/show a reference platform',
+    example: true,
+  })
+  @IsOptional()
+  @IsBoolean()
+  hidden?: boolean;
 }

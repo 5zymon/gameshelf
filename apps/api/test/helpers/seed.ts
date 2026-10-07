@@ -1,3 +1,4 @@
+import { normalizePlatformName } from '../../src/platforms/platform-match';
 import type { PrismaService } from '../../src/prisma/prisma.service';
 
 export function seedPlatform(
@@ -9,6 +10,8 @@ export function seedPlatform(
     alternativeName?: string | null;
     platformFamily?: number | null;
     igdbId?: number | null;
+    addedByImport?: boolean;
+    hidden?: boolean;
   },
 ) {
   return prisma.platform.create({
@@ -18,6 +21,19 @@ export function seedPlatform(
       platformFamily: null,
       igdbId: null,
       ...data,
+    },
+  });
+}
+
+export function seedPlatformAlias(
+  prisma: PrismaService,
+  data: { platformId: number; name: string },
+) {
+  return prisma.platformAlias.create({
+    data: {
+      platformId: data.platformId,
+      name: data.name,
+      normalizedName: normalizePlatformName(data.name),
     },
   });
 }

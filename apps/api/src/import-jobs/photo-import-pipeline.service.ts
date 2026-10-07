@@ -31,11 +31,12 @@ import { PhotoStorageService } from './photo-storage.service';
 
 /**
  * Stable, UI-translatable reason for a title that matched a catalog candidate
- * but whose platform could not be mapped to a seeded `Platform` row. A fixed
- * snake_case token (the same idiom as the vision error codes) rather than
- * prose, so the UI can render a specific "platform not seeded" message and the
- * value stays stable across wording changes. The item is still recorded as an
- * `UnrecognizedItem` — it is surfaced for review, never silently dropped.
+ * but had no usable platform name to resolve. Unknown platform names are
+ * created by the import (spec §4.6.6), so this now only covers the case where
+ * neither the raw platform nor any candidate name/abbreviation is usable —
+ * the token itself is kept for compatibility with existing clients. The item
+ * is still recorded as an `UnrecognizedItem` — it is surfaced for review,
+ * never silently dropped.
  */
 export const PLATFORM_NOT_IN_CATALOG_REASON = 'platform_not_in_catalog';
 

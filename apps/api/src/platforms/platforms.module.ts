@@ -8,6 +8,6 @@ import { PlatformsSyncService } from './platforms-sync.service';
   imports: [GameCatalogModule],
   controllers: [PlatformsController],
   providers: [PlatformsService, PlatformsSyncService],
-  exports: [PlatformsSyncService],
+  exports: [PlatformsService, PlatformsSyncService],
 })
 export class PlatformsModule {}

@@ -1,5 +1,6 @@
 import { IgdbClient } from '../../src/game-catalog/igdb.client';
 import { ImportJobsService } from '../../src/import-jobs/import-jobs.service';
+import { PlatformsService } from '../../src/platforms/platforms.service';
 import { PlatformsSyncService } from '../../src/platforms/platforms-sync.service';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 import { resetDatabase } from '../helpers/reset';
@@ -9,6 +10,7 @@ describe('Platforms sync (e2e)', () => {
   let test: TestApp;
   let fetchPlatforms: jest.Mock;
   let syncService: PlatformsSyncService;
+  let platforms: PlatformsService;
   let importJobs: ImportJobsService;
 
   beforeAll(async () => {
@@ -17,6 +19,7 @@ describe('Platforms sync (e2e)', () => {
       { provide: IgdbClient, useValue: { fetchPlatforms } },
     ]);
     syncService = test.app.get(PlatformsSyncService);
+    platforms = test.app.get(PlatformsService);
     importJobs = test.app.get(ImportJobsService);
   });
 
@@ -92,6 +95,34 @@ describe('Platforms sync (e2e)', () => {
       updated: 0,
       unchanged: 1,
     });
+  });
+
+  it('matches a renamed platform through its alias without creating a duplicate', async () => {
+    const p = await seedPlatform(test.prisma, {
+      name: 'PlayStation 5',
+      slug: 'ps5',
+    });
+    await platforms.rename(p.id, { name: 'PS5 Slim' });
+
+    fetchPlatforms.mockResolvedValue([
+      {
+        id: 130,
+        name: 'PlayStation 5',
+        abbreviation: 'PS5',
+        platform_family: 1,
+      },
+    ]);
+
+    const result = await syncService.sync();
+
+    expect(result.created).toBe(0);
+    expect(result.updated + result.unchanged).toBe(1);
+    await expect(
+      test.prisma.platform.count({ where: { name: 'PlayStation 5' } }),
+    ).resolves.toBe(0);
+    await expect(
+      test.prisma.platform.findUnique({ where: { id: p.id } }),
+    ).resolves.toMatchObject({ name: 'PS5 Slim', igdbId: 130 });
   });
 
   it('resolves platforms per import without a platform-list call', async () => {
