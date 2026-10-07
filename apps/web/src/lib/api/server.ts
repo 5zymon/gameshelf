@@ -1,6 +1,12 @@
 import { cache } from 'react';
 import { cookies } from 'next/headers';
-import type { AuthUser, ListGamesQuery, ListGamesResponse } from './contracts';
+import type {
+  AuthUser,
+  GameDetail,
+  ListGamesQuery,
+  ListGamesResponse,
+  Platform,
+} from './contracts';
 import { createApiClient, type Transport } from './client';
 import { isApiError } from './errors';
 
@@ -44,4 +50,19 @@ export async function getGames(
     if (isApiError(error) && error.status === 401) return null;
     throw error;
   }
+}
+
+/** 404 → null (route calls `notFound()`); other errors propagate. */
+export async function getGame(id: number): Promise<GameDetail | null> {
+  try {
+    return await api.games.get(id);
+  } catch (error) {
+    if (isApiError(error) && error.status === 404) return null;
+    throw error;
+  }
+}
+
+/** All platforms for the edit select (`GET /platforms`, sorted import-first then name). */
+export async function getPlatforms(): Promise<Platform[]> {
+  return api.platforms.list();
 }

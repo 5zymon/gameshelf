@@ -1,0 +1,152 @@
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { useEffect, useId, useRef, useState } from 'react';
+import { isApiError } from '@/lib/api';
+import { api } from '@/lib/api/browser';
+
+export function DeleteGameButton({
+  gameId,
+  title,
+}: {
+  gameId: number;
+  title: string;
+}): React.ReactElement {
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const restoreFocusRef = useRef(false);
+  const labelId = useId();
+  const descriptionId = useId();
+
+  // Least-destructive default: focus Cancel when the confirmation opens.
+  useEffect(() => {
+    if (confirming) cancelRef.current?.focus();
+  }, [confirming]);
+
+  // On cancel the focused Cancel button unmounts; return focus to the trigger
+  // instead of letting it fall to <body>.
+  useEffect(() => {
+    if (!confirming && restoreFocusRef.current) {
+      restoreFocusRef.current = false;
+      triggerRef.current?.focus();
+    }
+  }, [confirming]);
+
+  function cancel(): void {
+    restoreFocusRef.current = true;
+    setConfirming(false);
+  }
+
+  useEffect(() => {
+    if (!confirming) return;
+    function onKeyDown(event: KeyboardEvent): void {
+      if (event.key === 'Escape') {
+        restoreFocusRef.current = true;
+        setConfirming(false);
+      }
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [confirming]);
+
+  async function handleConfirm(): Promise<void> {
+    setDeleting(true);
+    setError(null);
+    try {
+      await api.games.remove(gameId);
+      router.push('/');
+      router.refresh();
+      return;
+    } catch (caught) {
+      // Already gone is the outcome the user wanted; still navigate away.
+      if (isApiError(caught) && caught.status === 404) {
+        router.push('/');
+        router.refresh();
+        return;
+      }
+      if (isApiError(caught) && caught.status === 401) {
+        router.replace('/login');
+        router.refresh();
+        return;
+      }
+      setError(
+        isApiError(caught) && caught.status !== 0
+          ? caught.userMessage
+          : "We couldn't delete this game. Check your connection and try again.",
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  if (confirming) {
+    return (
+      <div
+        role="alertdialog"
+        aria-labelledby={labelId}
+        aria-describedby={descriptionId}
+        className="rounded-xl border border-danger/40 bg-danger/5 p-4"
+      >
+        <p id={labelId} className="text-sm font-medium text-fog">
+          Delete “{title}”?
+        </p>
+        <p id={descriptionId} className="mt-1 text-sm text-muted">
+          This can’t be undone.
+        </p>
+        {error !== null && (
+          <p role="alert" className="mt-2 text-sm text-danger">
+            {error}
+          </p>
+        )}
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button
+            ref={cancelRef}
+            type="button"
+            onClick={cancel}
+            disabled={deleting}
+            className="rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              void handleConfirm();
+            }}
+            disabled={deleting}
+            className="rounded-md bg-danger px-4 py-2 text-sm font-medium text-ink hover:bg-danger/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-60"
+          >
+            {deleting ? 'Deleting…' : 'Delete'}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-2">
+      <button
+        ref={triggerRef}
+        type="button"
+        onClick={() => {
+          setError(null);
+          setConfirming(true);
+        }}
+        className="rounded-md border border-danger/40 px-4 py-2 text-sm font-medium text-danger hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+      >
+        Delete game
+      </button>
+      {error !== null && (
+        <p role="alert" className="text-xs text-danger">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}

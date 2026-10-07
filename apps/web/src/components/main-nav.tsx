@@ -10,8 +10,10 @@ const NAV_ITEMS = [
   { href: '/settings', label: 'Settings' },
 ] as const;
 
+const GAME_DETAIL = /^\/games\/\d+(?:\/|$)/;
+
 function isActive(pathname: string, href: string): boolean {
-  if (href === '/') return pathname === '/';
+  if (href === '/') return pathname === '/' || GAME_DETAIL.test(pathname);
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 

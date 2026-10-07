@@ -1,5 +1,5 @@
 const FRAME =
-  'aspect-[3/4] w-full overflow-hidden rounded-lg border border-edge';
+  'aspect-[3/4] w-full overflow-hidden rounded-lg border border-edge transition-colors group-hover:border-accent/70 motion-reduce:transition-none';
 
 /** Same-origin only: a cover must be a root-relative path, never an external URL. CSP sets img-src 'self'. */
 function sameOriginPath(url: string | null): string | null {
