@@ -105,6 +105,9 @@ model Game {
   publisher   String?    @db.VarChar(255)
   genre       String?    @db.VarChar(255)
   playerCount Int?       @map("player_count")
+  // Number of physical copies owned. Owning several copies is deliberate
+  // (ticket 4.12): identity stays one catalog row, copies are counted here.
+  copyCount   Int        @default(1) @map("copy_count")
   coverUrl    String?    @map("cover_url") @db.VarChar(2083)
   // External catalog cover URL (IGDB/MobyGames). Internal only: used by the
   // background retry and `covers:redownload` to re-fetch a missing local file.

@@ -53,7 +53,7 @@ interface Harness {
   };
   storage: { read: jest.Mock; delete: jest.Mock };
   vision: { recognize: jest.Mock };
-  resolver: { resolve: jest.Mock; resolveBatch: jest.Mock };
+  resolver: { resolve: jest.Mock; resolveBatch: jest.Mock; search: jest.Mock };
   queueControl: { pauseForConfig: jest.Mock };
 }
 
@@ -218,6 +218,7 @@ function createHarness(): Harness {
       Promise.resolve({ kind: 'unrecognized', reason: 'none' }),
     ),
     resolveBatch: jest.fn(),
+    search: jest.fn(),
   };
   const queueControl: Harness['queueControl'] = {
     pauseForConfig: jest.fn(() => Promise.resolve()),

@@ -38,6 +38,8 @@ interface GamesServiceHarness {
   service: GamesService;
   mock: GamesPrismaMock;
   catalog: { resolve: jest.Mock };
+  catalogSearch: { search: jest.Mock };
+  identity: { findExisting: jest.Mock };
   enrichment: { enrichCandidate: jest.Mock };
   covers: { cacheFromUrl: jest.Mock; fileFromServedUrl: jest.Mock };
   preview: { previewUrl: jest.Mock };
@@ -62,6 +64,15 @@ function createService(): GamesServiceHarness {
     },
   };
   const catalog = { resolve: jest.fn() };
+  const catalogSearch = {
+    search: jest.fn(() =>
+      Promise.resolve({
+        kind: 'matches',
+        candidates: [] as CatalogCandidate[],
+      }),
+    ),
+  };
+  const identity = { findExisting: jest.fn(() => Promise.resolve(null)) };
   const enrichment = { enrichCandidate: jest.fn() };
   const covers = {
     cacheFromUrl: jest.fn(() => Promise.resolve(null as string | null)),
@@ -75,6 +86,8 @@ function createService(): GamesServiceHarness {
     service: new GamesService(
       mock as unknown as PrismaService,
       catalog as unknown as GameCatalogResolver,
+      catalogSearch as never,
+      identity as never,
       enrichment as unknown as GameEnrichmentService,
       covers as never,
       preview as never,
@@ -82,6 +95,8 @@ function createService(): GamesServiceHarness {
     ),
     mock,
     catalog,
+    catalogSearch,
+    identity,
     enrichment,
     covers,
     preview,
@@ -93,14 +108,25 @@ describe('GamesService (unit)', () => {
   let service: GamesService;
   let mock: GamesPrismaMock;
   let catalog: { resolve: jest.Mock };
+  let catalogSearch: { search: jest.Mock };
+  let identity: { findExisting: jest.Mock };
   let enrichment: { enrichCandidate: jest.Mock };
   let covers: { cacheFromUrl: jest.Mock; fileFromServedUrl: jest.Mock };
   let preview: { previewUrl: jest.Mock };
   let maintenance: { removeIfUnreferenced: jest.Mock };
 
   beforeEach(() => {
-    ({ service, mock, catalog, enrichment, covers, preview, maintenance } =
-      createService());
+    ({
+      service,
+      mock,
+      catalog,
+      catalogSearch,
+      identity,
+      enrichment,
+      covers,
+      preview,
+      maintenance,
+    } = createService());
   });
 
   describe('list', () => {
@@ -463,6 +489,249 @@ describe('GamesService (unit)', () => {
         new BadRequestException('Platform with id 999 does not exist'),
       );
       expect(mock.game.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a duplicate unlinked identity with 409 carrying the existing game', async () => {
+      mock.platform.findUnique.mockResolvedValue({ id: 1 });
+      identity.findExisting.mockResolvedValue({ id: 9, copyCount: 3 });
+      const existingGame = {
+        id: 9,
+        title: 'HK',
+        platformId: 1,
+        copyCount: 3,
+        sourceCoverUrl: null,
+        userEditedFields: null,
+        platform: { id: 1, name: 'PS5', slug: 'ps5' },
+      };
+      mock.game.findUnique.mockResolvedValue(existingGame);
+
+      let caught: unknown;
+      try {
+        await service.create({ title: 'HK', platformId: 1 });
+      } catch (error) {
+        caught = error;
+      }
+
+      expect(caught).toBeInstanceOf(ConflictException);
+      const response = (caught as ConflictException).getResponse() as {
+        code: string;
+        game: { id: number; copyCount: number };
+      };
+      expect(response.code).toBe('GAME_ALREADY_IN_CATALOG');
+      expect(response.game.id).toBe(9);
+      expect(response.game.copyCount).toBe(3);
+      expect(identity.findExisting).toHaveBeenCalledWith({
+        title: 'HK',
+        platformId: 1,
+        edition: null,
+        source: 'MANUAL',
+        externalId: null,
+      });
+      expect(mock.game.create).not.toHaveBeenCalled();
+      expect(covers.cacheFromUrl).not.toHaveBeenCalled();
+    });
+
+    const linkedCandidate: CatalogCandidate = {
+      externalId: 1036,
+      title: 'Halo: Combat Evolved',
+      releaseYear: 2001,
+      publisher: 'Bungie',
+      genre: 'Shooter',
+      playerCount: 16,
+      coverUrl: 'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
+      platforms: [{ igdbId: 11, name: 'Xbox', abbreviation: 'XBOX' }],
+      source: 'IGDB',
+      raw: { id: 1036 },
+    };
+
+    it('creates a linked game from a verified pick (enrichment is the source)', async () => {
+      mock.platform.findUnique.mockResolvedValue({ id: 3 });
+      catalogSearch.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [linkedCandidate],
+      });
+      const enriched = {
+        title: 'Halo: Combat Evolved',
+        platformId: 3,
+        edition: 'GOTY',
+        releaseYear: 2001,
+        publisher: 'Bungie',
+        genre: 'Shooter',
+        playerCount: 16,
+        coverUrl: '/api/covers/abc.jpg',
+        sourceCoverUrl: linkedCandidate.coverUrl,
+        rawMetadata: JSON.stringify({ id: 1036 }),
+        enrichedAt: new Date('2026-10-07T00:00:00.000Z'),
+        source: 'IGDB' as const,
+        externalId: 1036,
+      };
+      enrichment.enrichCandidate.mockResolvedValue(enriched);
+      mock.game.create.mockResolvedValue({ id: 42, ...enriched });
+
+      const result = await service.create({
+        title: 'Halo',
+        platformId: 3,
+        edition: 'GOTY',
+        candidate: { source: 'IGDB', externalId: 1036 },
+      });
+
+      expect(catalogSearch.search).toHaveBeenCalledWith('Halo');
+      expect(identity.findExisting).toHaveBeenCalledWith({
+        title: 'Halo: Combat Evolved',
+        platformId: 3,
+        edition: 'GOTY',
+        source: 'IGDB',
+        externalId: 1036,
+      });
+      expect(enrichment.enrichCandidate).toHaveBeenCalledWith(
+        linkedCandidate,
+        3,
+        'GOTY',
+      );
+      expect(mock.game.create).toHaveBeenCalledWith({
+        data: enriched,
+        include: { platform: { select: PLATFORM_SELECT } },
+      });
+      expect(result.id).toBe(42);
+    });
+
+    it('rejects a pick that no longer appears in a fresh search (409)', async () => {
+      mock.platform.findUnique.mockResolvedValue({ id: 3 });
+      catalogSearch.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [],
+      });
+
+      await expect(
+        service.create({
+          title: 'Halo',
+          platformId: 3,
+          candidate: { source: 'IGDB', externalId: 999 },
+        }),
+      ).rejects.toThrow(ConflictException);
+      expect(enrichment.enrichCandidate).not.toHaveBeenCalled();
+      expect(mock.game.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects a duplicate linked identity without downloading the cover', async () => {
+      mock.platform.findUnique.mockResolvedValue({ id: 3 });
+      catalogSearch.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [linkedCandidate],
+      });
+      identity.findExisting.mockResolvedValue({ id: 9, copyCount: 1 });
+      mock.game.findUnique.mockResolvedValue({
+        id: 9,
+        platform: { id: 3, name: 'Xbox', slug: 'xbox' },
+        sourceCoverUrl: null,
+        userEditedFields: null,
+      });
+
+      await expect(
+        service.create({
+          title: 'Halo',
+          platformId: 3,
+          candidate: { source: 'IGDB', externalId: 1036 },
+        }),
+      ).rejects.toThrow(ConflictException);
+      expect(enrichment.enrichCandidate).not.toHaveBeenCalled();
+      expect(mock.game.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('search', () => {
+    const candidate: CatalogCandidate = {
+      externalId: 1036,
+      title: 'Halo: Combat Evolved',
+      releaseYear: 2001,
+      publisher: 'Bungie',
+      genre: 'Shooter',
+      playerCount: 16,
+      coverUrl: 'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
+      platforms: [{ igdbId: 11, name: 'Xbox', abbreviation: 'XBOX' }],
+      source: 'IGDB',
+      raw: { id: 1036 },
+    };
+
+    it('maps candidates through a same-origin preview cover and strips raw', async () => {
+      catalogSearch.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [candidate],
+      });
+      preview.previewUrl.mockReturnValue('/api/covers/preview?u=abc&s=sig');
+
+      const result = await service.search({ q: 'halo' });
+
+      expect(catalogSearch.search).toHaveBeenCalledWith('halo');
+      expect(preview.previewUrl).toHaveBeenCalledWith(candidate.coverUrl);
+      expect(result.candidates).toHaveLength(1);
+      expect(result.candidates[0]).toMatchObject({
+        externalId: 1036,
+        title: 'Halo: Combat Evolved',
+        coverUrl: '/api/covers/preview?u=abc&s=sig',
+      });
+      expect((result.candidates[0] as { raw?: unknown }).raw).toBeUndefined();
+    });
+
+    it('defaults a missing q to an empty query', async () => {
+      catalogSearch.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [],
+      });
+
+      await service.search({});
+
+      expect(catalogSearch.search).toHaveBeenCalledWith('');
+    });
+
+    it('maps transient and config_error to 503', async () => {
+      catalogSearch.search.mockResolvedValue({
+        kind: 'transient',
+        reason: 'IGDB 429',
+      });
+      await expect(service.search({ q: 'halo' })).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+
+      catalogSearch.search.mockResolvedValue({
+        kind: 'config_error',
+        source: 'igdb',
+        reason: 'IGDB rejected the credentials',
+      });
+      await expect(service.search({ q: 'halo' })).rejects.toThrow(
+        ServiceUnavailableException,
+      );
+    });
+  });
+
+  describe('addCopy', () => {
+    it('increments copyCount atomically and returns the detail', async () => {
+      mock.game.findUnique.mockResolvedValue({ id: 5 });
+      mock.game.update.mockResolvedValue({
+        id: 5,
+        copyCount: 2,
+        sourceCoverUrl: null,
+        userEditedFields: null,
+        platform: { id: 1, name: 'PS5', slug: 'ps5' },
+      });
+
+      const result = await service.addCopy(5);
+
+      expect(mock.game.update).toHaveBeenCalledWith({
+        where: { id: 5 },
+        data: { copyCount: { increment: 1 } },
+        include: { platform: { select: PLATFORM_SELECT } },
+      });
+      expect(result.copyCount).toBe(2);
+    });
+
+    it('throws 404 for an unknown game', async () => {
+      mock.game.findUnique.mockResolvedValue(null);
+
+      await expect(service.addCopy(5)).rejects.toThrow(
+        new NotFoundException('Game with id 5 not found'),
+      );
+      expect(mock.game.update).not.toHaveBeenCalled();
     });
   });
 

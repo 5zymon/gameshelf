@@ -37,3 +37,24 @@ export function igdbErrorFromStatus(status: number): IgdbError {
     `IGDB rejected the request (HTTP ${String(status)})`,
   );
 }
+
+/**
+ * Maps a Twitch OAuth token-endpoint status to an IGDB error. Unlike the Games
+ * API, any non-transient non-2xx here means the token endpoint could not issue
+ * a token for the configured client id/secret: Twitch returns 400
+ * (`invalid client`) for bad credentials as well as 401/403, and a 404/other 4xx
+ * usually means `IGDB_TOKEN_URL` points somewhere wrong. Those must surface as
+ * `IgdbConfigError` (503), not as a permanent request error that an empty
+ * search would swallow. 429/5xx and network failures stay retryable.
+ */
+export function igdbTokenErrorFromStatus(status: number): IgdbError {
+  if (status === 429) {
+    return new IgdbError(true, 'IGDB rate-limited the request');
+  }
+  if (status >= 500) {
+    return new IgdbError(true, 'IGDB returned a server error');
+  }
+  return new IgdbConfigError(
+    `IGDB token endpoint rejected the request (HTTP ${String(status)})`,
+  );
+}

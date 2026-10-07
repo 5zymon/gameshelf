@@ -337,3 +337,75 @@ describe('IgdbGameCatalogResolver.resolveBatch (unit)', () => {
     expect(multiquery).not.toHaveBeenCalled();
   });
 });
+
+describe('IgdbGameCatalogResolver.search (unit)', () => {
+  it('returns ranked candidates (score > 0) with cover and metadata', async () => {
+    const search = jest.fn<Promise<IgdbGame[]>, [string]>().mockResolvedValue([
+      game({ id: 1, name: 'Halo 2' }),
+      game({ id: 2, name: 'Halo Combat Evolved' }),
+      game({
+        id: 3,
+        name: 'Halo',
+        first_release_date: 978307200,
+        cover: { url: '//images.igdb.com/igdb/image/upload/t_thumb/halo.jpg' },
+        involved_companies: [{ company: { name: 'Bungie' } }],
+        genres: [{ name: 'Shooter' }],
+        platforms: [{ id: 11, name: 'Xbox', abbreviation: 'XBOX' }],
+      }),
+    ]);
+    const resolver = createResolver(search);
+
+    const result = await resolver.search('Halo');
+
+    expect(search).toHaveBeenCalledWith('Halo');
+    expect(result.kind).toBe('matches');
+    if (result.kind !== 'matches') return;
+    // Exact normalized match first; the sequel scores 0 and is dropped.
+    expect(result.candidates.map((c) => c.externalId)).toEqual([3, 2]);
+    expect(result.candidates[0]).toMatchObject({
+      externalId: 3,
+      title: 'Halo',
+      releaseYear: 2001,
+      publisher: 'Bungie',
+      genre: 'Shooter',
+      coverUrl: 'https://images.igdb.com/igdb/image/upload/t_thumb/halo.jpg',
+    });
+  });
+
+  it('maps an IgdbConfigError to a config_error result', async () => {
+    const search = jest
+      .fn<Promise<IgdbGame[]>, [string]>()
+      .mockRejectedValue(new IgdbConfigError('IGDB rejected the credentials'));
+    const resolver = createResolver(search);
+
+    await expect(resolver.search('Halo')).resolves.toEqual({
+      kind: 'config_error',
+      source: 'igdb',
+      reason: 'IGDB rejected the credentials',
+    });
+  });
+
+  it('maps a retryable IgdbError to transient', async () => {
+    const search = jest
+      .fn<Promise<IgdbGame[]>, [string]>()
+      .mockRejectedValue(new IgdbError(true, 'IGDB rate-limited the request'));
+    const resolver = createResolver(search);
+
+    await expect(resolver.search('Halo')).resolves.toEqual({
+      kind: 'transient',
+      reason: 'IGDB rate-limited the request',
+    });
+  });
+
+  it('maps a permanent IgdbError to an empty matches result', async () => {
+    const search = jest
+      .fn<Promise<IgdbGame[]>, [string]>()
+      .mockRejectedValue(new IgdbError(false, 'IGDB malformed query'));
+    const resolver = createResolver(search);
+
+    await expect(resolver.search('Halo')).resolves.toEqual({
+      kind: 'matches',
+      candidates: [],
+    });
+  });
+});

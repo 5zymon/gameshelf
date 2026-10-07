@@ -1,7 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { RecognizedItem } from '../settings/vision/vision-provider';
 import {
+  type CatalogCandidate,
   type CatalogResolution,
+  type CatalogSearchResult,
   GAME_CATALOG_SOURCES,
   type GameCatalogSource,
   GameCatalogResolver,
@@ -63,4 +65,26 @@ export class ChainedGameCatalogResolver extends GameCatalogResolver {
   }
 
   // resolveBatch intentionally NOT overridden: inherited default calls this.resolve per item.
+
+  /**
+   * Ordered title search for manual add. IGDB-first: a later source is only
+   * queried when every earlier source returned no candidates (rate-limit
+   * friendly, mirrors the validation chain). A later failure keeps whatever
+   * candidates an earlier source already produced.
+   */
+  override async search(query: string): Promise<CatalogSearchResult> {
+    const candidates: CatalogCandidate[] = [];
+    for (const source of this.sources) {
+      const result = await source.search(query);
+      if (result.kind === 'matches') {
+        candidates.push(...result.candidates);
+        if (candidates.length > 0) return { kind: 'matches', candidates }; // first hit wins
+      } else if (candidates.length > 0) {
+        return { kind: 'matches', candidates }; // later source failed; keep results
+      } else {
+        return result; // transient/config_error from the first source
+      }
+    }
+    return { kind: 'matches', candidates };
+  }
 }

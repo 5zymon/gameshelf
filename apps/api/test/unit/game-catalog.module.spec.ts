@@ -32,7 +32,7 @@ describe('IGDB-only chain (AC4)', () => {
         reason: 'No IGDB game matched the title',
       });
     const resolver = new ChainedGameCatalogResolver([
-      { label: 'IGDB', resolve: igdbResolve },
+      { label: 'IGDB', resolve: igdbResolve, search: jest.fn() },
     ]);
 
     const result = await resolver.resolve(item('Zorblax'));

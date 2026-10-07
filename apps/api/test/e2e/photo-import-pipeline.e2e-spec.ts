@@ -64,9 +64,25 @@ function recognizedWithPlatform(
   return { title, edition: null, platform, confidence: 0.9 };
 }
 
+const EXTERNAL_IDS_BY_TITLE = new Map<string, number>();
+
+/**
+ * Deterministic, unique-per-title external id. A real catalog returns one
+ * record per game, so two differently-titled fixtures must not share an
+ * `externalId` (the shared identity rule would otherwise link them into one
+ * row).
+ */
+function externalIdFor(title: string): number {
+  const existing = EXTERNAL_IDS_BY_TITLE.get(title);
+  if (existing !== undefined) return existing;
+  const id = EXTERNAL_IDS_BY_TITLE.size + 1;
+  EXTERNAL_IDS_BY_TITLE.set(title, id);
+  return id;
+}
+
 function candidate(title: string): CatalogCandidate {
   return {
-    externalId: 1,
+    externalId: externalIdFor(title),
     title,
     releaseYear: 2001,
     publisher: 'Sony Interactive Entertainment',
@@ -528,6 +544,69 @@ describe('Photo import pipeline (e2e)', () => {
           where: { status: 'imported' },
         }),
       ).toBe(1);
+    });
+
+    it('links two recognized items resolving to the same candidate into one row without incrementing copies', async () => {
+      const { id } = await seedJob();
+      const platform = await test.prisma.platform.findFirstOrThrow({
+        where: { igdbId: PLATFORM_IGDB_ID },
+      });
+      const first = await test.prisma.recognizedItem.create({
+        data: {
+          importJobId: id,
+          position: 0,
+          rawTitle: 'A',
+          confidence: 0.9,
+          status: 'pending',
+        },
+      });
+      const second = await test.prisma.recognizedItem.create({
+        data: {
+          importJobId: id,
+          position: 1,
+          rawTitle: 'B',
+          confidence: 0.9,
+          status: 'pending',
+        },
+      });
+      const importJobs = app.get(ImportJobsService);
+      // Both candidates carry the same external record (same source +
+      // externalId); the shared identity rule links them to one row despite
+      // the different upstream titles.
+      const sharedExternalId = candidate('A').externalId;
+      const outcome: ImportBatchOutcome = {
+        resolved: [
+          {
+            recognizedItemId: first.id,
+            platformId: platform.id,
+            edition: null,
+            candidate: candidate('A'),
+          },
+          {
+            recognizedItemId: second.id,
+            platformId: platform.id,
+            edition: null,
+            candidate: { ...candidate('B'), externalId: sharedExternalId },
+          },
+        ],
+        unrecognized: [],
+        transient: [],
+      };
+
+      await importJobs.commitImportBatch(id, outcome);
+
+      expect(await test.prisma.game.count()).toBe(1);
+      const game = await test.prisma.game.findFirstOrThrow();
+      // Importing the same physical copy again links, never increments.
+      expect(game.copyCount).toBe(1);
+      const items = await test.prisma.recognizedItem.findMany({
+        orderBy: { position: 'asc' },
+      });
+      expect(items.map((item) => item.status)).toEqual([
+        'imported',
+        'imported',
+      ]);
+      expect(items.map((item) => item.gameId)).toEqual([game.id, game.id]);
     });
 
     it('ends needs_attention with declaredCountMismatch when the model finds fewer than declared', async () => {

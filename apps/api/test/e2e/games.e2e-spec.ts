@@ -37,6 +37,7 @@ interface GameDetail extends GameListItem {
   publisher: string | null;
   genre: string | null;
   playerCount: number | null;
+  copyCount: number;
   rawMetadata: string | null;
   enrichedAt: string | null;
   source: string;
@@ -377,6 +378,7 @@ describe('Games API (e2e)', () => {
       expect(body.publisher).toBe('Team Cherry');
       expect(body.genre).toBe('Metroidvania');
       expect(body.playerCount).toBe(1);
+      expect(body.copyCount).toBe(1);
       expect(body.coverUrl).toBe(servedCover(EXTERNAL_COVER));
       expect(body.coverUrl).toMatch(/^\/api\/covers\//);
       // The internal source link is never serialized.
@@ -424,6 +426,7 @@ describe('Games API (e2e)', () => {
       expect(body.publisher).toBeNull();
       expect(body.genre).toBeNull();
       expect(body.playerCount).toBeNull();
+      expect(body.copyCount).toBe(1);
       expect(body.coverUrl).toBeNull();
       expect(body.rawMetadata).toBeNull();
       expect(body.enrichedAt).toBeNull();

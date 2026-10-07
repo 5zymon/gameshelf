@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 import {
   IsInt,
   IsNotEmpty,
@@ -7,7 +8,9 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateNested,
 } from 'class-validator';
+import { EnrichCandidateDto } from './enrich-game.dto';
 
 export class CreateGameDto {
   @ApiProperty({
@@ -87,4 +90,14 @@ export class CreateGameDto {
   @IsString()
   @MaxLength(2083)
   coverUrl?: string;
+
+  @ApiPropertyOptional({
+    type: EnrichCandidateDto,
+    description:
+      'External catalog row the user picked from GET /games/search. When present the row is saved linked (source+externalId) and re-verified against a fresh search; the catalog cover wins over `coverUrl`.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => EnrichCandidateDto)
+  candidate?: EnrichCandidateDto;
 }

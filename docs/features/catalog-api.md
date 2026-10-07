@@ -147,5 +147,24 @@ policy.
 
 The game-detail payload (`GET /games/:id`, and the `game` block of the enrich
 response) also carries `externalId` (the upstream row id paired with `source`),
-`platformUnverified`, and `userEditedFields` (the hand-edited metadata fields
-re-enrichment must not overwrite).
+`platformUnverified`, `userEditedFields` (the hand-edited metadata fields
+re-enrichment must not overwrite), and `copyCount` (physical copies owned; the
+identity remains one row).
+
+# Manual add
+
+- `GET /games/search?q=` searches the external database (through the shared
+  rate limiters) and returns a ranked `candidates` list with same-origin preview
+  covers. A query below 2 normalized characters returns `{ "candidates": [] }`
+  without an upstream call; successful results are cached briefly and identical
+  concurrent queries are coalesced.
+- `POST /games` accepts an optional `candidate: { "source", "externalId" }` from
+  that list. With a candidate the row is saved **linked** (catalog metadata and
+  cover) using the submitted `platformId`/`edition`; without one it is saved as
+  typed data (`source: "MANUAL"`, `externalId: null`).
+- Creating a game whose identity (external record + platform + edition, or
+  normalized title + platform + edition when unlinked) already exists returns
+  `409` with `code: "GAME_ALREADY_IN_CATALOG"` and the existing `game`.
+- `POST /games/:id/copies` increments `copyCount` without creating a row.
+
+See [Manual Add with DB Search and Copy Count](/manual-add-and-copy-count.md).

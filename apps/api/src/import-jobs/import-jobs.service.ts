@@ -14,6 +14,9 @@ import type {
   CatalogPlatform,
 } from '../game-catalog/game-catalog.resolver';
 import { GameEnrichmentService } from '../enrichment/game-enrichment.service';
+import { CoverMaintenanceService } from '../covers/cover-maintenance.service';
+import type { GameIdentity } from '../games/game-identity';
+import { GameIdentityService } from '../games/game-identity.service';
 import { PlatformsService } from '../platforms/platforms.service';
 import {
   findPlatformMatch,
@@ -149,6 +152,8 @@ export class ImportJobsService {
     private readonly queueControl: QueueControlService,
     private readonly enrichment: GameEnrichmentService,
     private readonly platforms: PlatformsService,
+    private readonly identity: GameIdentityService,
+    private readonly maintenance: CoverMaintenanceService,
   ) {}
 
   // ---------- read API ----------
@@ -904,6 +909,10 @@ export class ImportJobsService {
       })),
     );
 
+    // Covers downloaded for duplicate items that were not adopted (ref-counted
+    // cleanup happens after the transaction commits).
+    const duplicateCovers: (string | null)[] = [];
+
     await this.prisma.$transaction(async (tx) => {
       // Re-check inside the transaction so a job that turned terminal while the
       // covers were downloading is still refused.
@@ -917,14 +926,30 @@ export class ImportJobsService {
         );
       }
       for (const item of resolved) {
-        const game = await tx.game.create({ data: item.data });
+        const input: GameIdentity = {
+          title: item.data.title,
+          platformId: item.data.platformId,
+          edition: item.data.edition,
+          source: item.data.source,
+          externalId: item.data.externalId,
+        };
+        // Already in catalog (overlapping photo / re-upload): link, never a
+        // second row, and do NOT increment — this is the same physical copy.
+        const existing = await this.identity.findExisting(input, tx);
+        let gameId: number;
+        if (existing !== null) {
+          gameId = existing.id;
+          duplicateCovers.push(item.data.coverUrl);
+        } else {
+          gameId = (await tx.game.create({ data: item.data })).id;
+        }
         const claim = await tx.recognizedItem.updateMany({
           where: {
             id: item.recognizedItemId,
             importJobId: jobId,
             status: 'pending',
           },
-          data: { status: 'imported', gameId: game.id },
+          data: { status: 'imported', gameId },
         });
         if (claim.count === 0) {
           // A concurrent/abandoned attempt already resolved this item: the
@@ -959,6 +984,14 @@ export class ImportJobsService {
         });
       }
     });
+
+    // A duplicate item's freshly downloaded cover was not adopted by an insert;
+    // remove it if no other game row references it (a shared/live cover is kept).
+    for (const coverUrl of duplicateCovers) {
+      if (coverUrl !== null) {
+        await this.maintenance.removeIfUnreferenced(coverUrl);
+      }
+    }
   }
 
   // ---------- helpers ----------

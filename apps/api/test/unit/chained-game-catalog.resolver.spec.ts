@@ -5,6 +5,7 @@ import {
 import type {
   CatalogCandidate,
   CatalogResolution,
+  CatalogSearchResult,
   GameCatalogSource,
 } from '../../src/game-catalog/game-catalog.resolver';
 import type { RecognizedItem } from '../../src/settings/vision/vision-provider';
@@ -33,10 +34,15 @@ type ResolveMock = jest.Mock<Promise<CatalogResolution>, [RecognizedItem]>;
 interface FakeSource extends GameCatalogSource {
   label: string;
   resolve: ResolveMock;
+  search: SearchMock;
 }
 
 function source(label: string, resolve: ResolveMock): FakeSource {
-  return { label, resolve };
+  return {
+    label,
+    resolve,
+    search: jest.fn<Promise<CatalogSearchResult>, [string]>(),
+  };
 }
 
 /** The call order of a mock's invocation at `index`, asserting it happened. */
@@ -260,5 +266,106 @@ describe('ChainedGameCatalogResolver (unit)', () => {
     expect(callOrder(igdb.resolve, 1)).toBeLessThan(
       callOrder(fallback.resolve, 1),
     );
+  });
+});
+
+type SearchMock = jest.Mock<Promise<CatalogSearchResult>, [string]>;
+
+function searchSource(label: string, search: SearchMock): FakeSource {
+  return {
+    label,
+    resolve: jest.fn<Promise<CatalogResolution>, [RecognizedItem]>(),
+    search,
+  };
+}
+
+/** A typed search mock that always resolves the given result. */
+function searchReturning(result: CatalogSearchResult): SearchMock {
+  return jest.fn<Promise<CatalogSearchResult>, [string]>(() =>
+    Promise.resolve(result),
+  );
+}
+
+/** A typed search mock expected not to be called. */
+function unusedSearch(): SearchMock {
+  return jest.fn<Promise<CatalogSearchResult>, [string]>();
+}
+
+function matches(query: string): CatalogSearchResult {
+  return { kind: 'matches', candidates: [candidate(query)] };
+}
+
+describe('ChainedGameCatalogResolver.search (unit)', () => {
+  it('returns the first source that yields candidates and never consults a later source', async () => {
+    const igdb = searchSource('IGDB', searchReturning(matches('Halo')));
+    const fallback = searchSource('MobyGames', unusedSearch());
+    const resolver = new ChainedGameCatalogResolver([igdb, fallback]);
+
+    const result = await resolver.search('Halo');
+
+    expect(result).toEqual({
+      kind: 'matches',
+      candidates: [expect.objectContaining({ title: 'Halo' }) as unknown],
+    });
+    expect(igdb.search).toHaveBeenCalledWith('Halo');
+    expect(fallback.search).not.toHaveBeenCalled();
+  });
+
+  it('falls through to the next source when an earlier source returns no candidates', async () => {
+    const igdb = searchSource(
+      'IGDB',
+      searchReturning({ kind: 'matches', candidates: [] }),
+    );
+    const fallback = searchSource(
+      'MobyGames',
+      searchReturning(matches('Obscure Gem')),
+    );
+    const resolver = new ChainedGameCatalogResolver([igdb, fallback]);
+
+    const result = await resolver.search('Obscure Gem');
+
+    expect(result.kind).toBe('matches');
+    expect(result.kind === 'matches' && result.candidates[0]?.title).toBe(
+      'Obscure Gem',
+    );
+    expect(igdb.search).toHaveBeenCalledTimes(1);
+    expect(fallback.search).toHaveBeenCalledTimes(1);
+  });
+
+  it('short-circuits on a transient from the first source', async () => {
+    const igdb = searchSource(
+      'IGDB',
+      searchReturning({ kind: 'transient', reason: 'IGDB 429' }),
+    );
+    const fallback = searchSource('MobyGames', unusedSearch());
+    const resolver = new ChainedGameCatalogResolver([igdb, fallback]);
+
+    const result = await resolver.search('Halo');
+
+    expect(result).toEqual({ kind: 'transient', reason: 'IGDB 429' });
+    expect(fallback.search).not.toHaveBeenCalled();
+  });
+
+  it('returns a config_error from the first source without consulting later sources', async () => {
+    const configError: CatalogSearchResult = {
+      kind: 'config_error',
+      source: 'igdb',
+      reason: 'IGDB rejected the credentials',
+    };
+    const igdb = searchSource('IGDB', searchReturning(configError));
+    const fallback = searchSource('MobyGames', unusedSearch());
+    const resolver = new ChainedGameCatalogResolver([igdb, fallback]);
+
+    await expect(resolver.search('Halo')).resolves.toEqual(configError);
+    expect(fallback.search).not.toHaveBeenCalled();
+  });
+
+  it('returns an empty candidate list when no source is configured', async () => {
+    const resolver = new ChainedGameCatalogResolver([]);
+
+    await expect(resolver.search('Halo')).resolves.toEqual({
+      kind: 'matches',
+      candidates: [],
+    });
   });
 });

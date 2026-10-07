@@ -55,7 +55,11 @@ The token request is `POST` with `Content-Type:
 application/x-www-form-urlencoded` and body
 `client_id=…&client_secret=…&grant_type=client_credentials`. A successful
 response supplies `access_token` (or `token`) and `expires_in`; the client
-treats a missing `expires_in` as `3600 s`.
+treats a missing `expires_in` as `3600 s`. A `2xx` token response that carries
+neither token field (for example a misconfigured `IGDB_TOKEN_URL` proxy or mock
+returning `{}`) is a **configuration failure**: it throws `IgdbConfigError`, the
+same class as a rejected credential, so it surfaces as `503` on manual search and
+a config-error pause on import rather than a silent empty result.
 
 # Token caching and refresh
 
@@ -76,7 +80,12 @@ and never rejects: it is skipped under the test runner (`NODE_ENV=test`) and whe
 the credentials are absent, and on failure it only logs a safe `IgdbError`
 message. Application boot therefore still cannot fail on missing or unreachable
 credentials. Credentials are validated before any request: a missing client id
-or secret throws a permanent `IgdbError` without sending anything.
+or secret throws an `IgdbConfigError` (a permanent `IgdbError` subclass) without
+sending anything. A token-endpoint rejection (`400`/`401`/`403`, or any other
+non-`429`/`5xx` status, e.g. a wrong `IGDB_TOKEN_URL` returning `404`) and a
+`2xx` response without a token are also `IgdbConfigError`, so the caller maps
+them to `config_error` (HTTP `503` on search, a config-error pause on import)
+instead of a permanent request error that an empty search would swallow.
 
 # Central rate limiter
 
