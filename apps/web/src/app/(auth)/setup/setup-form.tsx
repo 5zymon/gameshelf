@@ -2,6 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { isApiError } from '@/lib/api';
+import { api } from '@/lib/api/browser';
 
 const INVALID_INPUT = 'Enter an email and a password, then try again.';
 const GENERIC_ERROR =
@@ -21,28 +23,20 @@ export function SetupForm(): React.ReactElement {
     setError(null);
     setSubmitting(true);
     try {
-      const res = await fetch('/api/setup', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-        credentials: 'same-origin',
-      });
-      if (res.status === 201) {
-        router.replace('/login?setup=complete');
-        router.refresh();
-        return;
-      }
-      if (res.status === 409) {
+      await api.setup.create({ email, password });
+      router.replace('/login?setup=complete');
+      router.refresh();
+      return;
+    } catch (error) {
+      if (isApiError(error) && error.status === 409) {
         router.replace('/login');
         router.refresh();
         return;
       }
-      if (res.status === 400) {
+      if (isApiError(error) && error.status === 400) {
         setError(INVALID_INPUT);
         return;
       }
-      setError(GENERIC_ERROR);
-    } catch {
       setError(GENERIC_ERROR);
     } finally {
       setSubmitting(false);

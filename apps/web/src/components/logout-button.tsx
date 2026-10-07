@@ -2,6 +2,8 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import { isApiError } from '@/lib/api';
+import { api } from '@/lib/api/browser';
 
 export function LogoutButton(): React.ReactElement {
   const router = useRouter();
@@ -12,17 +14,16 @@ export function LogoutButton(): React.ReactElement {
     setBusy(true);
     setError(false);
     try {
-      const res = await fetch('/api/auth/logout', {
-        method: 'POST',
-        credentials: 'same-origin',
-      });
-      if (res.status === 204 || res.status === 401) {
+      await api.auth.logout();
+      router.replace('/login');
+      router.refresh();
+      return;
+    } catch (error) {
+      if (isApiError(error) && error.status === 401) {
         router.replace('/login');
         router.refresh();
         return;
       }
-      setError(true);
-    } catch {
       setError(true);
     } finally {
       setBusy(false);

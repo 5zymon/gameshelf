@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation';
-import { getCurrentUser, type AuthUser } from '@/lib/api';
+import { getCurrentUser } from '@/lib/api/server';
+import type { AuthUser } from '@/lib/api';
 
 /**
  * Authoritative, server-side session guard for protected routes.
