@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import {
@@ -25,6 +27,18 @@ const TOKEN_URL = IGDB_TOKEN_URL_DEFAULT;
 const GAMES_URL = 'https://api.igdb.com/v4/games';
 const MULTIQUERY_URL = 'https://api.igdb.com/v4/multiquery';
 const PLATFORMS_URL = 'https://api.igdb.com/v4/platforms';
+
+/**
+ * Loads a recorded IGDB response envelope from `test/fixtures/igdb`.
+ * `search-halo-response.json` is a full `/v4/games` array wrapping the same
+ * sanitised payload as `igdb/halo-game.json`; `multiquery-halo-response.json`
+ * and `platforms-response.json` are the recorded multiquery/platforms bodies.
+ */
+function igdbFixture(name: string): unknown {
+  return JSON.parse(
+    readFileSync(join(__dirname, '..', 'fixtures', 'igdb', name), 'utf8'),
+  ) as unknown;
+}
 
 /** Number of `query games "gN"` sub-queries in a multiquery request body. */
 function countSubQueries(body: string): number {
@@ -1260,5 +1274,141 @@ describe('FetchIgdbHttpClient (unit)', () => {
     expect(error).toBeInstanceOf(IgdbError);
     expect((error as IgdbError).retryable).toBe(true);
     expect((error as IgdbError).message).toBe('IGDB could not be reached');
+  });
+});
+
+describe('IgdbClient recorded fixtures (integration)', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('parses a recorded /v4/games response through the HTTP seam', async () => {
+    const fetchSpy = jest.spyOn(globalThis, 'fetch');
+    // Envelope derived from `igdb/halo-game.json` (same sanitised payload, full
+    // recorded `/v4/games` response shape). Consumed only by this test.
+    const fixture = igdbFixture('search-halo-response.json') as unknown[];
+    const { client } = clientWith(
+      byUrl({
+        [GAMES_URL]: () => Promise.resolve(httpResponse(200, fixture)),
+      }),
+    );
+
+    await expect(client.searchGames('Halo: Combat Evolved')).resolves.toEqual(
+      fixture,
+    );
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('packs titles and parses a recorded /v4/multiquery response, then hydrates', async () => {
+    const fetchSpy = jest.spyOn(globalThis, 'fetch');
+    // Recorded `/v4/multiquery` body: g0 -> id 1036, g1 -> none.
+    const multiquery = igdbFixture(
+      'multiquery-halo-response.json',
+    ) as unknown[];
+    const search = igdbFixture('search-halo-response.json') as unknown[];
+    const { client, http } = clientWith(
+      byUrl({
+        [MULTIQUERY_URL]: () => Promise.resolve(httpResponse(200, multiquery)),
+        [GAMES_URL]: () => Promise.resolve(httpResponse(200, search)),
+      }),
+    );
+
+    const results = await client.multiqueryGames([
+      'Halo: Combat Evolved',
+      'Unknown',
+    ]);
+
+    expect(results).toEqual([[search[0]], []]);
+    const multiqueryRequests = http.requests.filter(
+      (request) => request.url === MULTIQUERY_URL,
+    );
+    expect(multiqueryRequests).toHaveLength(1);
+    expect(countSubQueries(multiqueryRequests[0]?.body ?? '')).toBe(2);
+    const gamesRequests = http.requests.filter(
+      (request) => request.url === GAMES_URL,
+    );
+    expect(gamesRequests).toHaveLength(1);
+    expect(hydrationIds(gamesRequests[0]?.body ?? '')).toEqual([1036]);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('parses a recorded /v4/platforms response', async () => {
+    const fetchSpy = jest.spyOn(globalThis, 'fetch');
+    // Recorded `/v4/platforms` body (PS5 id 167, Xbox id 11, PC id 6).
+    const fixture = igdbFixture('platforms-response.json') as unknown[];
+    const { client } = clientWith(
+      byUrl({
+        [PLATFORMS_URL]: () => Promise.resolve(httpResponse(200, fixture)),
+      }),
+    );
+
+    await expect(client.fetchPlatforms()).resolves.toEqual(fixture);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('sends the refreshed bearer token on the request after the cached token expires', async () => {
+    let now = 1_000_000;
+    const nowSpy = jest.spyOn(Date, 'now').mockImplementation(() => now);
+    let tokenCount = 0;
+    const http = new FakeHttpClient((request) => {
+      if (request.url === TOKEN_URL) {
+        tokenCount += 1;
+        return Promise.resolve(
+          httpResponse(200, {
+            access_token: `token-${String(tokenCount)}`,
+            expires_in: 100,
+          }),
+        );
+      }
+      return Promise.resolve(httpResponse(200, []));
+    });
+    const client = new IgdbClient(http, config(), permissiveLimiter());
+
+    await client.searchGames('Halo');
+    const firstGames = http.requests.filter((r) => r.url === GAMES_URL);
+    expect(firstGames[0]?.headers.Authorization).toBe('Bearer token-1');
+
+    // expiresAt = now + (100 - 60)s; step past it and re-request.
+    now += 41_000;
+    await client.searchGames('Halo 2');
+
+    const games = http.requests.filter((r) => r.url === GAMES_URL);
+    expect(games[1]?.headers.Authorization).toBe('Bearer token-2');
+    expect(tokenCount).toBe(2);
+    nowSpy.mockRestore();
+  });
+
+  it('shares a single refresh across concurrent callers when the cached token has expired', async () => {
+    let now = 1_000_000;
+    const nowSpy = jest.spyOn(Date, 'now').mockImplementation(() => now);
+    let tokenCount = 0;
+    const http = new FakeHttpClient((request) => {
+      if (request.url === TOKEN_URL) {
+        tokenCount += 1;
+        return Promise.resolve(
+          httpResponse(200, {
+            access_token: `token-${String(tokenCount)}`,
+            expires_in: 100,
+          }),
+        );
+      }
+      return Promise.resolve(httpResponse(200, []));
+    });
+    const client = new IgdbClient(http, config(), permissiveLimiter());
+
+    await client.searchGames('Halo');
+    expect(tokenCount).toBe(1);
+
+    // Lapse the cached token, then hit it concurrently: both callers must share
+    // the single refresh triggered by the first `getToken()`.
+    now += 41_000;
+    await Promise.all([client.searchGames('A'), client.searchGames('B')]);
+
+    expect(tokenCount).toBe(2);
+    const games = http.requests.filter((r) => r.url === GAMES_URL);
+    expect(games).toHaveLength(3);
+    expect(games[1]?.headers.Authorization).toBe('Bearer token-2');
+    expect(games[2]?.headers.Authorization).toBe('Bearer token-2');
+    nowSpy.mockRestore();
   });
 });
