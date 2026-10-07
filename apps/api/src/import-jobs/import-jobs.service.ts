@@ -14,7 +14,11 @@ import type {
   CatalogPlatform,
 } from '../game-catalog/game-catalog.resolver';
 import { GameEnrichmentService } from '../enrichment/game-enrichment.service';
-import { findPlatformMatch } from '../platforms/platform-match';
+import { PlatformsService } from '../platforms/platforms.service';
+import {
+  findPlatformMatch,
+  normalizePlatformName,
+} from '../platforms/platform-match';
 import type { PhotoImportJobData } from '../queue/photo-import.types';
 import { RetryableImportError } from '../queue/photo-import.failure';
 import { PHOTO_IMPORT_QUEUE } from '../queue/queue.constants';
@@ -144,6 +148,7 @@ export class ImportJobsService {
     private readonly queue: Queue<PhotoImportJobData>,
     private readonly queueControl: QueueControlService,
     private readonly enrichment: GameEnrichmentService,
+    private readonly platforms: PlatformsService,
   ) {}
 
   // ---------- read API ----------
@@ -785,17 +790,22 @@ export class ImportJobsService {
    * Maps a resolved candidate onto a `Platform` row. IGDB id first (the
    * canonical link), then anchored equality matching over the candidate's
    * name/abbreviation and the raw platform string against every platform's
-   * name/abbreviation/alternative name (case-, diacritic-, punctuation-, and
-   * whitespace-insensitive). One DB query per call and **zero** IGDB
-   * platform-list requests: per-game imports never create platforms or fetch
-   * the list. Returns `null` when nothing matches — the caller flags the item
-   * rather than guessing.
+   * name/abbreviation/alternative name and aliases (case-, diacritic-,
+   * punctuation-, and whitespace-insensitive). One DB query per call and
+   * **zero** IGDB platform-list requests.
+   *
+   * When nothing matches, the platform is created for the next import to
+   * reuse (spec §4.2.3/§4.6.6): the first usable of the raw platform name,
+   * the first candidate name, then the first candidate abbreviation. The new
+   * row is flagged `addedByImport` (see `PlatformsService.createFromImport`).
+   * Returns `null` only when no usable platform name exists at all, so the
+   * caller flags the item rather than creating a blank platform.
    */
   async resolvePlatformId(
     candidatePlatforms: CatalogPlatform[],
     rawPlatform: string | null,
   ): Promise<number | null> {
-    const platforms = await this.prisma.platform.findMany({
+    const rows = await this.prisma.platform.findMany({
       orderBy: { id: 'asc' },
       select: {
         id: true,
@@ -803,8 +813,13 @@ export class ImportJobsService {
         abbreviation: true,
         alternativeName: true,
         igdbId: true,
+        aliases: { select: { name: true } },
       },
     });
+    const platforms = rows.map((row) => ({
+      ...row,
+      aliases: row.aliases.map((alias) => alias.name),
+    }));
     const igdbIds = candidatePlatforms
       .map((platform) => platform.igdbId)
       .filter((id): id is number => id !== null);
@@ -824,7 +839,21 @@ export class ImportJobsService {
       ]),
       rawPlatform ?? '',
     ]);
-    return match?.id ?? null;
+    if (match) {
+      return match.id;
+    }
+    const creationName = [
+      rawPlatform,
+      ...candidatePlatforms.map((platform) => platform.name),
+      ...candidatePlatforms.map((platform) => platform.abbreviation),
+    ].find(
+      (value): value is string =>
+        value !== null && normalizePlatformName(value) !== '',
+    );
+    if (creationName === undefined) {
+      return null;
+    }
+    return this.platforms.createFromImport(creationName);
   }
 
   /**

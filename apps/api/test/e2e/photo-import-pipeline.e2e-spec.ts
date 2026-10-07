@@ -57,6 +57,13 @@ function recognized(title: string): RecognizedItem {
   return { title, edition: null, platform: 'PlayStation 5', confidence: 0.9 };
 }
 
+function recognizedWithPlatform(
+  title: string,
+  platform: string,
+): RecognizedItem {
+  return { title, edition: null, platform, confidence: 0.9 };
+}
+
 function candidate(title: string): CatalogCandidate {
   return {
     externalId: 1,
@@ -563,6 +570,45 @@ describe('Photo import pipeline (e2e)', () => {
       expect(body.declaredCountMismatch).toBe(true);
       expect(body.needsAttention).toBe(true);
       expect(existsSync(join(photoDir, photoRef))).toBe(false);
+    });
+  });
+
+  describe('ticket 4.11 import-created platforms', () => {
+    it('creates exactly one flagged platform for two items with the same unknown name', async () => {
+      const { id, photoRef } = await seedJob();
+      vision.recognize.mockResolvedValue({
+        items: [
+          recognizedWithPlatform('A', 'PlayStaton 5'),
+          recognizedWithPlatform('B', 'PlayStaton 5'),
+        ],
+        countVisible: 2,
+      });
+      // The candidate carries no platform, so the raw box name is the only
+      // signal — the platform disagreement path (spec §4.2.2).
+      resolver.resolve.mockImplementation((item: RecognizedItem) =>
+        Promise.resolve({
+          kind: 'matched',
+          candidate: { ...candidate(item.title), platforms: [] },
+        }),
+      );
+
+      const result = await app
+        .get(PhotoImportHandler)
+        .handle(makeJob(id, photoRef));
+
+      expect(result).toEqual({
+        recognizedCount: 2,
+        importedCount: 2,
+        unrecognizedCount: 0,
+      });
+      expect(await test.prisma.game.count()).toBe(2);
+      await expect(
+        test.prisma.platform.count({ where: { name: 'PlayStaton 5' } }),
+      ).resolves.toBe(1);
+      const created = await test.prisma.platform.findFirstOrThrow({
+        where: { name: 'PlayStaton 5' },
+      });
+      expect(created.addedByImport).toBe(true);
     });
   });
 

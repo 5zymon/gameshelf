@@ -4,29 +4,43 @@ title: Platforms API
 description: Platform CRUD (GET/POST/PATCH/DELETE /platforms) with per-platform game counts and the canonical IGDB platform list reconciled locally by an operator sync command.
 tags: [api, platforms, catalog]
 status: stable
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T14:49:32Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-07T14:45:00Z }
 ---
 
 # Overview
 
 The platforms API manages the catalog's platform reference list (spec §4.6):
-list, create, rename, and delete platforms. Every response carries the
-platform's `gameCount`, so the platforms view can show how many games sit on
-each platform without extra requests. The canonical IGDB platform list is
-**fetched once and stored locally** by an operator-run sync command
+list, create, rename, merge, confirm, and delete/hide platforms. Every response
+carries the platform's `gameCount`, so the platforms view can show how many
+games sit on each platform without extra requests. The canonical IGDB platform
+list is **fetched once and stored locally** by an operator-run sync command
 (`npm run platforms:sync`), not by a committed seed migration; per-game imports
-read the local table only (see
-[Canonical platform list](#canonical-platform-list)).
+read the local table only (see [Canonical platform list](#canonical-platform-list)).
+
+Platforms come in three shapes, distinguished by the row itself (no `kind`
+column):
+
+| Shape              | Marker                             | Notes                                                              |
+| ------------------ | ---------------------------------- | ------------------------------------------------------------------ |
+| **Reference**      | `igdbId != null`                   | Loaded by the sync; matching targets, not user data.               |
+| **Custom**         | `igdbId == null && !addedByImport` | Created by the user via `POST /platforms`.                         |
+| **Import-created** | `addedByImport == true`            | Created by the import for an unknown name; awaits review (§4.6.6). |
 
 # Endpoint contract
 
-| Method   | Path             | Purpose                                                                 | Success                 | Errors              |
-| -------- | ---------------- | ----------------------------------------------------------------------- | ----------------------- | ------------------- |
-| `GET`    | `/platforms`     | All platforms with a `gameCount` each, sorted by name (ci)              | `200` `PlatformModel[]` | —                   |
-| `GET`    | `/platforms/:id` | One platform by id, with `gameCount`                                    | `200` `PlatformModel`   | `400`, `404`        |
-| `POST`   | `/platforms`     | Create a platform (slug is generated)                                   | `201` `PlatformModel`   | `400`, `409`        |
-| `PATCH`  | `/platforms/:id` | Rename a platform (slug is kept); optionally set/clear canonical fields | `200` `PlatformModel`   | `400`, `404`, `409` |
-| `DELETE` | `/platforms/:id` | Delete a platform — refused while games reference it                    | `204` (no body)         | `400`, `404`, `409` |
+| Method   | Path                     | Purpose                                                                                  | Success                 | Errors              |
+| -------- | ------------------------ | ---------------------------------------------------------------------------------------- | ----------------------- | ------------------- |
+| `GET`    | `/platforms`             | All platforms with a `gameCount` each; import-created first, then name                   | `200` `PlatformModel[]` | —                   |
+| `GET`    | `/platforms/:id`         | One platform by id, with `gameCount`                                                     | `200` `PlatformModel`   | `400`, `404`        |
+| `POST`   | `/platforms`             | Create a custom platform (slug is generated)                                             | `201` `PlatformModel`   | `400`, `409`        |
+| `PATCH`  | `/platforms/:id`         | Rename (old name kept as an alias); set/clear canonical fields; toggle `hidden`          | `200` `PlatformModel`   | `400`, `404`, `409` |
+| `POST`   | `/platforms/:id/confirm` | Confirm an import-created platform (clears `addedByImport`)                              | `200` `PlatformModel`   | `400`, `404`        |
+| `POST`   | `/platforms/:id/merge`   | Merge a platform into a target (move games, keep name as an alias, delete it)            | `200` `PlatformModel`   | `400`, `404`, `409` |
+| `DELETE` | `/platforms/:id`         | Delete a custom platform, or hide a reference platform; refused while games reference it | `204` (no body)         | `400`, `404`, `409` |
+
+`POST /platforms/:id/merge` takes `{ "targetId": <number> }` in the body.
+`GET /platforms` orders `addedByImport: true` rows first, then by name, so the
+platforms view can lead with rows awaiting review.
 
 `PlatformModel` response shape:
 
@@ -39,6 +53,8 @@ read the local table only (see
   "platformFamily": 1,
   "igdbId": 130,
   "slug": "playstation-5",
+  "addedByImport": false,
+  "hidden": false,
   "gameCount": 12
 }
 ```
@@ -46,7 +62,11 @@ read the local table only (see
 `abbreviation`, `alternativeName`, `platformFamily`, and `igdbId` are `null`
 for custom platforms and for canonical platforms that IGDB does not carry those
 fields for. `platformFamily` is IGDB's platform-family reference id, stored
-faithfully and not used for matching.
+faithfully and not used for matching. `addedByImport` marks a platform the
+import created for an unknown name (see
+[Import-created platforms](#import-created-platforms)); `hidden` marks a
+reference platform hidden via `DELETE` (see
+[Delete behaviour](#delete-behaviour)).
 
 # Duplicate name (409)
 
@@ -62,6 +82,13 @@ platform returns:
 The check is the database unique constraint (Prisma `P2002` on `name`), not a
 pre-query, so two concurrent creates cannot both succeed.
 
+A name that is already stored as an **alias** of a different platform (see
+[Merge & aliases](#merge--aliases)) is also rejected with `409`:
+
+```
+409 Conflict — The name "PlayStaton 5" is already used as an alias by another platform
+```
+
 # Delete behaviour
 
 A platform that still has games **cannot be deleted** (spec §4.6.5: "A
@@ -72,7 +99,15 @@ first"). `DELETE /platforms/:id` therefore:
 2. Counts the platform's games; if the count is greater than zero, returns
    `409` with a message naming the count — nothing is deleted
    (non-destructive).
-3. Otherwise deletes and returns `204`.
+3. If the platform is a **reference** platform (`igdbId != null`), it is
+   **hidden**, not deleted: `hidden` is set to `true` and `204` is returned.
+   The row stays (a later `platforms:sync` would bring a deleted reference row
+   back), and `GET /platforms/:id` still returns `200` with
+   `hidden: true`.
+4. Otherwise (custom or import-created) it is deleted and `204` is returned.
+
+Unhide with `PATCH /platforms/:id` sending the current `name` and
+`hidden: false`.
 
 The foreign key `games.platform_id → platforms.id` is `ON DELETE RESTRICT`,
 which is the backstop for the race where a game appears between the count and
@@ -82,16 +117,72 @@ maps it to the same `409`.
 # Rename semantics
 
 `PATCH /platforms/:id` takes a required `name` plus optional canonical fields
-(`abbreviation`, `alternativeName`, `igdbId`). An explicit `null` clears a
-field; omitting it leaves it untouched. (The sync command writes the canonical
-link directly through `PlatformsSyncService`, not through this endpoint.)
+(`abbreviation`, `alternativeName`, `igdbId`) and `hidden`. An explicit `null`
+clears a field; omitting it leaves it untouched. (The sync command writes the
+canonical link directly through `PlatformsSyncService`, not through this
+endpoint.)
 
 - The rename changes only the displayed name. **The slug is never rewritten**
   (spec §4.6.4), so `slug` is stable across renames and existing game rows
   are untouched (the FK is on `id`, not `name` or `slug`).
+- **The previous name is written as an alias** (normalized) in the same
+  transaction, so matching against the old name keeps working — nothing in the
+  games table changes (see [Merge & aliases](#merge--aliases)).
 - Renaming a platform to its own current name is a `200` no-op, not a `409`.
-- Renaming to another platform's name is a `409` (case-insensitive, as above).
+- Renaming to another platform's name, or to a name another platform already
+  owns as an alias, is a `409`.
 - Renaming an unknown id is a `404`.
+
+# Merge & aliases
+
+`POST /platforms/:id/merge` merges a **source** platform into a **target**
+(`{ "targetId": <number> }`), implementing spec §4.6.4 ("the merged name is
+kept as an alias so future imports match it"). In one transaction it:
+
+1. Reassigns every game on the source to the target
+   (`game.updateMany`).
+2. Re-points the source's existing aliases to the target.
+3. Adds the source's `name`, `abbreviation`, and `alternativeName`
+   (normalized) as aliases of the target.
+4. Deletes the source row.
+
+The response is the target `PlatformModel` with a fresh `gameCount`.
+
+Aliases live in `platform_aliases` (`platform_id`, `name`,
+`normalizedName`). `normalizedName` is `normalizePlatformName(name)` and is
+**globally unique**, so one alias key has exactly one owner. The matcher treats
+aliases as extra keys alongside `name`/`abbreviation`/`alternativeName`
+(see [Matching rules](#matching-rules)). This is the mechanism behind two spec
+behaviours: a merge keeps the merged-away name matchable, and a rename keeps
+the old name matchable.
+
+- `sourceId === targetId` → `400`.
+- Unknown source or target → `404`.
+- A game inserted on the source concurrently is caught by the FK and mapped to
+  `409`.
+
+Given an import-created "PlayStaton 5" merged into "PlayStation 5", a later
+import reading "PlayStaton 5" resolves to "PlayStation 5".
+
+# Import-created platforms
+
+An import that reads a platform name matching no existing platform creates the
+platform, flagged `addedByImport: true` (spec §4.2.3/§4.6.6; see
+[Import Jobs API](/import-jobs-api.md)). The normalized name is matched against
+reference, custom, and previously import-created platforms **and their
+aliases** before creating, so the same unknown name never produces two rows
+(the `platforms.name` unique and `platform_aliases.normalized_name` unique are
+the concurrency backstops).
+
+Import-created platforms:
+
+- lead the `GET /platforms` list (`addedByImport desc, name asc`);
+- carry a `gameCount` like any platform;
+- are cleared by `POST /platforms/:id/confirm` (user keeps them as is);
+- are removed by merging them into an existing platform
+  (`POST /platforms/:id/merge`);
+- are treated as custom (had no `igdbId`) after confirmation, so a later
+  `platforms:sync` can adopt them by name if IGDB carries that name.
 
 # Slug rules
 
@@ -157,20 +248,24 @@ Platforms synced: fetched=<n> created=<n> updated=<n> unchanged=<n>
 matcher shared by the sync command and the per-game import:
 
 - **Anchored equality only**, applied to whole normalized
-  names/abbreviations/alternative names — no fuzzy or containment matching, so
-  `PlayStation 4` never force-matches `PlayStation 5`.
+  names/abbreviations/alternative names/aliases — no fuzzy or containment
+  matching, so `PlayStation 4` never force-matches `PlayStation 5`.
 - Normalization is case-, diacritic-, punctuation-, and whitespace-insensitive
   (`Święta` → `swieta`, `PlayStation-5` → `playstation 5`) and expands `&` to
   `and`.
+- Aliases (old names from a rename, merged-away names) are extra keys on the
+  owning platform.
 - The first input whose key is known wins (candidate order is respected).
 - A key shared by two distinct platform ids is treated as **ambiguous** and
   never matched; blank keys are skipped.
-- An unknown platform is created by the sync; a per-game import never creates
-  one.
+- An unknown platform is created by the sync. A per-game import also creates
+  one now, flagged `addedByImport` (see
+  [Import-created platforms](#import-created-platforms)); it returns `null`
+  only when the item has no usable platform name at all.
 
 Because the list is stored locally, per-game imports make **zero**
 platform-list calls: `resolvePlatformId` reads the local `platforms` table (in
-one query) and then matches — it never fetches IGDB.
+one query, aliases included) and then matches — it never fetches IGDB.
 
 The spec's "refresh from Settings" (§4.6.1) is a later-stage concern; the
 documented refresh today is `npm run platforms:sync`. When the endpoint is
@@ -194,15 +289,15 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
 
 # Out of scope
 
-- **Merging platforms** (spec §4.6.4) — a later ticket; the API currently has
-  no merge endpoint.
 - **Reassigning games between platforms** — done via the games API
   ([Catalog API](/catalog-api.md)); this API only refuses deletes that would
   orphan games.
-- **The "added by import" review flow** (spec §4.6.6) — a Stage 4 import
-  concern.
-- **The platforms view** (counts + toggle for all reference platforms) —
-  frontend; this API serves the data it needs.
+- **The platforms view** (default = platforms with ≥ 1 game, toggle for all
+  reference platforms) — frontend; this API serves the data it needs.
+- **Per-import "platforms added by this import" listing** — a later import
+  concern; the row flag `addedByImport` is the durable record.
+- **Bulk platform-scoped reassignment** — per-game `PATCH /games/:id`
+  ([Catalog API](/catalog-api.md)) already implements reassignment.
 - **The Settings "refresh platforms" endpoint** — later stage; today's
   documented refresh is the `npm run platforms:sync` command (see
   [Canonical platform list](#canonical-platform-list)).

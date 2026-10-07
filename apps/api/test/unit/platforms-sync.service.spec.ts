@@ -227,6 +227,39 @@ describe('PlatformsSyncService (unit)', () => {
     });
   });
 
+  it('matches an existing platform through an alias instead of creating', async () => {
+    const { sync, igdb, platforms } = createSync();
+    igdb.fetchPlatforms.mockResolvedValue([
+      {
+        id: 130,
+        name: 'PlayStation 5',
+        abbreviation: 'PS5',
+        platform_family: 1,
+      },
+    ]);
+    platforms.listMatchCandidates.mockResolvedValue([
+      existing({ id: 9, name: 'PS5', aliases: ['PlayStation 5'] }),
+    ]);
+    platforms.updateCanonical.mockResolvedValue(true);
+
+    const result = await sync.sync();
+
+    expect(platforms.createCanonical).not.toHaveBeenCalled();
+    expect(platforms.updateCanonical).toHaveBeenCalledWith(9, {
+      name: 'PlayStation 5',
+      abbreviation: 'PS5',
+      alternativeName: null,
+      platformFamily: 1,
+      igdbId: 130,
+    });
+    expect(result).toEqual({
+      fetched: 1,
+      created: 0,
+      updated: 1,
+      unchanged: 0,
+    });
+  });
+
   it('trims fields and normalizes a missing platform_family to null', async () => {
     const { sync, igdb, platforms } = createSync();
     const fetched: IgdbPlatform[] = [

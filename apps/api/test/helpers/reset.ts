@@ -9,6 +9,7 @@ const TABLES = [
   'games',
   'sessions',
   'users',
+  'platform_aliases',
   'platforms',
 ] as const;
 

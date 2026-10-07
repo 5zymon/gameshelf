@@ -1,0 +1,111 @@
+import { ImportJobsService } from '../../src/import-jobs/import-jobs.service';
+import { findPlatformMatch } from '../../src/platforms/platform-match';
+import { PlatformsService } from '../../src/platforms/platforms.service';
+import { createTestApp, type TestApp } from '../helpers/test-app';
+import { resetDatabase } from '../helpers/reset';
+import { seedPlatform } from '../helpers/seed';
+
+/** Narrows a resolved platform id for the test's DB assertions. */
+function mustId(id: number | null): number {
+  if (id === null) {
+    throw new Error('expected a platform id');
+  }
+  return id;
+}
+
+/**
+ * Import-created platforms (ticket 4.11, spec §4.2.3/§4.6.6). Exercises
+ * `ImportJobsService.resolvePlatformId` against a real database — matching,
+ * creation, de-duplication, merge-then-reimport, and rename-preserves-match.
+ */
+describe('Platform import creation (e2e)', () => {
+  let test: TestApp;
+  let importJobs: ImportJobsService;
+  let platforms: PlatformsService;
+
+  beforeAll(async () => {
+    test = await createTestApp();
+    importJobs = test.app.get(ImportJobsService);
+    platforms = test.app.get(PlatformsService);
+  });
+
+  beforeEach(async () => {
+    await resetDatabase(test.prisma);
+  });
+
+  afterAll(async () => {
+    await test.app.close();
+  });
+
+  it('creates a flagged platform for an unknown name', async () => {
+    const id = mustId(await importJobs.resolvePlatformId([], 'PlayStaton 5'));
+
+    const platform = await test.prisma.platform.findUnique({
+      where: { id },
+    });
+    expect(platform).toMatchObject({
+      name: 'PlayStaton 5',
+      addedByImport: true,
+      hidden: false,
+    });
+    await expect(
+      test.prisma.platform.count({ where: { name: 'PlayStaton 5' } }),
+    ).resolves.toBe(1);
+  });
+
+  it('creates exactly one platform for two items with the same unknown name', async () => {
+    const first = await importJobs.resolvePlatformId([], 'PlayStaton 5');
+    const second = await importJobs.resolvePlatformId([], 'PlayStaton 5');
+
+    expect(second).toBe(first);
+    await expect(
+      test.prisma.platform.count({ where: { name: 'PlayStaton 5' } }),
+    ).resolves.toBe(1);
+  });
+
+  it('resolves a merged-away name to the target on a later import', async () => {
+    const target = await seedPlatform(test.prisma, {
+      name: 'PlayStation 5',
+      slug: 'ps5',
+    });
+    const createdId = mustId(
+      await importJobs.resolvePlatformId([], 'PlayStaton 5'),
+    );
+    expect(createdId).not.toBe(target.id);
+
+    await platforms.merge(createdId, target.id);
+    await expect(
+      test.prisma.platform.findUnique({ where: { id: createdId } }),
+    ).resolves.toBeNull();
+
+    // A later import reading the misread name must land on the target.
+    await expect(
+      importJobs.resolvePlatformId([], 'PlayStaton 5'),
+    ).resolves.toBe(target.id);
+  });
+
+  it('keeps matching the old name after a rename', async () => {
+    const p = await seedPlatform(test.prisma, {
+      name: 'PlayStation 5',
+      slug: 'ps5',
+    });
+
+    await platforms.rename(p.id, { name: 'PS5 Slim' });
+
+    await expect(
+      importJobs.resolvePlatformId([], 'PlayStation 5'),
+    ).resolves.toBe(p.id);
+    const candidates = await platforms.listMatchCandidates();
+    expect(findPlatformMatch(candidates, ['PlayStation 5'])?.id).toBe(p.id);
+  });
+
+  it('returns null when there is no usable platform name', async () => {
+    await expect(
+      importJobs.resolvePlatformId(
+        [{ igdbId: 99, name: '!!!', abbreviation: '???' }],
+        '   ',
+      ),
+    ).resolves.toBeNull();
+    await expect(test.prisma.platform.count()).resolves.toBe(0);
+  });
+});

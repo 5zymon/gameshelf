@@ -28,6 +28,18 @@ export class PlatformModel {
   slug!: string;
 
   @ApiProperty({
+    description: 'Created by the import and awaiting review',
+    example: false,
+  })
+  addedByImport!: boolean;
+
+  @ApiProperty({
+    description: 'Hidden reference platform (DELETE sets this)',
+    example: false,
+  })
+  hidden!: boolean;
+
+  @ApiProperty({
     description: 'Number of games on this platform',
     example: 12,
   })

@@ -20,6 +20,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CreatePlatformDto } from './dto/create-platform.dto';
+import { MergePlatformDto } from './dto/merge-platform.dto';
 import { PlatformIdParamDto } from './dto/platform-id-param.dto';
 import { PlatformModel } from './dto/platform-response.model';
 import { UpdatePlatformDto } from './dto/update-platform.dto';
@@ -64,7 +65,7 @@ export class PlatformsController {
   @Patch(':id')
   @ApiOperation({
     summary:
-      'Rename a platform (slug is kept); optional canonical fields for the IGDB integration',
+      'Rename a platform (slug is kept; the old name becomes an alias); optional canonical fields for the IGDB integration; toggle hidden',
   })
   @ApiParam({ name: 'id', type: Number })
   @ApiOkResponse({ type: PlatformModel })
@@ -82,13 +83,49 @@ export class PlatformsController {
     return this.platformsService.rename(params.id, dto);
   }
 
+  @Post(':id/confirm')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Confirm an import-created platform (clears the added-by-import flag)',
+  })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiOkResponse({ type: PlatformModel })
+  @ApiNotFoundResponse({ description: 'Platform not found' })
+  confirm(@Param() params: PlatformIdParamDto): Promise<PlatformModel> {
+    return this.platformsService.confirm(params.id);
+  }
+
+  @Post(':id/merge')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Merge a platform into a target: move its games, keep its name as an alias, delete it',
+  })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiOkResponse({ type: PlatformModel })
+  @ApiBadRequestResponse({
+    description: 'Cannot merge a platform into itself',
+  })
+  @ApiNotFoundResponse({ description: 'Source or target platform not found' })
+  @ApiConflictResponse({
+    description: 'A game referenced the source platform concurrently',
+  })
+  merge(
+    @Param() params: PlatformIdParamDto,
+    @Body() dto: MergePlatformDto,
+  ): Promise<PlatformModel> {
+    return this.platformsService.merge(params.id, dto.targetId);
+  }
+
   @Delete(':id')
   @HttpCode(204)
   @ApiOperation({
-    summary: 'Delete a platform — refused with 409 while games reference it',
+    summary:
+      'Delete a custom platform, or hide a reference platform; refused with 409 while games reference it',
   })
   @ApiParam({ name: 'id', type: Number })
-  @ApiResponse({ status: 204, description: 'Platform deleted' })
+  @ApiResponse({ status: 204, description: 'Platform deleted or hidden' })
   @ApiConflictResponse({
     description: 'Platform still has games — reassign or delete them first',
   })

@@ -9,6 +9,7 @@ import { ImportJobsService } from '../../src/import-jobs/import-jobs.service';
 import { IMPORT_QUEUE_STATE_TIMEOUT_MS } from '../../src/import-jobs/import-pipeline.options';
 import type { PhotoImportJobData } from '../../src/queue/photo-import.types';
 import { RetryableImportError } from '../../src/queue/photo-import.failure';
+import type { PlatformsService } from '../../src/platforms/platforms.service';
 import type { PrismaService } from '../../src/prisma/prisma.service';
 import type { QueueControlService } from '../../src/queue/queue-control.service';
 import type { GameEnrichmentService } from '../../src/enrichment/game-enrichment.service';
@@ -39,6 +40,10 @@ interface ImportJobsPrismaMock {
   };
   platform: {
     findMany: jest.Mock;
+    create: jest.Mock;
+  };
+  platformAlias: {
+    findUnique: jest.Mock;
   };
   game: {
     create: jest.Mock;
@@ -59,6 +64,7 @@ function createService(): {
   queue: { getJob: jest.Mock; add: jest.Mock };
   queueControl: QueueControlMock;
   enrichment: { enrichCandidate: jest.Mock };
+  platforms: { createFromImport: jest.Mock };
 } {
   const mock: ImportJobsPrismaMock = {
     importJob: {
@@ -86,6 +92,10 @@ function createService(): {
     },
     platform: {
       findMany: jest.fn(),
+      create: jest.fn(),
+    },
+    platformAlias: {
+      findUnique: jest.fn(),
     },
     game: {
       create: jest.fn(),
@@ -114,17 +124,20 @@ function createService(): {
     ),
   };
   const enrichment = { enrichCandidate: jest.fn() };
+  const platforms = { createFromImport: jest.fn() };
   return {
     service: new ImportJobsService(
       mock as unknown as PrismaService,
       queue as unknown as Queue<PhotoImportJobData>,
       queueControl as unknown as QueueControlService,
       enrichment as unknown as GameEnrichmentService,
+      platforms as unknown as PlatformsService,
     ),
     mock,
     queue,
     queueControl,
     enrichment,
+    platforms,
   };
 }
 
@@ -172,9 +185,11 @@ describe('ImportJobsService (unit)', () => {
   let queue: { getJob: jest.Mock; add: jest.Mock };
   let queueControl: QueueControlMock;
   let enrichment: { enrichCandidate: jest.Mock };
+  let platforms: { createFromImport: jest.Mock };
 
   beforeEach(() => {
-    ({ service, mock, queue, queueControl, enrichment } = createService());
+    ({ service, mock, queue, queueControl, enrichment, platforms } =
+      createService());
   });
 
   describe('list', () => {
@@ -1129,6 +1144,7 @@ describe('ImportJobsService (unit)', () => {
       abbreviation: string | null;
       alternativeName: string | null;
       igdbId: number | null;
+      aliases: { name: string }[];
     }
 
     function row(
@@ -1139,11 +1155,12 @@ describe('ImportJobsService (unit)', () => {
         abbreviation: null,
         alternativeName: null,
         igdbId: null,
+        aliases: [],
         ...overrides,
       };
     }
 
-    it('prefers an IGDB-id match with a single platform query', async () => {
+    it('prefers an IGDB-id match with a single platform query (select includes aliases)', async () => {
       mock.platform.findMany.mockResolvedValue([
         row({ id: 5, name: 'Xbox', abbreviation: 'XBOX', igdbId: 11 }),
       ]);
@@ -1163,8 +1180,10 @@ describe('ImportJobsService (unit)', () => {
           abbreviation: true,
           alternativeName: true,
           igdbId: true,
+          aliases: { select: { name: true } },
         },
       });
+      expect(platforms.createFromImport).not.toHaveBeenCalled();
     });
 
     it("matches rawPlatform 'PS5' against a platform abbreviation", async () => {
@@ -1189,6 +1208,22 @@ describe('ImportJobsService (unit)', () => {
       ).resolves.toBe(9);
     });
 
+    it('matches through an alias', async () => {
+      mock.platform.findMany.mockResolvedValue([
+        row({
+          id: 9,
+          name: 'PlayStation 5',
+          abbreviation: 'PS5',
+          aliases: [{ name: 'PlayStaton 5' }],
+        }),
+      ]);
+
+      await expect(service.resolvePlatformId([], 'PlayStaton 5')).resolves.toBe(
+        9,
+      );
+      expect(platforms.createFromImport).not.toHaveBeenCalled();
+    });
+
     it('is case- and punctuation-insensitive', async () => {
       mock.platform.findMany.mockResolvedValue([
         row({ id: 9, name: 'PlayStation 5', abbreviation: 'PS5' }),
@@ -1199,34 +1234,54 @@ describe('ImportJobsService (unit)', () => {
       ).resolves.toBe(9);
     });
 
-    it('returns null for an unknown platform', async () => {
+    it('creates an import platform for an unknown named platform', async () => {
+      mock.platform.findMany.mockResolvedValue([row({ id: 1, name: 'PC' })]);
+      platforms.createFromImport.mockResolvedValue(77);
+
+      await expect(service.resolvePlatformId([], 'Atari Jaguar')).resolves.toBe(
+        77,
+      );
+      expect(platforms.createFromImport).toHaveBeenCalledWith('Atari Jaguar');
+    });
+
+    it('creates from the first candidate name when the raw platform is unusable', async () => {
+      mock.platform.findMany.mockResolvedValue([row({ id: 1, name: 'PC' })]);
+      platforms.createFromImport.mockResolvedValue(88);
+
+      await expect(
+        service.resolvePlatformId(
+          [{ igdbId: 99, name: 'Atari Jaguar', abbreviation: 'JAG' }],
+          '   ',
+        ),
+      ).resolves.toBe(88);
+      expect(platforms.createFromImport).toHaveBeenCalledWith('Atari Jaguar');
+    });
+
+    it('returns null when there is no usable platform name', async () => {
       mock.platform.findMany.mockResolvedValue([row({ id: 1, name: 'PC' })]);
 
       await expect(
-        service.resolvePlatformId([], 'Atari Jaguar'),
+        service.resolvePlatformId(
+          [{ igdbId: 99, name: '!!!', abbreviation: '???' }],
+          '   ',
+        ),
       ).resolves.toBeNull();
+      expect(platforms.createFromImport).not.toHaveBeenCalled();
     });
 
-    it('returns null for a near-miss rather than guessing', async () => {
+    it('does not match a near-miss; it creates the named platform instead', async () => {
       mock.platform.findMany.mockResolvedValue([
         row({ id: 9, name: 'PlayStation 5', abbreviation: 'PS5' }),
       ]);
+      platforms.createFromImport.mockResolvedValue(66);
 
       await expect(
         service.resolvePlatformId(
           [{ igdbId: 99, name: 'PlayStation 4', abbreviation: 'PS4' }],
           'PS4',
         ),
-      ).resolves.toBeNull();
-    });
-
-    it('returns null when a key is shared by two distinct platforms', async () => {
-      mock.platform.findMany.mockResolvedValue([
-        row({ id: 1, name: 'PS5' }),
-        row({ id: 2, name: 'PlayStation 5', abbreviation: 'PS5' }),
-      ]);
-
-      await expect(service.resolvePlatformId([], 'PS5')).resolves.toBeNull();
+      ).resolves.toBe(66);
+      expect(platforms.createFromImport).toHaveBeenCalledWith('PS4');
     });
   });
 

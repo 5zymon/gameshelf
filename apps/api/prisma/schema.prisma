@@ -64,10 +64,33 @@ model Platform {
   platformFamily  Int?    @map("platform_family")
   igdbId          Int?    @map("igdb_id")
   slug            String  @unique @db.VarChar(255)
+  // Set when the import created this row for an unknown platform name (spec
+  // §4.2.3/§4.6.6). Cleared by `confirm`; the row is deleted by `merge`.
+  addedByImport   Boolean @default(false) @map("added_by_import")
+  // Reference platforms without games can be hidden instead of deleted (a
+  // refresh would bring them back — spec §4.6.5).
+  hidden          Boolean @default(false)
 
-  games Game[]
+  games   Game[]
+  aliases PlatformAlias[]
 
   @@map("platforms")
+}
+
+// A stable matching key for a platform, separate from its displayed `name`:
+// the old name after a rename, or the merged-away name after a merge. The
+// normalized key is globally unique so one alias has exactly one owner.
+model PlatformAlias {
+  id             Int      @id @default(autoincrement())
+  platformId     Int      @map("platform_id")
+  name           String   @db.VarChar(255)
+  normalizedName String   @unique @map("normalized_name") @db.VarChar(512)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  platform Platform @relation(fields: [platformId], references: [id], onDelete: Cascade)
+
+  @@index([platformId])
+  @@map("platform_aliases")
 }
 
 // `edition` is a first-class attribute (research §4.2) — not IGDB-only.
