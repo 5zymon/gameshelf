@@ -1,0 +1,439 @@
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState, useTransition } from 'react';
+import type { GamePlatform } from '@/lib/api';
+import {
+  catalogHref,
+  hasActiveFilters,
+  type CatalogFilterValues,
+} from '@/lib/catalog-filters';
+
+const DEBOUNCE_MS = 300;
+const FIELD =
+  'w-full rounded-md border border-edge bg-ink px-3 py-2 text-fog outline-none focus-visible:ring-2 focus-visible:ring-accent';
+const LABEL = 'block text-sm text-muted';
+
+type TextKey = 'q' | 'year' | 'publisher' | 'genre' | 'playerCount';
+type Draft = Record<TextKey, string>;
+const DRAFT_KEYS = ['q', 'year', 'publisher', 'genre', 'playerCount'] as const;
+const EMPTY_DRAFT: Draft = {
+  q: '',
+  year: '',
+  publisher: '',
+  genre: '',
+  playerCount: '',
+};
+
+function toDraft(values: CatalogFilterValues): Draft {
+  return {
+    q: values.q ?? '',
+    year: values.year === undefined ? '' : String(values.year),
+    publisher: values.publisher ?? '',
+    genre: values.genre ?? '',
+    playerCount:
+      values.playerCount === undefined ? '' : String(values.playerCount),
+  };
+}
+
+/** '' → undefined (clear), valid → number, invalid → 'invalid' (keep the committed value). */
+function boundedInt(
+  raw: string,
+  min: number,
+  max: number,
+): number | undefined | 'invalid' {
+  const t = raw.trim();
+  if (t === '') return undefined;
+  if (!/^\d+$/.test(t)) return 'invalid';
+  const n = Number(t);
+  return n >= min && n <= max ? n : 'invalid';
+}
+
+function draftOverrides(draft: Draft): Partial<CatalogFilterValues> {
+  const out: Partial<CatalogFilterValues> = {};
+  const q = draft.q.trim();
+  out.q = q === '' ? undefined : q;
+  const publisher = draft.publisher.trim();
+  out.publisher = publisher === '' ? undefined : publisher;
+  const genre = draft.genre.trim();
+  out.genre = genre === '' ? undefined : genre;
+  const year = boundedInt(draft.year, 1000, 2100);
+  if (year !== 'invalid') out.year = year;
+  const players = boundedInt(draft.playerCount, 1, 100);
+  if (players !== 'invalid') out.playerCount = players;
+  return out;
+}
+
+function Chip({
+  label,
+  onRemove,
+}: {
+  label: string;
+  onRemove: () => void;
+}): React.ReactElement {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full border border-edge bg-shelf px-3 py-1 text-xs text-fog">
+      {label}
+      <button
+        type="button"
+        aria-label={`Remove ${label} filter`}
+        onClick={onRemove}
+        className="text-muted hover:text-danger"
+      >
+        ×
+      </button>
+    </span>
+  );
+}
+
+interface CatalogFilterBarProps {
+  /** Committed, server-parsed values — the URL is the source of truth. */
+  values: CatalogFilterValues;
+  /** `games.filters.platforms` — never hardcoded. */
+  platforms: GamePlatform[];
+  /** `games.filters.editions` — never hardcoded. */
+  editions: string[];
+}
+
+export function CatalogFilterBar({
+  values,
+  platforms,
+  editions,
+}: CatalogFilterBarProps): React.ReactElement {
+  const router = useRouter();
+  const [draft, setDraft] = useState<Draft>(() => toDraft(values));
+  const [isPending, startTransition] = useTransition();
+  const draftRef = useRef<Draft>(draft);
+  const valuesRef = useRef<CatalogFilterValues>(values);
+  // The most recent values we have pushed but whose RSC payload has not committed yet.
+  const pendingRef = useRef<CatalogFilterValues | null>(null);
+  const syncedRef = useRef<Draft>(toDraft(values));
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Keep the ref authoritative for handlers that fire before the next effect flush.
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+
+  // Reconcile external (back/forward or a pushed URL) changes per field, never clobbering in-flight typing.
+  useEffect(() => {
+    valuesRef.current = values;
+    pendingRef.current = null;
+    const incoming = toDraft(values);
+    const prev = syncedRef.current;
+    const next = { ...draftRef.current };
+    for (const key of DRAFT_KEYS) {
+      // Apply a changed incoming value only to a field the user has not edited
+      // since the previous committed values; a dirty field keeps its in-flight text.
+      if (incoming[key] !== prev[key] && draftRef.current[key] === prev[key]) {
+        next[key] = incoming[key];
+      }
+    }
+    syncedRef.current = incoming;
+    if (DRAFT_KEYS.some((k) => next[k] !== draftRef.current[k])) setDraft(next);
+  }, [values]);
+
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) clearTimeout(timerRef.current);
+    },
+    [],
+  );
+
+  function navigate(overrides: Partial<CatalogFilterValues> = {}): void {
+    const next: CatalogFilterValues = {
+      ...(pendingRef.current ?? valuesRef.current), // committed (or in-flight) discrete fields
+      ...draftOverrides(draftRef.current), // live text fields
+      ...overrides, // explicit clear/set (undefined removes)
+    };
+    pendingRef.current = next;
+    startTransition(() => {
+      router.push(catalogHref(next));
+    });
+  }
+
+  /** Flush pending timers, then push — folds typed text into the same navigation. */
+  function commit(overrides: Partial<CatalogFilterValues> = {}): void {
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    navigate(overrides);
+  }
+
+  function schedule(): void {
+    if (timerRef.current !== null) clearTimeout(timerRef.current);
+    timerRef.current = setTimeout(() => {
+      timerRef.current = null;
+      navigate();
+    }, DEBOUNCE_MS);
+  }
+
+  function setField(key: TextKey, value: string): void {
+    const next = { ...draftRef.current, [key]: value };
+    draftRef.current = next;
+    setDraft(next);
+    schedule();
+  }
+
+  /** Visibly clears one text input while its committed filter is removed. */
+  function resetField(key: TextKey): void {
+    const next = { ...draftRef.current, [key]: '' };
+    draftRef.current = next;
+    setDraft(next);
+  }
+
+  /**
+   * Clears everything through the normal commit path: drafts are reset
+   * synchronously so no stale text survives, and the in-flight set captured by
+   * `pendingRef` is the fully cleared one (all seven keys explicitly undefined).
+   */
+  function clearAll(): void {
+    draftRef.current = EMPTY_DRAFT;
+    setDraft(EMPTY_DRAFT);
+    commit({
+      platformId: undefined,
+      edition: undefined,
+      year: undefined,
+      publisher: undefined,
+      genre: undefined,
+      playerCount: undefined,
+      q: undefined,
+    });
+  }
+
+  const platformLabel =
+    values.platformId === undefined
+      ? ''
+      : (platforms.find((p) => p.id === values.platformId)?.name ??
+        `Platform #${String(values.platformId)}`);
+
+  return (
+    <div
+      aria-busy={isPending}
+      className={`space-y-4 ${isPending ? 'opacity-60' : ''}`}
+    >
+      <form
+        noValidate
+        onSubmit={(event) => {
+          event.preventDefault();
+          commit();
+        }}
+        className="space-y-3"
+      >
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
+            <label htmlFor="catalog-q" className={LABEL}>
+              Search titles
+            </label>
+            <input
+              id="catalog-q"
+              name="q"
+              type="search"
+              autoComplete="off"
+              maxLength={255}
+              value={draft.q}
+              onChange={(event) => {
+                setField('q', event.target.value);
+              }}
+              className={FIELD}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="catalog-platform" className={LABEL}>
+              Platform
+            </label>
+            <select
+              id="catalog-platform"
+              name="platformId"
+              value={
+                values.platformId === undefined ? '' : String(values.platformId)
+              }
+              onChange={(event) => {
+                const v = event.target.value;
+                commit({ platformId: v === '' ? undefined : Number(v) });
+              }}
+              className={FIELD}
+            >
+              <option value="">All platforms</option>
+              {platforms.map((platform) => (
+                <option key={platform.id} value={platform.id}>
+                  {platform.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="catalog-edition" className={LABEL}>
+              Edition
+            </label>
+            <select
+              id="catalog-edition"
+              name="edition"
+              value={values.edition ?? ''}
+              onChange={(event) => {
+                const v = event.target.value;
+                commit({ edition: v === '' ? undefined : v });
+              }}
+              className={FIELD}
+            >
+              <option value="">All editions</option>
+              {editions.map((edition) => (
+                <option key={edition} value={edition}>
+                  {edition}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="catalog-year" className={LABEL}>
+              Year (1000–2100)
+            </label>
+            <input
+              id="catalog-year"
+              name="year"
+              type="text"
+              inputMode="numeric"
+              pattern="\d*"
+              maxLength={4}
+              value={draft.year}
+              onChange={(event) => {
+                setField('year', event.target.value);
+              }}
+              className={FIELD}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="catalog-player-count" className={LABEL}>
+              Players (1–100)
+            </label>
+            <input
+              id="catalog-player-count"
+              name="playerCount"
+              type="text"
+              inputMode="numeric"
+              pattern="\d*"
+              maxLength={3}
+              value={draft.playerCount}
+              onChange={(event) => {
+                setField('playerCount', event.target.value);
+              }}
+              className={FIELD}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="catalog-publisher" className={LABEL}>
+              Publisher
+            </label>
+            <input
+              id="catalog-publisher"
+              name="publisher"
+              type="text"
+              maxLength={255}
+              value={draft.publisher}
+              onChange={(event) => {
+                setField('publisher', event.target.value);
+              }}
+              className={FIELD}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label htmlFor="catalog-genre" className={LABEL}>
+              Genre
+            </label>
+            <input
+              id="catalog-genre"
+              name="genre"
+              type="text"
+              maxLength={255}
+              value={draft.genre}
+              onChange={(event) => {
+                setField('genre', event.target.value);
+              }}
+              className={FIELD}
+            />
+          </div>
+        </div>
+      </form>
+
+      {hasActiveFilters(values) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {values.q !== undefined && (
+            <Chip
+              label={`Search: “${values.q}”`}
+              onRemove={() => {
+                resetField('q');
+                commit({ q: undefined });
+              }}
+            />
+          )}
+          {values.platformId !== undefined && (
+            <Chip
+              label={`Platform: ${platformLabel}`}
+              onRemove={() => {
+                commit({ platformId: undefined });
+              }}
+            />
+          )}
+          {values.edition !== undefined && (
+            <Chip
+              label={`Edition: ${values.edition}`}
+              onRemove={() => {
+                commit({ edition: undefined });
+              }}
+            />
+          )}
+          {values.year !== undefined && (
+            <Chip
+              label={`Year: ${String(values.year)}`}
+              onRemove={() => {
+                resetField('year');
+                commit({ year: undefined });
+              }}
+            />
+          )}
+          {values.publisher !== undefined && (
+            <Chip
+              label={`Publisher: ${values.publisher}`}
+              onRemove={() => {
+                resetField('publisher');
+                commit({ publisher: undefined });
+              }}
+            />
+          )}
+          {values.genre !== undefined && (
+            <Chip
+              label={`Genre: ${values.genre}`}
+              onRemove={() => {
+                resetField('genre');
+                commit({ genre: undefined });
+              }}
+            />
+          )}
+          {values.playerCount !== undefined && (
+            <Chip
+              label={`Players: ${String(values.playerCount)}`}
+              onRemove={() => {
+                resetField('playerCount');
+                commit({ playerCount: undefined });
+              }}
+            />
+          )}
+          <button
+            type="button"
+            onClick={clearAll}
+            className="text-sm text-accent underline-offset-4 hover:underline hover:text-accent-strong"
+          >
+            Clear all
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
