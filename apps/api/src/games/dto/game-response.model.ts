@@ -77,6 +77,15 @@ export class GameDetailModel {
   @ApiProperty({ enum: ['IGDB', 'MobyGames', 'MANUAL'], example: 'MANUAL' })
   source!: string;
 
+  @ApiPropertyOptional({ nullable: true, example: 1036 })
+  externalId!: number | null;
+
+  @ApiProperty({ example: false })
+  platformUnverified!: boolean;
+
+  @ApiProperty({ type: [String], example: ['publisher'] })
+  userEditedFields!: string[];
+
   @ApiProperty({ format: 'date-time' })
   createdAt!: Date;
 

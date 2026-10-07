@@ -1,8 +1,20 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+  ServiceUnavailableException,
+} from '@nestjs/common';
+import type { CatalogCandidate } from '../../src/game-catalog/game-catalog.resolver';
+import type { GameCatalogResolver } from '../../src/game-catalog/game-catalog.resolver';
 import type { CreateGameDto } from '../../src/games/dto/create-game.dto';
 import type { ListGamesQueryDto } from '../../src/games/dto/list-games-query.dto';
 import type { UpdateGameDto } from '../../src/games/dto/update-game.dto';
 import { GamesService } from '../../src/games/games.service';
+import type { GameEnrichmentService } from '../../src/enrichment/game-enrichment.service';
+import {
+  serializeEditedFields,
+  TRACKED_METADATA_FIELDS,
+} from '../../src/enrichment/reenrichment';
 import type { PrismaService } from '../../src/prisma/prisma.service';
 
 const PLATFORM_SELECT = { id: true, name: true, slug: true };
@@ -22,7 +34,14 @@ interface GamesPrismaMock {
   };
 }
 
-function createService(): { service: GamesService; mock: GamesPrismaMock } {
+interface GamesServiceHarness {
+  service: GamesService;
+  mock: GamesPrismaMock;
+  catalog: { resolve: jest.Mock };
+  enrichment: { enrichCandidate: jest.Mock };
+}
+
+function createService(): GamesServiceHarness {
   const mock: GamesPrismaMock = {
     game: {
       findMany: jest.fn(),
@@ -37,15 +56,28 @@ function createService(): { service: GamesService; mock: GamesPrismaMock } {
       findUnique: jest.fn(),
     },
   };
-  return { service: new GamesService(mock as unknown as PrismaService), mock };
+  const catalog = { resolve: jest.fn() };
+  const enrichment = { enrichCandidate: jest.fn() };
+  return {
+    service: new GamesService(
+      mock as unknown as PrismaService,
+      catalog as unknown as GameCatalogResolver,
+      enrichment as unknown as GameEnrichmentService,
+    ),
+    mock,
+    catalog,
+    enrichment,
+  };
 }
 
 describe('GamesService (unit)', () => {
   let service: GamesService;
   let mock: GamesPrismaMock;
+  let catalog: { resolve: jest.Mock };
+  let enrichment: { enrichCandidate: jest.Mock };
 
   beforeEach(() => {
-    ({ service, mock } = createService());
+    ({ service, mock, catalog, enrichment } = createService());
   });
 
   describe('list', () => {
@@ -241,7 +273,7 @@ describe('GamesService (unit)', () => {
         where: { id: 7 },
         include: { platform: { select: PLATFORM_SELECT } },
       });
-      expect(result).toBe(game);
+      expect(result).toEqual({ ...game, userEditedFields: [] });
     });
 
     it('throws 404 for an unknown id', async () => {
@@ -278,10 +310,10 @@ describe('GamesService (unit)', () => {
         },
         include: { platform: { select: PLATFORM_SELECT } },
       });
-      expect(result).toBe(created);
+      expect(result).toEqual({ ...created, userEditedFields: [] });
     });
 
-    it('passes every provided field through', async () => {
+    it('passes every provided field through and records provenance', async () => {
       mock.platform.findUnique.mockResolvedValue({ id: 2 });
       const created = { id: 1 };
       mock.game.create.mockResolvedValue(created);
@@ -299,7 +331,17 @@ describe('GamesService (unit)', () => {
       await service.create(dto);
 
       expect(mock.game.create).toHaveBeenCalledWith({
-        data: dto,
+        data: {
+          title: 'HK',
+          platformId: 2,
+          edition: 'GOTY',
+          releaseYear: 2017,
+          publisher: 'Team Cherry',
+          genre: 'Metroidvania',
+          playerCount: 1,
+          coverUrl: 'https://example.com/hk.jpg',
+          userEditedFields: serializeEditedFields(TRACKED_METADATA_FIELDS),
+        },
         include: { platform: { select: PLATFORM_SELECT } },
       });
     });
@@ -369,10 +411,10 @@ describe('GamesService (unit)', () => {
         data: { title: 'New' },
         include: { platform: { select: PLATFORM_SELECT } },
       });
-      expect(result).toBe(updated);
+      expect(result).toEqual({ ...updated, userEditedFields: [] });
     });
 
-    it('changes the platform when platformId is provided', async () => {
+    it('changes the platform when platformId is provided and clears the unverified flag', async () => {
       mock.game.findUnique.mockResolvedValue({ id: 3 });
       mock.platform.findUnique.mockResolvedValue({ id: 5 });
       mock.game.update.mockResolvedValue({ id: 3 });
@@ -380,11 +422,32 @@ describe('GamesService (unit)', () => {
       await service.update(3, { platformId: 5 });
 
       expect(mock.game.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { platformId: 5 } }),
+        expect.objectContaining({
+          data: { platformId: 5, platformUnverified: false },
+        }),
       );
     });
 
-    it('clears optional fields with explicit null', async () => {
+    it('merges newly edited tracked fields into the provenance column', async () => {
+      mock.game.findUnique.mockResolvedValue({
+        id: 3,
+        userEditedFields: '["publisher"]',
+      });
+      mock.game.update.mockResolvedValue({ id: 3 });
+
+      await service.update(3, { genre: 'Metroidvania' });
+
+      expect(mock.game.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            genre: 'Metroidvania',
+            userEditedFields: '["genre","publisher"]',
+          },
+        }),
+      );
+    });
+
+    it('clears optional fields with explicit null and records provenance', async () => {
       mock.game.findUnique.mockResolvedValue({ id: 3 });
       mock.game.update.mockResolvedValue({ id: 3 });
 
@@ -396,8 +459,287 @@ describe('GamesService (unit)', () => {
       } as unknown as UpdateGameDto);
 
       expect(mock.game.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { edition: null, releaseYear: null } }),
+        expect.objectContaining({
+          data: {
+            edition: null,
+            releaseYear: null,
+            userEditedFields: '["releaseYear"]',
+          },
+        }),
       );
+    });
+  });
+
+  describe('enrich', () => {
+    const candidate: CatalogCandidate = {
+      externalId: 1036,
+      title: 'Halo: Combat Evolved',
+      releaseYear: 2001,
+      publisher: 'Bungie',
+      genre: 'Shooter',
+      playerCount: 16,
+      coverUrl: 'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
+      platforms: [{ igdbId: 11, name: 'Xbox', abbreviation: 'XBOX' }],
+      source: 'IGDB',
+      raw: { id: 1036 },
+    };
+
+    const enriched = {
+      title: 'Halo: Combat Evolved',
+      platformId: 3,
+      edition: null,
+      releaseYear: 2001,
+      publisher: 'Bungie',
+      genre: 'Shooter',
+      playerCount: 16,
+      coverUrl: '/api/covers/0123456789abcdef0123456789abcdef.jpg',
+      rawMetadata: JSON.stringify({ id: 1036 }),
+      enrichedAt: new Date('2026-10-07T00:00:00.000Z'),
+      source: 'IGDB' as const,
+      externalId: 1036,
+    };
+
+    function gameRow(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 5,
+        title: 'Halo: Combat Evolved',
+        platformId: 3,
+        edition: null,
+        releaseYear: null,
+        publisher: null,
+        genre: null,
+        playerCount: null,
+        coverUrl: null,
+        rawMetadata: null,
+        enrichedAt: null,
+        source: 'MANUAL',
+        externalId: null,
+        platformUnverified: false,
+        userEditedFields: null as string | null,
+        createdAt: new Date('2026-10-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-10-01T00:00:00.000Z'),
+        platform: { id: 3, name: 'Xbox', slug: 'xbox' },
+        ...overrides,
+      };
+    }
+
+    it('search (no body) returns the candidate and writes nothing', async () => {
+      const row = gameRow();
+      mock.game.findUnique.mockResolvedValue(row);
+      catalog.resolve.mockResolvedValue({ kind: 'matched', candidate });
+
+      const result = await service.enrich(5, {});
+
+      expect(catalog.resolve).toHaveBeenCalledWith({
+        title: 'Halo: Combat Evolved',
+        edition: null,
+        platform: 'Xbox',
+        confidence: 1,
+      });
+      expect(result.status).toBe('matched');
+      expect(result.applied).toBe(false);
+      expect(result.reason).toBeNull();
+      expect(result.candidates).toHaveLength(1);
+      expect(result.candidates[0]).toEqual({
+        externalId: 1036,
+        title: 'Halo: Combat Evolved',
+        releaseYear: 2001,
+        publisher: 'Bungie',
+        genre: 'Shooter',
+        playerCount: 16,
+        coverUrl:
+          'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
+        platforms: [{ igdbId: 11, name: 'Xbox', abbreviation: 'XBOX' }],
+        source: 'IGDB',
+      });
+      // The raw archive payload must never leak into a response.
+      expect(result.candidates[0]).not.toHaveProperty('raw');
+      expect(result.game).toEqual({ ...row, userEditedFields: [] });
+      expect(enrichment.enrichCandidate).not.toHaveBeenCalled();
+      expect(mock.game.update).not.toHaveBeenCalled();
+    });
+
+    it('apply (pick) updates the existing game in place', async () => {
+      const row = gameRow();
+      mock.game.findUnique.mockResolvedValue(row);
+      catalog.resolve.mockResolvedValue({ kind: 'matched', candidate });
+      enrichment.enrichCandidate.mockResolvedValue(enriched);
+      mock.game.update.mockResolvedValue({
+        ...row,
+        releaseYear: 2001,
+        publisher: 'Bungie',
+        genre: 'Shooter',
+        playerCount: 16,
+        coverUrl: enriched.coverUrl,
+        rawMetadata: enriched.rawMetadata,
+        enrichedAt: enriched.enrichedAt,
+        source: 'IGDB',
+        externalId: 1036,
+      });
+
+      const result = await service.enrich(5, {
+        candidate: { source: 'IGDB', externalId: 1036 },
+      });
+
+      expect(enrichment.enrichCandidate).toHaveBeenCalledWith(
+        candidate,
+        3,
+        null,
+      );
+      // Exact data equality proves the protected identity fields are omitted.
+      expect(mock.game.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 5 },
+          data: {
+            releaseYear: 2001,
+            publisher: 'Bungie',
+            genre: 'Shooter',
+            playerCount: 16,
+            coverUrl: enriched.coverUrl,
+            source: 'IGDB',
+            externalId: 1036,
+            rawMetadata: enriched.rawMetadata,
+            enrichedAt: enriched.enrichedAt,
+          },
+        }),
+      );
+      expect(result.status).toBe('matched');
+      expect(result.applied).toBe(true);
+      expect(result.game.publisher).toBe('Bungie');
+      expect(result.game.externalId).toBe(1036);
+    });
+
+    it('reports unrecognized without writing', async () => {
+      const row = gameRow();
+      mock.game.findUnique.mockResolvedValue(row);
+      catalog.resolve.mockResolvedValue({
+        kind: 'unrecognized',
+        reason: 'No game matched the title in any source',
+      });
+
+      const result = await service.enrich(5, {});
+
+      expect(result.status).toBe('unrecognized');
+      expect(result.reason).toBe('No game matched the title in any source');
+      expect(result.candidates).toEqual([]);
+      expect(result.applied).toBe(false);
+      expect(result.game).toEqual({ ...row, userEditedFields: [] });
+      expect(mock.game.update).not.toHaveBeenCalled();
+    });
+
+    it('maps a transient resolution to 503', async () => {
+      mock.game.findUnique.mockResolvedValue(gameRow());
+      catalog.resolve.mockResolvedValue({
+        kind: 'transient',
+        reason: 'IGDB rate-limited the request',
+      });
+
+      await expect(service.enrich(5, {})).rejects.toThrow(
+        new ServiceUnavailableException('IGDB rate-limited the request'),
+      );
+      expect(mock.game.update).not.toHaveBeenCalled();
+    });
+
+    it('maps a config_error resolution to 503', async () => {
+      mock.game.findUnique.mockResolvedValue(gameRow());
+      catalog.resolve.mockResolvedValue({
+        kind: 'config_error',
+        source: 'igdb',
+        reason: 'IGDB credentials rejected',
+      });
+
+      await expect(service.enrich(5, {})).rejects.toThrow(
+        new ServiceUnavailableException('IGDB credentials rejected'),
+      );
+      expect(mock.game.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a stale pick with 409', async () => {
+      mock.game.findUnique.mockResolvedValue(gameRow());
+      catalog.resolve.mockResolvedValue({ kind: 'matched', candidate });
+
+      await expect(
+        service.enrich(5, { candidate: { source: 'IGDB', externalId: 999 } }),
+      ).rejects.toThrow(
+        new ConflictException(
+          'The selected candidate is no longer available; run the search again',
+        ),
+      );
+      expect(enrichment.enrichCandidate).not.toHaveBeenCalled();
+      expect(mock.game.update).not.toHaveBeenCalled();
+    });
+
+    it('is idempotent: a second identical apply writes nothing', async () => {
+      const row = gameRow({
+        releaseYear: 2001,
+        publisher: 'Bungie',
+        genre: 'Shooter',
+        playerCount: 16,
+        coverUrl: enriched.coverUrl,
+        rawMetadata: enriched.rawMetadata,
+        enrichedAt: enriched.enrichedAt,
+        source: 'IGDB',
+        externalId: 1036,
+      });
+      mock.game.findUnique.mockResolvedValue(row);
+      catalog.resolve.mockResolvedValue({ kind: 'matched', candidate });
+      enrichment.enrichCandidate.mockResolvedValue(enriched);
+
+      const result = await service.enrich(5, {
+        candidate: { source: 'IGDB', externalId: 1036 },
+      });
+
+      expect(result.applied).toBe(false);
+      expect(mock.game.update).not.toHaveBeenCalled();
+      expect(result.game.externalId).toBe(1036);
+    });
+
+    it('never overwrites a hand-edited field', async () => {
+      const row = gameRow({ userEditedFields: '["publisher"]' });
+      mock.game.findUnique.mockResolvedValue(row);
+      catalog.resolve.mockResolvedValue({ kind: 'matched', candidate });
+      enrichment.enrichCandidate.mockResolvedValue(enriched);
+      mock.game.update.mockResolvedValue({
+        ...row,
+        releaseYear: 2001,
+        genre: 'Shooter',
+        playerCount: 16,
+        coverUrl: enriched.coverUrl,
+        rawMetadata: enriched.rawMetadata,
+        enrichedAt: enriched.enrichedAt,
+        source: 'IGDB',
+        externalId: 1036,
+      });
+
+      await service.enrich(5, {
+        candidate: { source: 'IGDB', externalId: 1036 },
+      });
+
+      // Exact data equality proves the hand-edited publisher is omitted.
+      expect(mock.game.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 5 },
+          data: {
+            releaseYear: 2001,
+            genre: 'Shooter',
+            playerCount: 16,
+            coverUrl: enriched.coverUrl,
+            source: 'IGDB',
+            externalId: 1036,
+            rawMetadata: enriched.rawMetadata,
+            enrichedAt: enriched.enrichedAt,
+          },
+        }),
+      );
+    });
+
+    it('throws 404 for an unknown game', async () => {
+      mock.game.findUnique.mockResolvedValue(null);
+
+      await expect(service.enrich(7, {})).rejects.toThrow(
+        new NotFoundException('Game with id 7 not found'),
+      );
+      expect(catalog.resolve).not.toHaveBeenCalled();
     });
   });
 

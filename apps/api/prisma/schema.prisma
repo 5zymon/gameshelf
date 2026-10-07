@@ -86,6 +86,14 @@ model Game {
   rawMetadata String?    @map("raw_metadata") @db.MediumText
   enrichedAt  DateTime?  @map("enriched_at")
   source      GameSource @default(MANUAL)
+  // External catalog link: `source`+`externalId` identify the upstream row
+  // (IGDB/MobyGames). Null for a MANUAL/manually-created game until re-enriched.
+  externalId        Int?     @map("external_id")
+  // Set when a game's platform could not be confidently confirmed; cleared when
+  // the user fixes the platform or a re-enrichment confirms one.
+  platformUnverified Boolean @default(false) @map("platform_unverified")
+  // Provenance: JSON array of hand-edited metadata field names (never queried).
+  userEditedFields  String?  @map("user_edited_fields") @db.VarChar(255)
   createdAt   DateTime   @default(now()) @map("created_at")
   updatedAt   DateTime   @updatedAt @map("updated_at")
 

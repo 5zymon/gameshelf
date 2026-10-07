@@ -15,6 +15,7 @@ export interface EnrichedGameData {
   rawMetadata: string;
   enrichedAt: Date;
   source: CatalogCandidate['source'];
+  externalId: number;
 }
 
 /** Inputs to the pure candidate→`Game` mapping. */
@@ -49,6 +50,7 @@ export function mapCandidateToGameData(
     rawMetadata: JSON.stringify(candidate.raw),
     enrichedAt: input.fetchedAt ?? new Date(),
     source: candidate.source,
+    externalId: candidate.externalId,
   };
 }
 

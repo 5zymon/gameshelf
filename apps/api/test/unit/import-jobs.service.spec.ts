@@ -1205,6 +1205,7 @@ describe('ImportJobsService (unit)', () => {
       rawMetadata: JSON.stringify({ id: 7 }),
       enrichedAt: new Date('2026-10-07T00:00:00.000Z'),
       source: 'IGDB' as const,
+      externalId: 7,
     };
 
     it('creates a game and claims the recognized item in one transaction', async () => {

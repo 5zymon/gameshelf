@@ -11,15 +11,19 @@ import {
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
   ApiResponse,
+  ApiServiceUnavailableResponse,
   ApiTags,
 } from '@nestjs/swagger';
 import { CreateGameDto } from './dto/create-game.dto';
+import { EnrichGameDto } from './dto/enrich-game.dto';
+import { EnrichGameResponseModel } from './dto/enrich-game-response.model';
 import { GameIdParamDto } from './dto/game-id-param.dto';
 import { ListGamesQueryDto } from './dto/list-games-query.dto';
 import { UpdateGameDto } from './dto/update-game.dto';
@@ -92,5 +96,26 @@ export class GamesController {
   @ApiNotFoundResponse({ description: 'Game not found' })
   remove(@Param() params: GameIdParamDto): Promise<void> {
     return this.gamesService.remove(params.id);
+  }
+
+  @Post(':id/enrich')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Re-enrich a game from its current (corrected) title',
+  })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiOkResponse({ type: EnrichGameResponseModel })
+  @ApiConflictResponse({
+    description: 'The selected candidate is no longer available',
+  })
+  @ApiServiceUnavailableResponse({
+    description: 'The game database is temporarily unavailable',
+  })
+  @ApiNotFoundResponse({ description: 'Game not found' })
+  enrich(
+    @Param() params: GameIdParamDto,
+    @Body() dto: EnrichGameDto,
+  ): Promise<EnrichGameResponseModel> {
+    return this.gamesService.enrich(params.id, dto);
   }
 }

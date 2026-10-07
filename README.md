@@ -377,6 +377,8 @@ Each photo job inherits `attempts: 3` and exponential backoff (`IMPORT_RETRY_BAC
 
 **Metadata and covers.** Each confirmed candidate is mapped to a `Game` by the reusable `GameEnrichmentService` (title, canonical platform, vision-only edition, year, publisher, genre, player count, provenance, and the raw archival payload); a source field that is absent stays empty rather than being invented. The candidate's external cover is downloaded once **outside** the DB transaction into the local cache (`COVERS_DIR`, default `~/.gameshelf/covers`) and the saved `coverUrl` becomes a same-origin `/api/covers/<file>` served by the API — never an external host. A failed download leaves `coverUrl` null without failing the import item. See `docs/features/game-metadata-enrichment.md`.
 
+**Re-enrichment.** `POST /games/:id/enrich` re-runs the same IGDB → MobyGames → unresolved chain against a game's current (corrected) title: with no body it returns the candidate(s) and mutates nothing, and with a `{ "candidate": { "source", "externalId" } }` body it applies fresh metadata to the **existing** row — never a duplicate. The merge only fills a field the candidate provides, never changes `title`/`platformId`/`edition`, and never overwrites a hand-edited (provenance-tracked) field; `source`+`externalId` link the game and `platformUnverified` is cleared. A second identical apply writes nothing. See `docs/features/game-reenrichment.md`.
+
 **Worker settings** (ticket 3.7; all compile-time constants, not env vars):
 
 | Setting                | Value                                  | Constant                         |

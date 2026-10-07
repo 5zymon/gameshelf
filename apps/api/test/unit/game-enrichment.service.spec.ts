@@ -77,6 +77,7 @@ describe('GameEnrichmentService (unit)', () => {
       rawMetadata: JSON.stringify(fixture),
       enrichedAt: expect.any(Date) as Date,
       source: 'IGDB',
+      externalId: 1036,
     });
     expect(data.enrichedAt).toBeInstanceOf(Date);
     // The raw upstream payload is archived verbatim into the archival column.
@@ -106,6 +107,7 @@ describe('GameEnrichmentService (unit)', () => {
       rawMetadata: JSON.stringify({ id: 5, name: 'Mystery' }),
       enrichedAt: expect.any(Date) as Date,
       source: 'IGDB',
+      externalId: 5,
     });
   });
 

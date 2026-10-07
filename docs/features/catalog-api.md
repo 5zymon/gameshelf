@@ -128,3 +128,17 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
   `sort=bogus`, `order=up`) → 400.
 - Unknown `platformId` is **not** a 400 — it is an FK reference, and an
   unknown id simply yields an empty result.
+
+# Game re-enrichment
+
+`POST /games/:id/enrich` re-runs the external catalog chain (IGDB → MobyGames →
+unresolved) against a game's current title and can apply fresh metadata **in
+place** without duplicating the row or changing `title`/`platformId`/`edition`.
+Search with no body returns the candidate; a `candidate` body picks it. See
+[Game Re-enrichment](/game-reenrichment.md) for the full contract and merge
+policy.
+
+The game-detail payload (`GET /games/:id`, and the `game` block of the enrich
+response) also carries `externalId` (the upstream row id paired with `source`),
+`platformUnverified`, and `userEditedFields` (the hand-edited metadata fields
+re-enrichment must not overwrite).

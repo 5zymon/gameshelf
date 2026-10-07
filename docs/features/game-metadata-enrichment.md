@@ -19,8 +19,9 @@ It exists so that:
 
 - the mapping lives in one place
   (`GameEnrichmentService.enrichCandidate` over the pure
-  `mapCandidateToGameData`) and can be reused by re-enrichment (ticket 4.7)
-  without re-implementing field rules;
+  `mapCandidateToGameData`) and is reused by re-enrichment
+  ([Game Re-enrichment](/game-reenrichment.md)) without re-implementing field
+  rules;
 - a saved `Game` is describable from the confirmed source candidate — title,
   canonical platform, release year, publisher, genre, player count — with
   missing source fields left **empty**, never invented;
@@ -49,6 +50,7 @@ No schema migration is involved: `Game.playerCount`, `Game.coverUrl`,
 | `rawMetadata` | `JSON.stringify(candidate.raw)` — the archival column                |
 | `enrichedAt`  | the enrichment timestamp                                             |
 | `source`      | `candidate.source` (`IGDB` / `MobyGames`)                            |
+| `externalId`  | `candidate.externalId` (the upstream row id, paired with `source`)   |
 
 A source that does not expose a field leaves the column `null`; the mapper never
 substitutes a default. In particular `edition` comes only from the vision item,
@@ -72,9 +74,9 @@ value.
 The raw upstream payload is written verbatim to `Game.rawMetadata`
 (`JSON.stringify(candidate.raw)`). The column is **archival**: it is never used
 in a query predicate — no `filter`, `sort`, `where`, `orderBy`, or any derived
-value is computed from it. It exists so a future re-enrichment can re-read the
-exact upstream row, and it is surfaced read-only as part of the game-detail
-payload (`GameDetailModel.rawMetadata` on `GET /games/:id`, from
+value is computed from it. It exists so re-enrichment
+([Game Re-enrichment](/game-reenrichment.md)) can re-read the exact upstream
+row, and it is surfaced read-only as part of the game-detail payload (`GameDetailModel.rawMetadata` on `GET /games/:id`, from
 `GamesService.findOne`); that serialization is not a query use.
 
 # Minimal local cover cache
@@ -137,7 +139,6 @@ or backfilled (ticket 4.10). New and re-enriched games store the same-origin
 - Search-result thumbnail passthrough.
 - Cover deletion on game delete and replacement on re-enrichment (orphan
   cleanup).
-- `Game.externalId` and the re-enrichment API (ticket 4.7).
 
 # Tests
 
@@ -163,7 +164,7 @@ or backfilled (ticket 4.10). New and re-enriched games store the same-origin
 - `covers.e2e-spec.ts` (e2e): a real pipeline run saves a game whose `coverUrl`
   matches `^/api/covers/[a-f0-9]{32}\.jpg$` with the full accepted field set
   (`title`/`platformId`/`releaseYear`/`publisher`/`genre`/`playerCount`/`source`/
-  `enrichedAt`/`rawMetadata`) set; an unauthenticated `GET /covers/<file>` is
+  `enrichedAt`/`externalId`/`rawMetadata`) set; an unauthenticated `GET /covers/<file>` is
   `401` and an authenticated one returns `200` `image/jpeg` with the exact
   cached bytes; a failed download still saves the game with `coverUrl: null` and
   a `done` job.
