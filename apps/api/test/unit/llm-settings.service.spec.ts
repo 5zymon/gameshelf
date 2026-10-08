@@ -10,6 +10,7 @@ import { VisionProviderRegistry } from '../../src/settings/vision/vision-provide
 const PROVIDERS = [
   { id: 'gemini', label: 'Google Gemini', defaultModel: 'gemini-3.8-flash' },
   { id: 'openai', label: 'OpenAI', defaultModel: 'gpt-4o-mini' },
+  { id: 'custom', label: 'Custom (OpenAI-compatible)', defaultModel: '' },
 ] as const;
 
 function row(overrides: Partial<LlmSetting> = {}): LlmSetting {
@@ -17,6 +18,7 @@ function row(overrides: Partial<LlmSetting> = {}): LlmSetting {
     id: 1,
     provider: 'gemini',
     model: null,
+    baseUrl: null,
     apiKeyCiphertext: null,
     updatedAt: new Date('2026-10-06T00:00:00Z'),
     ...overrides,
@@ -81,6 +83,7 @@ describe('LlmSettingsService (unit)', () => {
     await expect(service.getPublic()).resolves.toEqual({
       provider: 'gemini',
       model: 'gemini-3.8-flash',
+      baseUrl: null,
       keyPresent: true,
       importEnabled: true,
       availableProviders: [
@@ -90,8 +93,33 @@ describe('LlmSettingsService (unit)', () => {
           defaultModel: 'gemini-3.8-flash',
         },
         { id: 'openai', label: 'OpenAI', defaultModel: 'gpt-4o-mini' },
+        { id: 'custom', label: 'Custom (OpenAI-compatible)', defaultModel: '' },
       ],
       updatedAt: null,
+    });
+  });
+
+  it('getPublic returns the stored base URL for the custom provider', async () => {
+    const { service, mocks } = createService();
+    mocks.findUnique.mockResolvedValue(
+      row({ provider: 'custom', baseUrl: 'http://localhost:11434/v1' }),
+    );
+
+    await expect(service.getPublic()).resolves.toMatchObject({
+      provider: 'custom',
+      baseUrl: 'http://localhost:11434/v1',
+    });
+  });
+
+  it('getPublic returns a null base URL for the built-in providers', async () => {
+    const { service, mocks } = createService();
+    mocks.findUnique.mockResolvedValue(
+      row({ provider: 'openai', baseUrl: 'http://localhost:11434/v1' }),
+    );
+
+    await expect(service.getPublic()).resolves.toMatchObject({
+      provider: 'openai',
+      baseUrl: null,
     });
   });
 
@@ -212,11 +240,13 @@ describe('LlmSettingsService (unit)', () => {
         id: 1,
         provider: 'openai',
         model: 'gpt-x',
+        baseUrl: null,
         apiKeyCiphertext: 'v1:enc:new-key',
       },
       update: {
         provider: 'openai',
         model: 'gpt-x',
+        baseUrl: null,
         apiKeyCiphertext: 'v1:enc:new-key',
       },
     });
@@ -236,9 +266,10 @@ describe('LlmSettingsService (unit)', () => {
         id: 1,
         provider: 'gemini',
         model: null,
+        baseUrl: null,
         apiKeyCiphertext: null,
       },
-      update: { provider: 'gemini' },
+      update: { provider: 'gemini', baseUrl: null },
     });
     expect(mocks.encrypt).not.toHaveBeenCalled();
   });
@@ -262,6 +293,7 @@ describe('LlmSettingsService (unit)', () => {
     expect(saveArgs(mocks).update).toEqual({
       provider: 'openai',
       model: null,
+      baseUrl: null,
       apiKeyCiphertext: null,
     });
     // The previous provider's key must never be decrypted or reused.
@@ -297,6 +329,7 @@ describe('LlmSettingsService (unit)', () => {
     expect(saveArgs(mocks).update).toEqual({
       provider: 'openai',
       model: 'gpt-new',
+      baseUrl: null,
       apiKeyCiphertext: 'v1:enc:new-key',
     });
   });
@@ -308,6 +341,7 @@ describe('LlmSettingsService (unit)', () => {
 
     expect(saveArgs(mocks).update).toEqual({
       provider: 'gemini',
+      baseUrl: null,
       apiKeyCiphertext: null,
     });
     expect(mocks.encrypt).not.toHaveBeenCalled();
@@ -321,6 +355,7 @@ describe('LlmSettingsService (unit)', () => {
     expect(saveArgs(mocks).update).toEqual({
       provider: 'gemini',
       model: null,
+      baseUrl: null,
     });
   });
 
@@ -330,5 +365,123 @@ describe('LlmSettingsService (unit)', () => {
     await expect(
       service.save({ provider: 'bogus' } as unknown as PutLlmSettingsDto),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('save normalizes the custom base URL (trailing slash stripped)', async () => {
+    const { service, mocks } = createService();
+
+    await service.save({
+      provider: 'custom',
+      baseUrl: 'http://localhost:11434/v1/',
+      apiKey: 'custom-key',
+    });
+
+    expect(mocks.upsert).toHaveBeenCalledWith({
+      where: { id: 1 },
+      create: {
+        id: 1,
+        provider: 'custom',
+        model: null,
+        baseUrl: 'http://localhost:11434/v1',
+        apiKeyCiphertext: 'v1:enc:custom-key',
+      },
+      update: {
+        provider: 'custom',
+        baseUrl: 'http://localhost:11434/v1',
+        apiKeyCiphertext: 'v1:enc:custom-key',
+      },
+    });
+  });
+
+  it('save rejects custom without a base URL when switching provider', async () => {
+    const { service, mocks } = createService();
+    mocks.findUnique.mockResolvedValue(row({ provider: 'gemini' }));
+
+    await expect(service.save({ provider: 'custom' })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(mocks.upsert).not.toHaveBeenCalled();
+  });
+
+  it('save rejects an empty custom base URL', async () => {
+    const { service, mocks } = createService();
+
+    await expect(
+      service.save({ provider: 'custom', baseUrl: '' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(mocks.upsert).not.toHaveBeenCalled();
+  });
+
+  it('save rejects a relative custom base URL', async () => {
+    const { service, mocks } = createService();
+
+    await expect(
+      service.save({ provider: 'custom', baseUrl: 'localhost:11434/v1' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(mocks.upsert).not.toHaveBeenCalled();
+  });
+
+  it('save rejects a non-http custom base URL', async () => {
+    const { service, mocks } = createService();
+
+    await expect(
+      service.save({ provider: 'custom', baseUrl: 'ftp://x/v1' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(mocks.upsert).not.toHaveBeenCalled();
+  });
+
+  it('save rejects a base URL for the built-in providers', async () => {
+    const { service, mocks } = createService();
+
+    await expect(
+      service.save({ provider: 'openai', baseUrl: 'http://x/v1' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.save({ provider: 'gemini', baseUrl: 'http://x/v1' }),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(mocks.upsert).not.toHaveBeenCalled();
+  });
+
+  it('save keeps the stored base URL when custom omits it', async () => {
+    const { service, mocks } = createService();
+    mocks.findUnique.mockResolvedValue(
+      row({ provider: 'custom', baseUrl: 'http://localhost:11434/v1' }),
+    );
+
+    await service.save({ provider: 'custom' });
+
+    expect(saveArgs(mocks).update).toEqual({ provider: 'custom' });
+  });
+
+  it('resolveActive includes the base URL for custom only', async () => {
+    const { service, mocks } = createService();
+    mocks.findUnique.mockResolvedValue(
+      row({
+        provider: 'custom',
+        baseUrl: 'http://localhost:11434/v1',
+        apiKeyCiphertext: 'v1:enc:custom-key',
+      }),
+    );
+
+    await expect(service.resolveActive()).resolves.toEqual({
+      provider: 'custom',
+      model: '',
+      apiKey: 'custom-key',
+      baseUrl: 'http://localhost:11434/v1',
+    });
+
+    mocks.findUnique.mockResolvedValue(
+      row({
+        provider: 'openai',
+        baseUrl: 'http://localhost:11434/v1',
+        apiKeyCiphertext: 'v1:enc:openai-key',
+      }),
+    );
+
+    await expect(service.resolveActive()).resolves.toEqual({
+      provider: 'openai',
+      model: 'gpt-4o-mini',
+      apiKey: 'openai-key',
+    });
   });
 });

@@ -1,12 +1,14 @@
 import { VisionProviderError } from './vision.errors';
 
 /**
- * The two backends GameShelf ships with. The upload/recognition pipeline never
- * names a concrete provider — it goes through `VisionService` and the
- * `VisionProviderRegistry`, so adding a third provider needs one new class, one
- * registry line, and one module provider line only.
+ * The three backends GameShelf ships with. The upload/recognition pipeline
+ * never names a concrete provider — it goes through `VisionService` and the
+ * `VisionProviderRegistry`, so adding a fourth provider needs one new class,
+ * one registry line, and one module provider line only. `custom` reuses the
+ * shared OpenAI-compatible builder (`openai-compatible.ts`), so it is one new
+ * class plus the same two lines.
  */
-export const SUPPORTED_PROVIDER_IDS = ['gemini', 'openai'] as const;
+export const SUPPORTED_PROVIDER_IDS = ['gemini', 'openai', 'custom'] as const;
 export type VisionProviderId = (typeof SUPPORTED_PROVIDER_IDS)[number];
 
 /** Default models; a runtime setting or `LLM_MODEL` overrides them. */
@@ -53,6 +55,8 @@ export interface VisionRecognitionInput {
 export interface VisionProviderConfig {
   apiKey: string;
   model: string;
+  /** The `custom` provider's base URL (absolute, trailing-slash-normalized). Only set for `custom`. */
+  baseUrl?: string;
 }
 
 export interface VisionProvider {

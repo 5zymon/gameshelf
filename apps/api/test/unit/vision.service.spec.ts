@@ -64,6 +64,33 @@ describe('VisionService (unit)', () => {
     expect(result.items).toHaveLength(1);
   });
 
+  it('recognize passes the base URL through for the custom provider', async () => {
+    const { service, mocks } = createService();
+    mocks.resolveActive.mockResolvedValue({
+      provider: 'custom',
+      model: 'llava:7b',
+      apiKey: 'key-custom',
+      baseUrl: 'http://localhost:11434/v1',
+    });
+    mocks.get.mockReturnValue({ recognize: mocks.recognize });
+    mocks.recognize.mockResolvedValue({ items: [], countVisible: null });
+
+    await service.recognize({
+      image: Buffer.from('x'),
+      mimeType: 'image/png',
+    });
+
+    expect(mocks.get).toHaveBeenCalledWith('custom');
+    expect(mocks.recognize).toHaveBeenCalledWith(
+      { image: expect.any(Buffer) as Buffer, mimeType: 'image/png' },
+      {
+        apiKey: 'key-custom',
+        model: 'llava:7b',
+        baseUrl: 'http://localhost:11434/v1',
+      },
+    );
+  });
+
   it('test reports not_configured with 200-style result when no key is set', async () => {
     const { service, mocks } = createService();
     mocks.resolveActive.mockResolvedValue(null);

@@ -6,6 +6,7 @@ import {
 } from '../vision/vision-provider';
 
 export const LLM_MODEL_MAX_LENGTH = 128;
+export const LLM_BASE_URL_MAX_LENGTH = 512;
 export const LLM_API_KEY_MAX_LENGTH = 512;
 
 /**
@@ -30,6 +31,18 @@ export class PutLlmSettingsDto {
   @IsString()
   @MaxLength(LLM_MODEL_MAX_LENGTH)
   model?: string;
+
+  @ApiPropertyOptional({
+    maxLength: LLM_BASE_URL_MAX_LENGTH,
+    example: 'http://localhost:11434/v1',
+    description:
+      'Required when provider is "custom" (absolute http(s) URL, trailing / ' +
+      'normalized). Must be omitted/empty for openai/gemini (fixed endpoints).',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(LLM_BASE_URL_MAX_LENGTH)
+  baseUrl?: string;
 
   @ApiPropertyOptional({
     writeOnly: true,

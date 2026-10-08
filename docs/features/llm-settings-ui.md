@@ -46,19 +46,32 @@ The form is driven entirely by the `LlmSettingsModel` returned by the API (and,
 after a save, by the authoritative `PUT` response kept in local state).
 
 - **Provider** — a `<select>` populated from
-  `settings.availableProviders` (Google Gemini, OpenAI). Changing it resets the
-  local model to that provider's default and clears any typed key, matching the
-  backend rule that a key/model belongs to the provider that stored it.
+  `settings.availableProviders` (Google Gemini, OpenAI, Custom
+  (OpenAI-compatible)). Changing it resets the local model to that provider's
+  default and clears any typed key, matching the backend rule that a
+  key/model belongs to the provider that stored it. The `custom` option's
+  label is localized in the UI (`llm.providerCustom`); the built-ins keep
+  their API-provided labels.
+- **Base URL** — a text input shown **only when `custom` is selected**,
+  seeded from `settings.baseUrl` and sent with every `custom` save (the
+  backend requires it). The hint names the supported endpoints (Ollama,
+  LM Studio, OpenRouter). The typed value survives provider hide/show —
+  toggling the provider does not reset it.
 - **Model** — a text input capped at 128 chars (the backend
   `LLM_MODEL_MAX_LENGTH`). The provider default is shown as the placeholder;
   leaving it at the default omits `model` from the request, while clearing it
-  sends `""` to drop a stored override.
-- **API key** — see below.
+  sends `""` to drop a stored override. For `custom` there is no default —
+  the hint tells the user to enter the exact model name their server exposes
+  (local models have arbitrary names).
+- **API key** — see below. For `custom`, the hint notes that local servers
+  typically accept any non-empty value.
 
 Only changed keys are sent. `model` is omitted when it equals the saved model
-(or the new provider's default), and `apiKey` is omitted unless the user typed
-one or chose to remove the key. **Save** is disabled while saving or when the
-form is not dirty.
+(or the new provider's default), `baseUrl` is always sent for `custom`
+(required by the backend) and never for the built-ins, and `apiKey` is omitted
+unless the user typed one or chose to remove the key. **Save** is disabled
+while saving or when the form is not dirty (a base-URL change counts as dirty
+only while `custom` is selected).
 
 # Key handling (write-only)
 
@@ -71,7 +84,9 @@ The key is never rendered back. The server model exposes only `keyPresent`, so:
 - **Remove key** shows "The key will be removed when you save." plus **Undo**;
   saving sends `apiKey: ""`.
 - Otherwise an empty password input is shown with the helper "It is stored
-  encrypted and never shown again."
+  encrypted and never shown again." For `custom` the helper is replaced by a
+  custom-specific hint: local servers typically accept any non-empty value,
+  and it is still stored encrypted and never shown again.
 
 Guarantees:
 
@@ -146,9 +161,10 @@ refresh.
 
 # Manual acceptance script
 
-1. Open `/settings`. The provider select lists Google Gemini and OpenAI; the
-   model is prefilled; the key field is empty; the recommended-default copy
-   names Gemini.
+1. Open `/settings`. The provider select lists Google Gemini, OpenAI, and
+   Custom (OpenAI-compatible); the model is prefilled; the key field is empty;
+   the recommended-default copy names Gemini. Selecting Custom reveals the
+   Base URL field and swaps the model/key hints for the custom-specific ones.
 2. Paste a key, **Save changes** → "Saved. Photo import is enabled." with a link
    to `/import`. Open `/import`: the gate is gone and the picker is enabled.
 3. Reload `/settings`: the key input is empty and shows "A key is saved"; no key
@@ -178,8 +194,10 @@ refresh.
 - Theme settings (ticket 7.3). The language preference is no longer out of
   scope: it lives in the Preferences section of this screen (see
   [Internationalization (PL default, EN)](/i18n.md)).
-- Anthropic/other providers; per-provider key storage for several providers at
-  once; key rotation/audit tooling.
+- Non-OpenAI-compatible protocols (e.g. Anthropic-native); per-provider key
+  storage for several providers at once; key rotation/audit tooling. The
+  `custom` provider covers any OpenAI-compatible endpoint (see
+  [LLM Settings API](/llm-settings-api.md)).
 - The full `/platforms` management view (still a placeholder).
 - A frontend test runner; verification is typecheck + lint + build plus the
   manual acceptance script.

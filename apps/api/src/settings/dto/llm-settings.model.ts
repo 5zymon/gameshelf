@@ -28,6 +28,15 @@ export class LlmSettingsModel {
   model!: string;
 
   @ApiProperty({
+    nullable: true,
+    example: 'http://localhost:11434/v1',
+    description:
+      "The custom provider's base URL. Null for the built-in providers. " +
+      'Not a secret — shown in the UI.',
+  })
+  baseUrl!: string | null;
+
+  @ApiProperty({
     example: true,
     description: 'True when an API key is available (encrypted DB row or env)',
   })
