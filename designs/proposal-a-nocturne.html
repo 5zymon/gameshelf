@@ -37,6 +37,9 @@
     --body: "Manrope", -apple-system, "Segoe UI", sans-serif;
   }
   * { box-sizing: border-box; }
+  html {
+    overflow-x: clip;
+  }
   body {
     margin: 0;
     background: var(--bg);
@@ -63,6 +66,7 @@
     left: 50%;
     transform: translateX(-50%);
     width: 1000px;
+    max-width: 100vw;
     height: 620px;
     background: radial-gradient(closest-side, rgba(242, 178, 62, 0.13), rgba(242, 178, 62, 0.04) 55%, transparent 78%);
     pointer-events: none;
