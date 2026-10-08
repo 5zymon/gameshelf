@@ -78,6 +78,7 @@ describe('UsersService (unit)', () => {
       id: 1,
       email: 'ash@example.com',
       language: 'pl',
+      theme: 'system',
       createdAt,
     });
 
@@ -89,12 +90,19 @@ describe('UsersService (unit)', () => {
     expect(passwords.hash).toHaveBeenCalledWith('pikachu123');
     expect(prisma.user.create).toHaveBeenCalledWith({
       data: { email: 'ash@example.com', passwordHash: 'ARGON2HASH' },
-      select: { id: true, email: true, language: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        language: true,
+        theme: true,
+        createdAt: true,
+      },
     });
     expect(result).toEqual({
       id: 1,
       email: 'ash@example.com',
       language: 'pl',
+      theme: 'system',
       createdAt,
     });
     expect(result).not.toHaveProperty('passwordHash');
@@ -138,6 +146,7 @@ describe('UsersService (unit)', () => {
         email: 'ash@example.com',
         passwordHash: 'ARGON2HASH',
         language: 'pl',
+        theme: 'system',
         createdAt: new Date('2026-10-05T12:00:00.000Z'),
       };
       prisma.user.findUnique.mockResolvedValue(row);
@@ -151,6 +160,7 @@ describe('UsersService (unit)', () => {
           email: true,
           passwordHash: true,
           language: true,
+          theme: true,
           createdAt: true,
         },
       });
@@ -169,6 +179,7 @@ describe('UsersService (unit)', () => {
         id: 7,
         email: 'ash@example.com',
         language: 'pl',
+        theme: 'system',
         createdAt: new Date('2026-10-05T12:00:00.000Z'),
       };
       prisma.user.findUnique.mockResolvedValue(row);
@@ -177,7 +188,13 @@ describe('UsersService (unit)', () => {
 
       expect(prisma.user.findUnique).toHaveBeenCalledWith({
         where: { id: 7 },
-        select: { id: true, email: true, language: true, createdAt: true },
+        select: {
+          id: true,
+          email: true,
+          language: true,
+          theme: true,
+          createdAt: true,
+        },
       });
       expect(result).toEqual(row);
       expect(result).not.toHaveProperty('passwordHash');
@@ -194,6 +211,7 @@ describe('UsersService (unit)', () => {
         id: 1,
         email: 'ash@example.com',
         language: 'pl',
+        theme: 'system',
         createdAt,
       });
 
@@ -214,12 +232,19 @@ describe('UsersService (unit)', () => {
       expect(values).toEqual(['ash@example.com', 'ARGON2HASH']);
       expect(prisma.user.findUnique).toHaveBeenCalledWith({
         where: { email: 'ash@example.com' },
-        select: { id: true, email: true, language: true, createdAt: true },
+        select: {
+          id: true,
+          email: true,
+          language: true,
+          theme: true,
+          createdAt: true,
+        },
       });
       expect(result).toEqual({
         id: 1,
         email: 'ash@example.com',
         language: 'pl',
+        theme: 'system',
         createdAt,
       });
       expect(result).not.toHaveProperty('passwordHash');
@@ -264,6 +289,7 @@ describe('UsersService (unit)', () => {
         id: 1,
         email: 'ash@example.com',
         language: 'pl',
+        theme: 'system',
         createdAt,
       });
 
@@ -275,12 +301,19 @@ describe('UsersService (unit)', () => {
       expect(prisma.$executeRaw).toHaveBeenCalledTimes(2);
       expect(prisma.user.findUnique).toHaveBeenCalledWith({
         where: { email: 'ash@example.com' },
-        select: { id: true, email: true, language: true, createdAt: true },
+        select: {
+          id: true,
+          email: true,
+          language: true,
+          theme: true,
+          createdAt: true,
+        },
       });
       expect(result).toEqual({
         id: 1,
         email: 'ash@example.com',
         language: 'pl',
+        theme: 'system',
         createdAt,
       });
       expect(result).not.toHaveProperty('passwordHash');
@@ -349,6 +382,7 @@ describe('UsersService (unit)', () => {
         id: 1,
         email: 'ash@example.com',
         language: 'pl',
+        theme: 'system',
         createdAt,
       });
 
@@ -361,12 +395,19 @@ describe('UsersService (unit)', () => {
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { email: 'ash@example.com' },
         data: { passwordHash: 'ARGON2HASH' },
-        select: { id: true, email: true, language: true, createdAt: true },
+        select: {
+          id: true,
+          email: true,
+          language: true,
+          theme: true,
+          createdAt: true,
+        },
       });
       expect(result).toEqual({
         id: 1,
         email: 'ash@example.com',
         language: 'pl',
+        theme: 'system',
         createdAt,
       });
       expect(result).not.toHaveProperty('passwordHash');

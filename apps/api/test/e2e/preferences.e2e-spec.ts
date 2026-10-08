@@ -37,11 +37,11 @@ describe('Preferences API (e2e)', () => {
     expect(res.status).toBe(401);
   });
 
-  it('GET returns the default language after login', async () => {
+  it('GET returns the default language and theme after login', async () => {
     await test.login();
 
     const res = await test.request.get(BASE).expect(200);
-    expect(res.body).toEqual({ language: 'pl' });
+    expect(res.body).toEqual({ language: 'pl', theme: 'system' });
   });
 
   it('PUT updates the language and rewrites the NEXT_LOCALE cookie', async () => {
@@ -49,9 +49,9 @@ describe('Preferences API (e2e)', () => {
 
     const res = await test.request
       .put(BASE)
-      .send({ language: 'en' })
+      .send({ language: 'en', theme: 'system' })
       .expect(200);
-    expect(res.body).toEqual({ language: 'en' });
+    expect(res.body).toEqual({ language: 'en', theme: 'system' });
 
     const cookies = res.headers['set-cookie'] as unknown as string[];
     const locale = cookies.find((c) => c.startsWith('NEXT_LOCALE='));
@@ -62,16 +62,90 @@ describe('Preferences API (e2e)', () => {
 
   it('GET reflects the updated language', async () => {
     await test.login();
-    await test.request.put(BASE).send({ language: 'en' }).expect(200);
+    await test.request
+      .put(BASE)
+      .send({ language: 'en', theme: 'system' })
+      .expect(200);
 
     const res = await test.request.get(BASE).expect(200);
-    expect(res.body).toEqual({ language: 'en' });
+    expect(res.body).toEqual({ language: 'en', theme: 'system' });
   });
 
   it('PUT rejects an unsupported language with 400', async () => {
     await test.login();
 
-    await test.request.put(BASE).send({ language: 'xx' }).expect(400);
+    await test.request
+      .put(BASE)
+      .send({ language: 'xx', theme: 'system' })
+      .expect(400);
+  });
+
+  it('PUT updates the theme and rewrites the NEXT_THEME cookie', async () => {
+    await test.login();
+    const res = await test.request
+      .put(BASE)
+      .send({ language: 'pl', theme: 'dark' })
+      .expect(200);
+    expect(res.body).toEqual({ language: 'pl', theme: 'dark' });
+    const cookies = res.headers['set-cookie'] as unknown as string[];
+    const theme = cookies.find((c) => c.startsWith('NEXT_THEME='));
+    expect(theme).toBeDefined();
+    expect(theme).toContain('NEXT_THEME=dark');
+    expect(theme).toContain('HttpOnly');
+  });
+
+  it('GET reflects the updated theme', async () => {
+    await test.login();
+    await test.request
+      .put(BASE)
+      .send({ language: 'pl', theme: 'light' })
+      .expect(200);
+    const res = await test.request.get(BASE).expect(200);
+    expect(res.body).toEqual({ language: 'pl', theme: 'light' });
+  });
+
+  it('PUT rejects an unsupported theme with 400', async () => {
+    await test.login();
+    await test.request
+      .put(BASE)
+      .send({ language: 'pl', theme: 'neon' })
+      .expect(400);
+  });
+
+  it('login sets NEXT_THEME from the stored theme', async () => {
+    // Create the account (theme defaults to 'system'), then flip the stored
+    // theme to 'dark' so a fresh login must heal the cookie from the DB.
+    await users.createUser({
+      email: TEST_USER_EMAIL,
+      password: TEST_USER_PASSWORD,
+    });
+    await test.prisma.user.update({
+      where: { email: TEST_USER_EMAIL },
+      data: { theme: 'dark' },
+    });
+
+    const res = await request
+      .agent(server())
+      .post('/auth/login')
+      .send({ email: TEST_USER_EMAIL, password: TEST_USER_PASSWORD });
+    expect(res.status).toBe(200);
+
+    const cookies = res.headers['set-cookie'] as unknown as string[];
+    const theme = cookies.find((c) => c.startsWith('NEXT_THEME='));
+    expect(theme).toBeDefined();
+    expect(theme).toContain('NEXT_THEME=dark');
+  });
+
+  it('logout clears the NEXT_THEME cookie', async () => {
+    await test.login();
+
+    const res = await test.request.post('/auth/logout').expect(204);
+    const cookies = res.headers['set-cookie'] as unknown as string[];
+    const theme = cookies.find((c) => c.startsWith('NEXT_THEME='));
+    expect(theme).toBeDefined();
+    // A cleared cookie carries a past expiry (Express uses the epoch) or
+    // Max-Age=0 — either way the browser drops it.
+    expect(theme).toMatch(/Max-Age=0|Expires=\w+, 01 Jan 1970/);
   });
 
   it('login sets NEXT_LOCALE from the stored language', async () => {

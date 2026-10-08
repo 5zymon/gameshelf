@@ -87,7 +87,7 @@ export async function getGameDatabaseStatus(): Promise<GameDatabaseStatus[]> {
   return api.settings.gameDatabases.status();
 }
 
-/** The signed-in user's preferences (currently only the UI language). 401 → null (not signed in). */
+/** The signed-in user's preferences (the UI language and theme). 401 → null (not signed in). */
 export async function getPreferences(): Promise<PreferencesModel | null> {
   try {
     return await api.settings.preferences.get();

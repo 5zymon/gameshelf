@@ -103,8 +103,9 @@
   },
   "preferences": {
     "heading": "Preferences",
-    "body": "Choose the interface language.",
+    "body": "Choose the interface language and theme.",
     "language": "Language",
+    "theme": "Theme",
     "save": "Save",
     "saving": "Saving…",
     "saved": "Saved.",
@@ -112,6 +113,11 @@
     "languageName": {
       "pl": "Polski",
       "en": "English"
+    },
+    "themeName": {
+      "light": "Light",
+      "dark": "Dark",
+      "system": "System"
     }
   },
   "gameDatabases": {

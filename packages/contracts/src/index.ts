@@ -372,10 +372,14 @@ export interface GameDatabaseStatus {
 /** Supported UI languages (ticket 7.2); Polish is the default. */
 export type AppLanguage = 'pl' | 'en';
 
+/** Supported UI themes (ticket 7.3); 'system' tracks the OS preference. */
+export type AppTheme = 'light' | 'dark' | 'system';
+
 export interface AuthUser {
   id: number;
   email: string;
   language: AppLanguage;
+  theme: AppTheme;
   createdAt: string;
 }
 
@@ -402,11 +406,13 @@ export interface SetupResponse {
 /** Mirrors `apps/api/src/settings/dto/preferences.model.ts`. */
 export interface PreferencesModel {
   language: AppLanguage;
+  theme: AppTheme;
 }
 
 /** Body of `PUT /settings/preferences`. */
 export interface PutPreferencesRequest {
   language: AppLanguage;
+  theme: AppTheme;
 }
 
 // ── Errors (wire) ────────────────────────────────────────────────────────

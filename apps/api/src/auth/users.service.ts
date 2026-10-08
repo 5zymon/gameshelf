@@ -35,6 +35,7 @@ export interface CreatedUser {
   id: number;
   email: string;
   language: string;
+  theme: string;
   createdAt: Date;
 }
 
@@ -44,6 +45,7 @@ export interface UserCredentials {
   email: string;
   passwordHash: string;
   language: string;
+  theme: string;
   createdAt: Date;
 }
 
@@ -66,7 +68,13 @@ export class UsersService {
     try {
       return await this.prisma.user.create({
         data: { email, passwordHash },
-        select: { id: true, email: true, language: true, createdAt: true },
+        select: {
+          id: true,
+          email: true,
+          language: true,
+          theme: true,
+          createdAt: true,
+        },
       });
     } catch (error) {
       if (
@@ -88,7 +96,13 @@ export class UsersService {
       return await this.prisma.user.update({
         where: { email },
         data: { passwordHash },
-        select: { id: true, email: true, language: true, createdAt: true },
+        select: {
+          id: true,
+          email: true,
+          language: true,
+          theme: true,
+          createdAt: true,
+        },
       });
     } catch (error) {
       if (
@@ -139,7 +153,13 @@ export class UsersService {
         }
         const created = await this.prisma.user.findUnique({
           where: { email },
-          select: { id: true, email: true, language: true, createdAt: true },
+          select: {
+            id: true,
+            email: true,
+            language: true,
+            theme: true,
+            createdAt: true,
+          },
         });
         if (created === null) {
           throw new ConflictException(SETUP_COMPLETED_MESSAGE); // defensive
@@ -184,6 +204,7 @@ export class UsersService {
         email: true,
         passwordHash: true,
         language: true,
+        theme: true,
         createdAt: true,
       },
     });
@@ -192,7 +213,13 @@ export class UsersService {
   async findById(id: number): Promise<CreatedUser | null> {
     return this.prisma.user.findUnique({
       where: { id },
-      select: { id: true, email: true, language: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        language: true,
+        theme: true,
+        createdAt: true,
+      },
     });
   }
 

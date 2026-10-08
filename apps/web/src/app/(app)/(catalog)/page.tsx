@@ -135,7 +135,7 @@ function EmptyCatalog({
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <Link
             href="/games/new"
-            className="rounded-md bg-accent px-4 py-2 font-medium text-ink hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong"
+            className="rounded-md bg-accent px-4 py-2 font-medium text-on-accent hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong"
           >
             {t('empty.addGame')}
           </Link>

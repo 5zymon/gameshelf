@@ -1,6 +1,33 @@
 @import 'tailwindcss';
 
+/* Class-based dark mode (ticket 7.3): the `dark` class on <html> is set
+   before first paint by the root layout's bootstrap script and kept in sync
+   by ThemeProvider (live OS tracking while the preference is 'system'). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
+  /* Light palette (default). The .dark block below overrides the same
+     tokens, so every utility (bg-ink, text-fog, …) flips with the theme —
+     components need no per-theme variants. All pairs meet WCAG AA. */
+  --color-ink: #f4f5f7;
+  --color-shelf: #ffffff;
+  --color-edge: #d9dde3;
+  --color-fog: #1a1d23;
+  --color-muted: #5b6472;
+  --color-accent: #b45309;
+  --color-accent-strong: #92400e;
+  --color-danger: #b91c1c;
+  --color-on-accent: #ffffff;
+  --color-on-danger: #ffffff;
+}
+
+:root {
+  color-scheme: light;
+}
+
+/* Dark palette — the original GameShelf design, unchanged. */
+.dark {
+  color-scheme: dark;
   --color-ink: #0b0d10;
   --color-shelf: #15181d;
   --color-edge: #262b33;
@@ -9,6 +36,8 @@
   --color-accent: #f5a524;
   --color-accent-strong: #ffc14d;
   --color-danger: #f87171;
+  --color-on-accent: #0b0d10;
+  --color-on-danger: #0b0d10;
 }
 
 body {

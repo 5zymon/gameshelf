@@ -44,6 +44,11 @@ export function middleware(request: NextRequest): NextResponse {
 
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set('Content-Security-Policy', csp);
+  // Expose the same nonce to the server components (root layout) so the
+  // synchronous first-paint theme script can carry it and pass the CSP.
+  // `next/script` and Next's own inline scripts still read it from the CSP
+  // header above; this header is the clean value for a raw <script nonce>.
+  requestHeaders.set('x-nonce', nonce);
 
   if (
     !PUBLIC_PATHS.has(request.nextUrl.pathname) &&

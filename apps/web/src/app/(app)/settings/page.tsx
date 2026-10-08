@@ -23,7 +23,7 @@ export default async function SettingsPage(): Promise<React.ReactElement> {
   const settings = llm.status === 'fulfilled' ? llm.value : null;
   const databases = dbs.status === 'fulfilled' ? dbs.value : null;
   // 401 → null (defensive: the layout's requireUser already redirected) or a
-  // rejected fetch. Without a language value the form has nothing to
+  // rejected fetch. Without language/theme values the form has nothing to
   // preselect, so the section is skipped rather than shown with a guess.
   const preferences = prefs.status === 'fulfilled' ? prefs.value : null;
 
@@ -38,7 +38,10 @@ export default async function SettingsPage(): Promise<React.ReactElement> {
 
       {preferences !== null && (
         <section>
-          <PreferencesForm language={preferences.language} />
+          <PreferencesForm
+            language={preferences.language}
+            theme={preferences.theme}
+          />
         </section>
       )}
 

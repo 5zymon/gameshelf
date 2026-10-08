@@ -103,8 +103,9 @@
   },
   "preferences": {
     "heading": "Preferencje",
-    "body": "Wybierz język interfejsu.",
+    "body": "Wybierz język i motyw interfejsu.",
     "language": "Język",
+    "theme": "Motyw",
     "save": "Zapisz",
     "saving": "Zapisywanie…",
     "saved": "Zapisano.",
@@ -112,6 +113,11 @@
     "languageName": {
       "pl": "Polski",
       "en": "English"
+    },
+    "themeName": {
+      "light": "Jasny",
+      "dark": "Ciemny",
+      "system": "Systemowy"
     }
   },
   "gameDatabases": {

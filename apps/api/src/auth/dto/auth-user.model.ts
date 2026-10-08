@@ -10,6 +10,9 @@ export class AuthUserModel {
   @ApiProperty({ enum: ['pl', 'en'], example: 'pl' })
   language!: string;
 
+  @ApiProperty({ enum: ['light', 'dark', 'system'], example: 'system' })
+  theme!: string;
+
   @ApiProperty({ example: '2026-10-05T12:00:00.000Z' })
   createdAt!: Date;
 }

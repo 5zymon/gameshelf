@@ -23,6 +23,7 @@ import { AuthUserModel, LoginResponseModel } from './dto/auth-user.model';
 import { LoginDto } from './dto/login.dto';
 import { Public } from './public.decorator';
 import { clearLocaleCookie, setLocaleCookie } from '../i18n/locale-cookie';
+import { clearThemeCookie, setThemeCookie } from '../settings/theme-cookie';
 import {
   clearSessionCookie,
   SESSION_COOKIE_NAME,
@@ -54,10 +55,12 @@ export class AuthController {
       req.headers['user-agent'] ?? null,
     );
     setSessionCookie(res, token, expiresAt, this.config);
-    // Heal the web app's locale from the DB on every login: the browser may
-    // have a stale/missing NEXT_LOCALE (fresh device, cleared cookies, or a
-    // shared machine), and login is the one reliable server-render hook.
+    // Heal the web app's locale and theme from the DB on every login: the
+    // browser may have a stale/missing NEXT_LOCALE or NEXT_THEME (fresh
+    // device, cleared cookies, or a shared machine), and login is the one
+    // reliable server-render hook.
     setLocaleCookie(res, user.language, this.config.cookieSecure);
+    setThemeCookie(res, user.theme, this.config.cookieSecure);
     return { user };
   }
 
@@ -71,9 +74,11 @@ export class AuthController {
   ): Promise<void> {
     await this.auth.logout(req.session.token);
     clearSessionCookie(res, this.config);
-    // Drop the locale too so a shared device never shows the previous user's
-    // language on the login screen (which falls back to the `pl` default).
+    // Drop the locale and theme too so a shared device never shows the
+    // previous user's language (which falls back to the `pl` default) or
+    // theme (which falls back to the `system` default) on the login screen.
     clearLocaleCookie(res, this.config.cookieSecure);
+    clearThemeCookie(res, this.config.cookieSecure);
   }
 
   @Get('me')

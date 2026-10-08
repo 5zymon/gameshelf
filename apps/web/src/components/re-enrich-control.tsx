@@ -192,7 +192,7 @@ export function ReEnrichControl({
                 void handleApply(candidate);
               }}
               disabled={busy}
-              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-ink hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong disabled:opacity-60"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong disabled:opacity-60"
             >
               {t('apply')}
             </button>
