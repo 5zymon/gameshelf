@@ -1,0 +1,678 @@
+'use client';
+
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
+import {
+  isApiError,
+  isGameConflict,
+  type GameDetail,
+  type GamePlatform,
+} from '@/lib/api';
+import { api } from '@/lib/api/browser';
+import {
+  buildCreateRequest,
+  emptyManualAddDraft,
+  MANUAL_ADD_FIELDS,
+  mapServerErrors,
+  type ManualAddDraft,
+  type ManualAddField,
+  type ManualAddFieldErrors,
+} from '@/lib/manual-add';
+
+const FIELD =
+  'w-full rounded-md border border-edge bg-ink px-3 py-2 text-fog outline-none focus-visible:ring-2 focus-visible:ring-accent';
+const LABEL = 'block text-sm text-muted';
+const PRIMARY_BUTTON =
+  'rounded-md bg-accent px-4 py-2 font-medium text-ink hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong disabled:opacity-60';
+const SECONDARY_BUTTON =
+  'rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60';
+
+type Intent = 'save' | 'save-and-add-another';
+
+/** Which submit button was pressed; the first button is the implicit Enter default. */
+function readIntent(event: React.SubmitEvent<HTMLFormElement>): Intent {
+  const submitter = event.nativeEvent.submitter;
+  return submitter instanceof HTMLButtonElement &&
+    submitter.value === 'save-and-add-another'
+    ? 'save-and-add-another'
+    : 'save';
+}
+
+function savedMessage(game: GameDetail, intent: Intent): string {
+  const action = intent === 'save-and-add-another' ? 'Added' : 'Saved';
+  const linked =
+    game.externalId === null ? ' Not linked to a game database.' : '';
+  return `${action} “${game.title}”.${linked}`;
+}
+
+export function ManualAddForm({
+  platforms: initialPlatforms,
+}: {
+  platforms: GamePlatform[];
+}): React.ReactElement {
+  const router = useRouter();
+  const [platforms, setPlatforms] = useState<GamePlatform[]>(initialPlatforms);
+  const [draft, setDraft] = useState<ManualAddDraft>(() =>
+    emptyManualAddDraft(),
+  );
+  const [fieldErrors, setFieldErrors] = useState<ManualAddFieldErrors>({});
+  const [formError, setFormError] = useState<string | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
+  const [lastCreated, setLastCreated] = useState<GameDetail | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [conflict, setConflict] = useState<GameDetail | null>(null);
+  const [addingCopy, setAddingCopy] = useState(false);
+  const [platformOpen, setPlatformOpen] = useState(false);
+  const [newPlatformName, setNewPlatformName] = useState('');
+  const [platformError, setPlatformError] = useState<string | null>(null);
+  const [creatingPlatform, setCreatingPlatform] = useState(false);
+
+  const formRef = useRef<HTMLFormElement>(null);
+  const titleRef = useRef<HTMLInputElement>(null);
+  const platformSelectRef = useRef<HTMLSelectElement>(null);
+  const newPlatformRef = useRef<HTMLInputElement>(null);
+  const conflictDismissRef = useRef<HTMLButtonElement>(null);
+
+  const busy = saving || addingCopy;
+
+  // Least-destructive default: focus the dismiss action when the prompt opens.
+  useEffect(() => {
+    if (conflict !== null) conflictDismissRef.current?.focus();
+  }, [conflict]);
+
+  // The inline platform create is keyboard-first: focus its input on open.
+  useEffect(() => {
+    if (platformOpen) newPlatformRef.current?.focus();
+  }, [platformOpen]);
+
+  useEffect(() => {
+    if (conflict === null) return;
+    function onKeyDown(event: KeyboardEvent): void {
+      if (event.key === 'Escape') setConflict(null);
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [conflict]);
+
+  function setField(key: ManualAddField, value: string): void {
+    setDraft((current) => ({ ...current, [key]: value }));
+    setFieldErrors((current) =>
+      current[key] === undefined ? current : { ...current, [key]: undefined },
+    );
+    setFormError(null);
+    setConflict(null);
+  }
+
+  function focusFirstError(errors: ManualAddFieldErrors): void {
+    const first = MANUAL_ADD_FIELDS.find((key) => errors[key] !== undefined);
+    if (first !== undefined) {
+      formRef.current?.querySelector<HTMLElement>(`[name="${first}"]`)?.focus();
+    }
+  }
+
+  async function handleSubmit(
+    event: React.SubmitEvent<HTMLFormElement>,
+  ): Promise<void> {
+    event.preventDefault();
+    if (busy) return;
+
+    const intent = readIntent(event);
+    const { request, errors } = buildCreateRequest(draft);
+    if (request === null) {
+      setFieldErrors(errors);
+      setFormError(null);
+      focusFirstError(errors);
+      return;
+    }
+
+    const keptPlatformId = draft.platformId;
+    setSaving(true);
+    setFormError(null);
+    setFieldErrors({});
+    setStatus(null);
+    setConflict(null);
+    try {
+      const created = await api.games.create(request);
+      setStatus(savedMessage(created, intent));
+      setLastCreated(created);
+      setPlatformError(null);
+      setDraft(emptyManualAddDraft(keptPlatformId));
+      titleRef.current?.focus();
+    } catch (caught) {
+      if (isGameConflict(caught)) {
+        setConflict(caught.body.game);
+        return;
+      }
+      if (isApiError(caught) && caught.status === 401) {
+        router.replace('/login');
+        router.refresh();
+        return;
+      }
+      if (isApiError(caught) && caught.status === 400) {
+        const mapped = mapServerErrors(caught.messages);
+        setFieldErrors(mapped.fieldErrors);
+        setFormError(mapped.formError);
+        focusFirstError(mapped.fieldErrors);
+        return;
+      }
+      setFormError(
+        isApiError(caught) && caught.status !== 0
+          ? caught.userMessage
+          : "We couldn't save this game. Check your connection and try again.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleAddCopy(): Promise<void> {
+    if (conflict === null || addingCopy) return;
+    const target = conflict;
+    setAddingCopy(true);
+    setFormError(null);
+    try {
+      const updated = await api.games.addCopy(target.id);
+      setStatus(
+        `Added a copy of “${updated.title}” — now ${String(updated.copyCount)} copies.`,
+      );
+      setLastCreated(updated);
+      setConflict(null);
+      setDraft(emptyManualAddDraft(draft.platformId));
+      titleRef.current?.focus();
+    } catch (caught) {
+      if (isApiError(caught) && caught.status === 401) {
+        router.replace('/login');
+        router.refresh();
+        return;
+      }
+      setFormError(
+        isApiError(caught) && caught.status !== 0
+          ? caught.userMessage
+          : "We couldn't add a copy. Check your connection and try again.",
+      );
+    } finally {
+      setAddingCopy(false);
+    }
+  }
+
+  function addPlatform(platform: GamePlatform): void {
+    setPlatforms((current) =>
+      current.some((item) => item.id === platform.id)
+        ? current
+        : [...current, platform],
+    );
+  }
+
+  function togglePlatformCreate(): void {
+    setPlatformError(null);
+    if (platformOpen) setNewPlatformName('');
+    setPlatformOpen((current) => !current);
+  }
+
+  function cancelPlatformCreate(): void {
+    setPlatformOpen(false);
+    setNewPlatformName('');
+    setPlatformError(null);
+    platformSelectRef.current?.focus();
+  }
+
+  /** A 409 means the name already exists; reload and select the existing row. */
+  async function refreshPlatformsAndFind(name: string): Promise<number | null> {
+    const list = await api.platforms.list();
+    const mapped: GamePlatform[] = list.map((platform) => ({
+      id: platform.id,
+      name: platform.name,
+      slug: platform.slug,
+    }));
+    setPlatforms(mapped);
+    const target = name.trim().toLowerCase();
+    const match = mapped.find(
+      (platform) => platform.name.trim().toLowerCase() === target,
+    );
+    if (match === undefined) return null;
+    setDraft((current) => ({ ...current, platformId: String(match.id) }));
+    return match.id;
+  }
+
+  async function handleCreatePlatform(): Promise<void> {
+    const name = newPlatformName.trim();
+    if (name === '') {
+      setPlatformError('Enter a platform name.');
+      return;
+    }
+    setCreatingPlatform(true);
+    setPlatformError(null);
+    try {
+      const created = await api.platforms.create({ name });
+      addPlatform({ id: created.id, name: created.name, slug: created.slug });
+      setDraft((current) => ({ ...current, platformId: String(created.id) }));
+      setPlatformOpen(false);
+      setNewPlatformName('');
+      platformSelectRef.current?.focus();
+    } catch (caught) {
+      if (isApiError(caught) && caught.status === 401) {
+        router.replace('/login');
+        router.refresh();
+        return;
+      }
+      if (isApiError(caught) && caught.status === 409) {
+        const selected = await refreshPlatformsAndFind(name).catch(() => null);
+        if (selected !== null) {
+          setPlatformOpen(false);
+          setNewPlatformName('');
+          platformSelectRef.current?.focus();
+          return;
+        }
+      }
+      setPlatformError(
+        isApiError(caught) && caught.status !== 0
+          ? caught.userMessage
+          : "We couldn't create the platform. Check your connection and try again.",
+      );
+    } finally {
+      setCreatingPlatform(false);
+    }
+  }
+
+  const conflictMeta = [
+    conflict?.platform.name ?? null,
+    conflict?.edition ?? null,
+    conflict === null
+      ? null
+      : `${String(conflict.copyCount)} ${
+          conflict.copyCount === 1 ? 'copy' : 'copies'
+        }`,
+  ]
+    .filter((part): part is string => part !== null && part !== '')
+    .join(' · ');
+
+  return (
+    <form
+      ref={formRef}
+      noValidate
+      onSubmit={(event) => {
+        void handleSubmit(event);
+      }}
+      className="space-y-6"
+    >
+      {formError !== null && (
+        <p
+          role="alert"
+          className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger"
+        >
+          {formError}
+        </p>
+      )}
+
+      {status !== null && (
+        <p
+          role="status"
+          aria-live="polite"
+          className="rounded-md border border-edge bg-shelf px-3 py-2 text-sm text-muted"
+        >
+          {status}
+          {lastCreated !== null && (
+            <>
+              {' '}
+              <Link
+                href={`/games/${String(lastCreated.id)}`}
+                className="text-accent underline-offset-4 hover:text-accent-strong hover:underline"
+              >
+                View game
+              </Link>
+            </>
+          )}
+        </p>
+      )}
+
+      {conflict !== null && (
+        <div
+          role="alertdialog"
+          aria-labelledby="add-conflict-title"
+          aria-describedby="add-conflict-body"
+          className="rounded-xl border border-accent/40 bg-accent/5 p-4"
+        >
+          <p id="add-conflict-title" className="text-sm font-medium text-fog">
+            “{conflict.title}” is already in the catalog.
+          </p>
+          <p id="add-conflict-body" className="mt-1 text-sm text-muted">
+            {conflictMeta}. Add another copy?
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              ref={conflictDismissRef}
+              type="button"
+              onClick={() => {
+                setConflict(null);
+                titleRef.current?.focus();
+              }}
+              disabled={addingCopy}
+              className={SECONDARY_BUTTON}
+            >
+              Not now
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                void handleAddCopy();
+              }}
+              disabled={addingCopy}
+              className={PRIMARY_BUTTON}
+            >
+              {addingCopy ? 'Adding…' : 'Add another copy'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-3 rounded-xl border border-edge bg-shelf/40 p-4 sm:grid-cols-2 sm:p-6">
+        <div className="space-y-1.5 sm:col-span-2">
+          <label htmlFor="add-title" className={LABEL}>
+            Title
+          </label>
+          <input
+            id="add-title"
+            name="title"
+            type="text"
+            ref={titleRef}
+            required
+            maxLength={255}
+            value={draft.title}
+            onChange={(event) => {
+              setField('title', event.target.value);
+            }}
+            className={FIELD}
+            aria-invalid={fieldErrors.title !== undefined}
+            aria-describedby={
+              fieldErrors.title !== undefined ? 'add-title-error' : undefined
+            }
+          />
+          {fieldErrors.title !== undefined && (
+            <p id="add-title-error" className="text-xs text-danger">
+              {fieldErrors.title}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-1.5 sm:col-span-2">
+          <label htmlFor="add-platform" className={LABEL}>
+            Platform
+          </label>
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              id="add-platform"
+              name="platformId"
+              ref={platformSelectRef}
+              value={draft.platformId}
+              onChange={(event) => {
+                setField('platformId', event.target.value);
+              }}
+              className={`${FIELD} sm:max-w-xs`}
+              aria-invalid={fieldErrors.platformId !== undefined}
+              aria-describedby={
+                fieldErrors.platformId !== undefined
+                  ? 'add-platform-error'
+                  : undefined
+              }
+            >
+              <option value="" disabled>
+                Choose a platform…
+              </option>
+              {platforms.map((platform) => (
+                <option key={platform.id} value={platform.id}>
+                  {platform.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              aria-expanded={platformOpen}
+              onClick={togglePlatformCreate}
+              className={SECONDARY_BUTTON}
+            >
+              {platformOpen ? 'Close new platform' : 'New platform'}
+            </button>
+          </div>
+          {platforms.length === 0 && !platformOpen && (
+            <p className="text-xs text-muted">
+              No platforms yet — create one to get started.
+            </p>
+          )}
+          {platformOpen && (
+            <div className="mt-2 rounded-lg border border-edge bg-ink/40 p-3">
+              <label htmlFor="add-new-platform" className={LABEL}>
+                New platform name
+              </label>
+              <input
+                id="add-new-platform"
+                ref={newPlatformRef}
+                type="text"
+                maxLength={255}
+                value={newPlatformName}
+                onChange={(event) => {
+                  setNewPlatformName(event.target.value);
+                  setPlatformError(null);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    cancelPlatformCreate();
+                  }
+                  if (
+                    event.key === 'Enter' &&
+                    !event.metaKey &&
+                    !event.ctrlKey &&
+                    !event.altKey &&
+                    !event.shiftKey
+                  ) {
+                    event.preventDefault();
+                    if (!creatingPlatform) {
+                      void handleCreatePlatform();
+                    }
+                  }
+                }}
+                className={`${FIELD} mt-1.5`}
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void handleCreatePlatform();
+                  }}
+                  disabled={creatingPlatform}
+                  className={PRIMARY_BUTTON}
+                >
+                  {creatingPlatform ? 'Creating…' : 'Create platform'}
+                </button>
+                <button
+                  type="button"
+                  onClick={cancelPlatformCreate}
+                  disabled={creatingPlatform}
+                  className={SECONDARY_BUTTON}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+          {fieldErrors.platformId !== undefined && (
+            <p id="add-platform-error" className="text-xs text-danger">
+              {fieldErrors.platformId}
+            </p>
+          )}
+          {platformError !== null && (
+            <p role="alert" className="text-xs text-danger">
+              {platformError}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="add-edition" className={LABEL}>
+            Edition
+          </label>
+          <input
+            id="add-edition"
+            name="edition"
+            type="text"
+            maxLength={255}
+            value={draft.edition}
+            onChange={(event) => {
+              setField('edition', event.target.value);
+            }}
+            className={FIELD}
+            aria-invalid={fieldErrors.edition !== undefined}
+            aria-describedby={
+              fieldErrors.edition !== undefined
+                ? 'add-edition-error'
+                : undefined
+            }
+          />
+          {fieldErrors.edition !== undefined && (
+            <p id="add-edition-error" className="text-xs text-danger">
+              {fieldErrors.edition}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="add-year" className={LABEL}>
+            Release year (1000–2100)
+          </label>
+          <input
+            id="add-year"
+            name="releaseYear"
+            type="text"
+            inputMode="numeric"
+            pattern="\d*"
+            maxLength={4}
+            value={draft.releaseYear}
+            onChange={(event) => {
+              setField('releaseYear', event.target.value);
+            }}
+            className={FIELD}
+            aria-invalid={fieldErrors.releaseYear !== undefined}
+            aria-describedby={
+              fieldErrors.releaseYear !== undefined
+                ? 'add-year-error'
+                : undefined
+            }
+          />
+          {fieldErrors.releaseYear !== undefined && (
+            <p id="add-year-error" className="text-xs text-danger">
+              {fieldErrors.releaseYear}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="add-players" className={LABEL}>
+            Players (1–100)
+          </label>
+          <input
+            id="add-players"
+            name="playerCount"
+            type="text"
+            inputMode="numeric"
+            pattern="\d*"
+            maxLength={3}
+            value={draft.playerCount}
+            onChange={(event) => {
+              setField('playerCount', event.target.value);
+            }}
+            className={FIELD}
+            aria-invalid={fieldErrors.playerCount !== undefined}
+            aria-describedby={
+              fieldErrors.playerCount !== undefined
+                ? 'add-players-error'
+                : undefined
+            }
+          />
+          {fieldErrors.playerCount !== undefined && (
+            <p id="add-players-error" className="text-xs text-danger">
+              {fieldErrors.playerCount}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="add-publisher" className={LABEL}>
+            Publisher
+          </label>
+          <input
+            id="add-publisher"
+            name="publisher"
+            type="text"
+            maxLength={255}
+            value={draft.publisher}
+            onChange={(event) => {
+              setField('publisher', event.target.value);
+            }}
+            className={FIELD}
+            aria-invalid={fieldErrors.publisher !== undefined}
+            aria-describedby={
+              fieldErrors.publisher !== undefined
+                ? 'add-publisher-error'
+                : undefined
+            }
+          />
+          {fieldErrors.publisher !== undefined && (
+            <p id="add-publisher-error" className="text-xs text-danger">
+              {fieldErrors.publisher}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <label htmlFor="add-genre" className={LABEL}>
+            Genre
+          </label>
+          <input
+            id="add-genre"
+            name="genre"
+            type="text"
+            maxLength={255}
+            value={draft.genre}
+            onChange={(event) => {
+              setField('genre', event.target.value);
+            }}
+            className={FIELD}
+            aria-invalid={fieldErrors.genre !== undefined}
+            aria-describedby={
+              fieldErrors.genre !== undefined ? 'add-genre-error' : undefined
+            }
+          />
+          {fieldErrors.genre !== undefined && (
+            <p id="add-genre-error" className="text-xs text-danger">
+              {fieldErrors.genre}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          type="submit"
+          name="intent"
+          value="save"
+          disabled={busy}
+          className={PRIMARY_BUTTON}
+        >
+          {saving ? 'Saving…' : 'Save game'}
+        </button>
+        <button
+          type="submit"
+          name="intent"
+          value="save-and-add-another"
+          disabled={busy}
+          className={SECONDARY_BUTTON}
+        >
+          {saving ? 'Saving…' : 'Save and add another'}
+        </button>
+      </div>
+    </form>
+  );
+}
