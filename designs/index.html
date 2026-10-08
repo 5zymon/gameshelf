@@ -135,6 +135,13 @@
     outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
+  .views {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .views .view { margin-top: 0; }
 
   .note {
     margin: 0;
@@ -153,6 +160,7 @@
     }
     .letter { font-size: 30px; }
     .view { justify-self: start; min-height: 44px; }
+    .views { justify-self: start; }
   }
   @media (prefers-reduced-motion: reduce) {
     .view { transition: none; }
@@ -171,7 +179,7 @@
         <span class="letter" aria-hidden="true">A</span>
         <div>
           <h2 class="proposal-name" aria-label="A · Nocturne">Nocturne</h2>
-          <p class="concept">Premium dark. A richer, layered take on GameShelf's amber-on-dark, with warm depth and a golden accent.</p>
+          <p class="concept">Premium dark. A richer, layered take on GameShelf's amber-on-dark, with warm depth and a golden accent. (dark + light)</p>
           <ul class="swatches" aria-label="Nocturne palette">
             <li class="swatch"><span class="dot" style="background:#0F1116"></span><span class="hex">#0F1116</span></li>
             <li class="swatch"><span class="dot" style="background:#171B22"></span><span class="hex">#171B22</span></li>
@@ -180,7 +188,10 @@
           </ul>
           <p class="typeface">Type: Sora + Manrope</p>
         </div>
-        <a class="view" href="proposal-a-nocturne.html">View proposal</a>
+        <div class="views">
+          <a class="view" href="proposal-a-nocturne.html">Ciemny (dark)</a>
+          <a class="view" href="proposal-a-nocturne-light.html">Jasny (light)</a>
+        </div>
       </li>
 
       <li class="proposal">
