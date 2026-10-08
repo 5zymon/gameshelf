@@ -31,6 +31,7 @@
     "main": "Nawigacja główna",
     "catalog": "Katalog",
     "platforms": "Platformy",
+    "addGame": "Dodaj grę",
     "import": "Import",
     "settings": "Ustawienia",
     "signOut": "Wyloguj się",
@@ -479,7 +480,7 @@
     "showAll": "Pokaż puste i ukryte platformy referencyjne",
     "empty": {
       "none": "Brak platform. Dodaj jedną albo zaimportuj gry, aby je utworzyć.",
-      "filtered": "Brak platform z grami. Zaznacz „Pokaż puste i ukryte platformy referencyjne”, aby zobaczyć pełną listę."
+      "filtered": "Brak platform do wyświetlenia. Zaznacz „Pokaż puste i ukryte platformy referencyjne”, aby zobaczyć pełną listę."
     },
     "kind": {
       "import": "Dodana przez import",

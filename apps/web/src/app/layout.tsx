@@ -99,7 +99,17 @@ export default async function RootLayout({
           dangerouslySetInnerHTML={{ __html: themeInitScript }}
         />
       </head>
-      <body className="min-h-dvh bg-ink text-fog antialiased">
+      {/*
+        `suppressHydrationWarning` on `<body>`: browser extensions mutate the
+        body before hydration — e.g. ColorZilla adds `cz-shortcut-listen="true"`
+        — which React would otherwise flag as an attribute mismatch on every
+        page. The app never sets that attribute; this only silences the dev-only
+        warning for `<body>` attribute drift injected by an extension.
+      */}
+      <body
+        className="min-h-dvh bg-ink text-fog antialiased"
+        suppressHydrationWarning
+      >
         <NextIntlClientProvider locale={locale} messages={messages}>
           <ThemeProvider theme={theme}>{children}</ThemeProvider>
         </NextIntlClientProvider>
