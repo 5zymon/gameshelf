@@ -347,7 +347,7 @@ export function PhotoImportForm({
         <p className="text-sm text-muted">
           <Link
             href={`/import/progress/${lastBatchId}`}
-            className="text-accent underline underline-offset-4"
+            className="text-accent-text underline underline-offset-4"
           >
             {t('recentImport')}
           </Link>

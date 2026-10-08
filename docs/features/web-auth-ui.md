@@ -4,7 +4,7 @@ title: Web Auth UI
 description: Browser login and first-run setup flows, the authenticated navigation shell, layered route protection, the same-origin /api proxy, and the cookie-only auth guarantee.
 tags: [web, auth, ui]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T00:00:00Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T21:54:58Z }
 ---
 
 # Overview
@@ -70,7 +70,8 @@ for active state) rendering four links:
 | Import    | `/import`    |
 | Settings  | `/settings`  |
 
-The active link gets `aria-current="page"` and the `bg-shelf text-fog` style;
+The active link gets `aria-current="page"` and a `bg-accent-soft text-accent-text`
+rounded-full pill style;
 `/` matches exactly while the others also match their sub-paths, so `/platforms`
 does not light up for a hypothetical `/platforms-x`.
 

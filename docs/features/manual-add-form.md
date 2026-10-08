@@ -4,7 +4,7 @@ title: Manual Add Form
 description: The authenticated /games/new typed-only form — title, platform (select or inline create), edition and optional metadata, with save-and-add-another, field-level errors, and an existing-identity copy prompt; reusable inline (prefill/submit-label/onSaved) by the import needs-attention review.
 tags: [web, ui, catalog]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T05:11:26Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T21:54:58Z }
 ---
 
 # Overview
@@ -43,7 +43,7 @@ Add with DB Search and Copy Count](/manual-add-and-copy-count.md).
 # Decisions
 
 - **D1 — typed-only.** The form never calls `GET /games/search` and has no candidate/search UI. Every record is created unlinked, which makes "works with no LLM" and "works with no game DB" true by construction.
-- **D2 — no `coverUrl`.** Manual records omit the cover and fall back to the existing gradient placeholder from [Catalog Grid](/catalog-grid.md).
+- **D2 — no `coverUrl`.** Manual records omit the cover and fall back to the gradient-initial no-cover placeholder from [Catalog Grid](/catalog-grid.md).
 - No backend or `packages/contracts` change: `POST /games`, `POST /games/:id/copies`, `GET /platforms` and `POST /platforms` already existed. No new dependencies: a hand-rolled controlled component using the existing Tailwind tokens.
 
 # Out of scope

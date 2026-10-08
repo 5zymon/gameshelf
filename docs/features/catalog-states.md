@@ -4,7 +4,7 @@ title: Catalog Loading, Error & Responsive States
 description: Route-level loading skeletons for the catalog and game detail views, error boundaries with a working retry for failed fetches, focus management for the edit/delete controls, descriptive cover alt text, and mobile polish for the grid, filter bar and detail view.
 tags: [web, ui, catalog, accessibility]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T00:38:40Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T21:54:58Z }
 ---
 
 # Overview
@@ -16,17 +16,18 @@ stream a route-level skeleton instead of blocking on an empty frame, a failed
 fetch offers a real retry, slow covers no longer resize their grid slot, the
 edit/delete controls manage focus, and every cover carries alt text. It also
 removes the remaining templated-looking styling from the catalog screens
-(ALL-CAPS accented eyebrows, middle-dot metadata joins, gradient cover
-placeholders and dashed "empty" cards).
+(ALL-CAPS accented eyebrows, middle-dot metadata joins and dashed "empty"
+cards), while a game without cover art shows the designed gradient-initial
+placeholder described in [Catalog Grid](/catalog-grid.md).
 
 # Loading skeletons (no layout shift)
 
 `apps/web/src/components/skeletons.tsx` holds the server-rendered skeletons.
 
-| Route         | Fallback                                                               | Notes                                                                                                           |
-| ------------- | ---------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `/`           | `apps/web/src/app/(app)/(catalog)/loading.tsx` → `CatalogSkeleton`     | Mirrors the header, filter form, 24-tile grid (`grid-cols-2 sm:grid-cols-3 lg:grid-cols-5`) and pagination row. |
-| `/games/[id]` | `apps/web/src/app/(app)/games/[id]/loading.tsx` → `GameDetailSkeleton` | Mirrors the back bar, header, cover column and the record grid.                                                 |
+| Route         | Fallback                                                               | Notes                                                                                                                          |
+| ------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `/`           | `apps/web/src/app/(app)/(catalog)/loading.tsx` → `CatalogSkeleton`     | Mirrors the header, filter form, 24-tile grid (`grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5`) and pagination row. |
+| `/games/[id]` | `apps/web/src/app/(app)/games/[id]/loading.tsx` → `GameDetailSkeleton` | Mirrors the back bar, header, cover column and the record grid.                                                                |
 
 The catalog page was moved into an `(app)/(catalog)` **route group** so its
 `loading.tsx` scopes to `/` only. A group-level `(app)/loading.tsx` would have
@@ -83,8 +84,8 @@ priority covers can paint before hydration and with JavaScript disabled. A 500ms
 fade is applied only to an image that finishes loading _after_ mount; an image
 already complete at hydration snaps straight to full opacity (an `img.complete`
 check covers React attaching handlers after the bytes arrived). A failed load
-swaps to the designed title placeholder, so a slow or failed image never changes
-the grid geometry. When `thumbUrl` changes on a mounted instance (the detail
+swaps to the gradient-initial placeholder, so a slow or failed image never
+changes the grid geometry. When `thumbUrl` changes on a mounted instance (the detail
 cover after a successful re-enrich + `router.refresh()`), the load state resets
 for the new source so a previously errored cover can recover.
 
@@ -111,17 +112,21 @@ once.
 - The detail cover is capped at `max-w-[10rem] sm:max-w-[12rem]` and only goes
   full-column at `md`, so the mobile detail page does not spend the first
   viewport on the cover.
-- Filter chips have a 24 px remove hit area with a visible focus ring.
+- Filter chips have a 24 px remove hit area with a visible focus outline (the
+  shared `:focus-visible` outline).
 - The grid stays `grid-cols-2` at 375 px with no horizontal scroll.
 
 # De-templating
 
-The catalog header dropped its tracked ALL-CAPS accent eyebrow; `EmptyCatalog`,
-`NoResults` and the out-of-range message use an open hairline panel
-(`rounded-lg border border-edge/70 bg-shelf/30`) instead of dashed `rounded-2xl`
-cards; the detail provenance chips became status-dot tags; the detail metadata
-line uses hairline structural separators instead of a `·` join; and the
-recordset is an open, unboxed two-column `<dl>` with hairline rows.
+The catalog screens carry no template chrome: the header has no tracked ALL-CAPS
+accent eyebrow; `EmptyCatalog`, `NoResults` and the out-of-range message are
+`rounded-card` surface panels (`border-edge bg-surface`) instead of dashed
+`rounded-2xl` cards; the detail provenance chips are status-dot tags
+(`rounded-full` with an `h-1.5 w-1.5` tone dot); the detail metadata line uses
+hairline structural separators (`h-3 w-px bg-edge`) instead of a `·` join; and
+the recordset is an open, unboxed two-column `<dl>` with hairline `edge-soft`
+rows. The gradient-initial `.cover-placeholder` (deterministic per-title tone,
+huge first-letter initial) is the **designed** no-cover state, not a defect.
 
 # Components
 
@@ -137,11 +142,11 @@ recordset is an open, unboxed two-column `<dl>` with hairline rows.
 1. Throttle the network and hard-reload `/`: the skeleton mirrors the final grid and the layout does not jump.
 2. Stop the API and load `/`: the root error boundary renders **Try again**; restarting the API and pressing it reloads the catalog.
 3. Open `/games/[id]`: the detail skeleton mirrors the header/cover/record geometry.
-4. A slow cover shows the pulse then fades in without moving its tile; a broken cover URL shows the title placeholder.
-5. At 375 px the grid is 2 columns, the filter bar is single-column full-width, the detail cover is capped, and there is no horizontal scroll.
+4. A slow cover shows the pulse then fades in without moving its tile; a broken cover URL shows the gradient-initial no-cover placeholder.
+5. At 375 px the grid is 2 columns (2 / 3 / 4 / 5 across 375 / 768 / 1024 / 1280), the filter bar is single-column full-width, the detail cover is capped, and there is no horizontal scroll.
 6. Delete dialog: focus starts on **Cancel**, Tab cycles Cancel↔Delete, Escape returns focus to **Delete game**.
 7. Edit disclosure: opening focuses **Title**, Escape closes and focuses **Edit record**.
-8. Grid tiles announce each game once; the detail hero and re-enrich preview covers keep non-empty descriptive `alt`; keyboard focus rings are visible throughout.
+8. Grid tiles announce each game once; the detail hero and re-enrich preview covers keep non-empty descriptive `alt`; keyboard focus outlines are visible throughout (the shared `:focus-visible` outline).
 
 # Out of scope
 

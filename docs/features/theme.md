@@ -4,7 +4,7 @@ title: Theme (light/dark/system)
 description: A per-user UI theme (light/dark/system) persisted server-side, carried to the web app in the NEXT_THEME cookie, applied class-based (Tailwind v4 `dark` variant) with a no-flash bootstrap script, and editable in the same Preferences view as the language.
 tags: [web, api, settings, theme]
 status: draft
-generated: { by: opencode/home-model, at: 2026-10-08T10:36:54Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T21:54:58Z }
 ---
 
 # Overview
@@ -103,53 +103,98 @@ change is visible immediately, before the PUT round-trip.
 
 - `@custom-variant dark (&:where(.dark, .dark *));` switches the `dark:`
   variant to the class strategy.
-- `@theme` declares the **light** palette as the default `--color-*` tokens;
-  an unlayered `.dark { … }` block on `<html>` overrides the same tokens with
-  the **dark** palette (the original GameShelf design, unchanged). Utilities
-  compile to `var(--color-*)`, so every `bg-ink`/`text-fog`/`border-edge`
-  (and opacity modifiers via `color-mix`) flips with the theme — no
-  per-component `dark:` variants are needed.
+- `@theme` declares the **Nocturne light** palette as the default `--color-*`
+  tokens; an unlayered `.dark { … }` block on `<html>` overrides the same
+  tokens with the **Nocturne dark** palette ("warm light, premium dark").
+  Utilities compile to `var(--color-*)`, so every `bg-surface`/`text-ink`/
+  `border-edge` (and opacity modifiers via `color-mix`) flips with the theme;
+  `src/` contains **zero `dark:` variants**, and components carry no
+  per-theme branches.
+- Fonts: `--font-sans` (Manrope, body) and `--font-display` (Sora, headings
+  and wordmark) are `@theme` tokens fed by the `next/font` CSS variables (see
+  [Single-Origin Frontend & API with Strict CSP](/single-origin-frontend-api.md)).
 - `color-scheme: light|dark` makes native `<select>` popups and scrollbars
   match the theme.
 
-| Token                   | Light     | Dark      |
-| ----------------------- | --------- | --------- |
-| `--color-ink`           | `#f4f5f7` | `#0b0d10` |
-| `--color-shelf`         | `#ffffff` | `#15181d` |
-| `--color-edge`          | `#d9dde3` | `#262b33` |
-| `--color-fog`           | `#1a1d23` | `#e7e9ee` |
-| `--color-muted`         | `#5b6472` | `#9aa3b2` |
-| `--color-accent`        | `#b45309` | `#f5a524` |
-| `--color-accent-strong` | `#92400e` | `#ffc14d` |
-| `--color-danger`        | `#b91c1c` | `#f87171` |
-| `--color-on-accent`     | `#ffffff` | `#0b0d10` |
-| `--color-on-danger`     | `#ffffff` | `#0b0d10` |
+| Token                   | Light                | Dark                   |
+| ----------------------- | -------------------- | ---------------------- |
+| `--color-canvas`        | `#F5F3EE`            | `#0F1116`              |
+| `--color-surface`       | `#FFFFFF`            | `#171B22`              |
+| `--color-surface-2`     | `#FAF8F3`            | `#20252F`              |
+| `--color-field`         | `#FAF8F3`            | `#12151B`              |
+| `--color-edge`          | `#E5E1D7`            | `#2A313C`              |
+| `--color-edge-soft`     | `#EDEAE1`            | `#232933`              |
+| `--color-edge-strong`   | `#D5D0C3`            | `#39414E`              |
+| `--color-ink`           | `#1C1A16`            | `#ECE8DE`              |
+| `--color-muted`         | `#6B675D`            | `#8B93A2`              |
+| `--color-faint`         | `#9A958A`            | `#5C6472`              |
+| `--color-accent`        | `#B45309`            | `#F2B23E`              |
+| `--color-accent-strong` | `#92400E`            | `#F7C155`              |
+| `--color-accent-soft`   | `rgba(180,83,9,.10)` | `rgba(242,178,62,.14)` |
+| `--color-accent-ink`    | `#FFFFFF`            | `#201607`              |
+| `--color-accent-text`   | `#92400E`            | `#F2B23E`              |
+| `--color-danger`        | `#B42318`            | `#F0705A`              |
+| `--color-danger-ink`    | `#FFFFFF`            | `#201607`              |
 
-`on-accent`/`on-danger` exist because one amber/red cannot be WCAG-AA both as
-text on a light surface **and** as a button background with dark text (the
-dark palette's amber works for both; the light one cannot). Buttons therefore
-use the explicit "on" tokens (`text-on-accent`, `text-on-danger`) instead of
-`text-ink`.
+`accent`/`accent-strong`/`danger` are fill tokens (buttons, light borders,
+focus outlines); `accent-text` is the accent **as text on a surface** (links,
+active nav, counts); and `accent-ink`/`danger-ink` are the text colours placed
+**on** an accent/danger fill. Buttons therefore use `text-accent-ink` /
+`text-danger-ink` instead of `text-ink`: one amber/red cannot be WCAG-AA both
+as text on a light surface **and** as a button background with dark text, so
+the fill and the on-fill text are separate tokens.
 
-Contrast (computed, all pairs ≥ 4.5:1 — WCAG AA for normal text):
+Contrast (computed, all listed pairs ≥ 4.5:1 — WCAG AA for normal text):
 
-| Pair                               | Light  | Dark  |
-| ---------------------------------- | ------ | ----- |
-| fog / ink (primary text on page)   | 15.5:1 | ~16:1 |
-| fog / shelf (text on surface)      | 16.9:1 | ~15:1 |
-| muted / ink (secondary text)       | 5.5:1  | 7.6:1 |
-| muted / shelf                      | 6.0:1  | ~7:1  |
-| accent / ink (as text)             | 4.6:1  | 9.5:1 |
-| accent / shelf (as text)           | 5.0:1  | ~10:1 |
-| accent-strong / ink (as text)      | 6.5:1  | ~11:1 |
-| danger / ink (error text)          | 5.9:1  | 7.0:1 |
-| danger / shelf                     | 6.5:1  | ~8:1  |
-| on-accent / accent (button)        | 5.0:1  | 9.5:1 |
-| on-accent / accent-strong (hover)  | 7.1:1  | ~10:1 |
-| on-danger / danger (delete button) | 6.5:1  | 7.0:1 |
+| Pair                                | Light  | Dark   |
+| ----------------------------------- | ------ | ------ |
+| ink / canvas (primary text on page) | 15.7:1 | 15.4:1 |
+| ink / surface (text on surface)     | 17.4:1 | 14.1:1 |
+| muted / canvas (secondary text)     | 5.1:1  | 6.1:1  |
+| muted / surface                     | 5.6:1  | 5.6:1  |
+| muted / field                       | 5.3:1  | 5.9:1  |
+| accent-text / canvas (accent text)  | 6.4:1  | 10.1:1 |
+| accent-text / surface               | 7.1:1  | 9.2:1  |
+| danger / canvas (error text)        | 5.9:1  | 6.5:1  |
+| danger / surface                    | 6.6:1  | 5.9:1  |
+| accent-ink / accent (button)        | 5.0:1  | 9.5:1  |
+| accent-ink / accent-strong (hover)  | 7.1:1  | 10.8:1 |
+| danger-ink / danger (delete)        | 6.6:1  | 6.1:1  |
 
-The one structural (non-token) difference between themes is the auth card's
-elevation halo: `ring-black/5 dark:ring-white/5`.
+# Theme-varying literals
+
+Values that are not `@theme` tokens; each is defined for light in `:root` and
+overridden in `.dark`. These are the only places where the theme appears
+outside the `--color-*` tokens:
+
+- **Text selection** — `::selection` light `rgba(180,83,9,.18)` → dark
+  `rgba(242,178,62,.28)`.
+- **Glow** — `.nocturne-glow`'s radial gradient: light `rgba(180,83,9,.07)`
+  → dark `rgba(242,178,62,.13)` (with softer inner stops), top-centre only.
+- **Card shadows** — `--shadow-card` / `--shadow-card-hover`: warm-tinted in
+  light, pure black in dark; consumed as `shadow-[var(--shadow-card)]` /
+  `shadow-[var(--shadow-card-hover)]`.
+- **Cover placeholder** — `--cover-bottom` (`#14100b` / `#0b0d11`) and
+  `--cover-scrim` (`rgba(20,15,8,.5)` / `rgba(9,10,13,.55)`) inside
+  `.cover-placeholder`.
+- **Select chevron** — `.select-field`'s data-URI stroke `#6B675D` (light) /
+  `#8B93A2` (dark), i.e. the muted colour per theme.
+- **Nav hover** — the inactive main-nav links' `hover:bg-ink/5` (5% ink via
+  `color-mix`, so it flips with the ink token).
+
+The former structural exception — the auth card's
+`ring-black/5 dark:ring-white/5` halo — is gone; no per-theme component
+variants remain.
+
+# Motion
+
+Interactive controls use a 140 ms colour transition
+(`transition-colors duration-[140ms] ease-[ease]`); the catalog card's
+transform/shadow transition runs 160 ms
+(`transition-[transform,box-shadow,border-color] duration-[160ms]`). The card
+lift is gated behind `motion-safe:hover:-translate-y-1`, and every transition
+carries `motion-reduce:transition-none`, so reduced-motion users get instant
+state changes.
 
 # Preferences API and switcher
 
@@ -178,8 +223,8 @@ elevation halo: `ring-black/5 dark:ring-white/5`.
 - Language and theme live in the same preferences view.
 - No flash of the wrong theme on first paint (bootstrap script sets the class
   before hydration).
-- Contrast is adequate in both themes (all token pairs ≥ 4.5:1); catalog,
-  forms, and import views render correctly in both (all token-based).
+- Contrast is adequate in both themes (all listed token pairs ≥ 4.5:1);
+  catalog, forms, and import views render correctly in both (all token-based).
 
 # Related
 
@@ -199,4 +244,6 @@ elevation halo: `ring-black/5 dark:ring-white/5`.
 - Per-page or per-component theme overrides.
 - Theme-aware cover image treatment (covers are photographic and identical in
   both themes — only the frame/placeholder tokens flip).
-- Reduced-motion theming (existing `motion-reduce` classes untouched).
+- A dedicated reduced-motion theme; the redesign's motion is already gated
+  (`motion-safe:` for the card lift, `motion-reduce:transition-none` on every
+  transition).

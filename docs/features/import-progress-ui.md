@@ -4,7 +4,7 @@ title: Import Progress UI
 description: The authenticated /import/progress/[batchId] view — aggregate X-of-Y progress, per-photo status and counts, a needs-attention review section (flagged-item review, inline manual add, retry, dismiss), live polling with a throttled heartbeat while the queue is paused, and a queue-paused banner with resume.
 tags: [web, import, ui]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T05:11:26Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T21:54:58Z }
 ---
 
 # Overview
@@ -106,8 +106,9 @@ recognized N." and turns danger-coloured when `declaredCountMismatch` is set.
 
 Rows carry a tone so a flagged photo is visually distinct in the timeline as
 well as in the review section: a `needsAttention` row uses the warning tone
-(`border-accent-strong/40 bg-accent-strong/10`), a `failed` row the danger tone
-(`border-danger/40 bg-danger/10`), and every other row the neutral shelf tone.
+(`border-accent/40 bg-accent-soft`), a `failed` row the danger tone
+(`border-danger/40 bg-danger/10`), and every other row the neutral surface tone
+(`border-edge bg-surface-2`).
 
 # Needs attention review
 

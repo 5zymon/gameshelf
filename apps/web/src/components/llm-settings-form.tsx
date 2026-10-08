@@ -401,7 +401,7 @@ export function LlmSettingsForm({
                 {t('llm.savedImportEnabled')}{' '}
                 <Link
                   href="/import"
-                  className="text-accent underline underline-offset-4"
+                  className="text-accent-text underline underline-offset-4"
                 >
                   {t('llm.goToImport')}
                 </Link>
