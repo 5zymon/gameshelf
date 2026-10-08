@@ -36,7 +36,7 @@ The page (a server component) reads `searchParams`, validates `page` to an integ
 - `apps/web/src/components/catalog-pagination.tsx` — `CatalogPagination` (server-rendered links).
 - `apps/web/src/components/catalog-filter-bar.tsx` — `CatalogFilterBar`, the client filter/search bar (ticket 5.3).
 - `apps/web/src/lib/catalog-filters.ts` — `parseCatalogFilters`/`catalogHref`/`hasActiveFilters` (ticket 5.3).
-- `apps/web/src/app/(app)/games/new/page.tsx` — placeholder page so the empty-state "Add a game" link resolves.
+- `apps/web/src/app/(app)/games/new/page.tsx` — `NewGamePage`; the real manual-add form (ticket 5.5); see [Manual Add Form](/manual-add-form.md).
 
 # Notes
 
@@ -48,7 +48,6 @@ The page (a server component) reads `searchParams`, validates `page` to an integ
 
 - Filters / search / URL-synced filter bar — delivered in ticket 5.3; see [Catalog Filters & Search](/catalog-filters.md).
 - Game detail, edit, and delete (ticket 5.4); see [Game Detail View with Edit, Delete & Re-enrich](/game-detail.md).
-- The real manual-add form; only the `/games/new` placeholder exists here (ticket 5.5).
 - Loading skeletons, error boundaries/retry, focus management, and further responsive polish (ticket 5.6).
 - i18n (ticket 7.2) and platform management (ticket 7.1).
 

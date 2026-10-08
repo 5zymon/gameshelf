@@ -212,8 +212,8 @@ responses, and the `game` block of the enrich response (it is spread by
 
 # Out of scope
 
-- Frontend form/UI (ticket 5.5) and list rendering of the copy count (ticket 5.4);
-  any change under `apps/web`.
+- The manual-add frontend form (ticket 5.5) and the copy-count UI (ticket 5.4);
+  see [Manual Add Form](/manual-add-form.md).
 - A DB unique constraint (multiple copies must remain legal).
 - Real-time search against the **local** catalog, and a by-external-id fetch
   endpoint (create re-verifies by re-running the ranked search, matching the

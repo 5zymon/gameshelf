@@ -114,6 +114,7 @@ export function GameDetailView({
           {game.platformUnverified && (
             <Chip tone="danger">Platform unverified</Chip>
           )}
+          {game.externalId === null && <Chip tone="muted">Not linked</Chip>}
         </div>
       </header>
 

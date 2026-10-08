@@ -30,3 +30,4 @@ okf_version: '0.2'
 - [Game Detail View with Edit, Delete & Re-enrich](/game-detail.md) - the `/games/[id]` route: full record view incl. raw metadata, inline PATCH edit, confirmed DELETE, re-enrich with reported outcome, provenance/enrichment state, copy count, and grid tiles linked to detail.
 - [Single-Origin Frontend & API with Strict CSP](/single-origin-frontend-api.md) - one origin via the `/api` rewrite, first-party session cookie, nonce-based `'self'`-only CSP, and build-time self-hosted fonts.
 - [User CLI](/user-cli.md) - operator-run `user:create`/`user:passwd` commands that reuse `UsersService`, prompt for the password without echoing it, and need no email infrastructure.
+- [Manual Add Form](/manual-add-form.md) - the `/games/new` typed-only form: platform select with inline quick-create, optional metadata, save-and-add-another, field-level errors, and the existing-identity copy prompt.
