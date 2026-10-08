@@ -7,6 +7,7 @@ import type {
   ImportBatchProgress,
   ListGamesQuery,
   ListGamesResponse,
+  ListImportJobsResponse,
   LlmSettingsModel,
   Platform,
 } from './contracts';
@@ -97,4 +98,16 @@ export async function getImportBatch(
     }
     throw error;
   }
+}
+
+/**
+ * Every import job for a batch (up to the API's 100-row page cap). The list
+ * endpoint returns newest first (createdAt DESC, id DESC); the progress view
+ * re-sorts by id for stable "Photo N" ordering. Used to render per-photo rows;
+ * other errors propagate.
+ */
+export async function getImportJobsForBatch(
+  batchId: string,
+): Promise<ListImportJobsResponse> {
+  return api.importJobs.list({ batchId, limit: 100, page: 1 });
 }

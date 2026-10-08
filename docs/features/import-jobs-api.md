@@ -367,4 +367,5 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
   item state change for now. (User retry and batch progress are implemented;
   see _Status lifecycle_, _Live vs durable state_, and _Batch progress_.)
 - **Auth guards** (2.x) and the **frontend views** — the API serves the
-  data; the progress view and flagged-item review are frontend tickets.
+  data. The progress view is implemented ([Import Progress UI](/import-progress-ui.md));
+  flagged-item review remains a frontend ticket.

@@ -115,3 +115,51 @@ export function GameDetailSkeleton(): React.ReactElement {
     </section>
   );
 }
+
+export function ImportProgressSkeleton(): React.ReactElement {
+  return (
+    <section className={`space-y-6 ${PULSE}`} aria-busy="true">
+      <span className="sr-only">Loading import progress…</span>
+      <header className="space-y-1">
+        <SkeletonBlock className="h-8 w-56" />
+        <SkeletonBlock className="h-4 w-72" />
+      </header>
+      <div className="space-y-3">
+        <SkeletonBlock className="h-2 w-full rounded-full border border-edge" />
+        <SkeletonBlock className="h-4 w-48" />
+        <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          {Array.from({ length: 4 }, (_, i) => (
+            <div
+              key={i}
+              className="rounded-lg border border-edge bg-shelf/30 p-3"
+            >
+              <SkeletonBlock className="h-3 w-16" />
+              <SkeletonBlock className="mt-0.5 h-6 w-10" />
+            </div>
+          ))}
+        </dl>
+      </div>
+      <div className="space-y-2">
+        <SkeletonBlock className="h-6 w-20" />
+        <ul className="space-y-2">
+          {Array.from({ length: 5 }, (_, i) => (
+            <li
+              key={i}
+              className="flex items-start gap-3 rounded-lg border border-edge bg-shelf/30 p-3"
+            >
+              <SkeletonBlock className="mt-1.5 h-2 w-2 shrink-0 rounded-full" />
+              <div className="min-w-0 flex-1 space-y-1">
+                <SkeletonBlock className="h-4 w-32" />
+                <SkeletonBlock className="h-4 w-48" />
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className="flex flex-wrap items-center gap-3 border-t border-edge pt-4">
+        <SkeletonBlock className="h-9 w-32 rounded-md border border-edge" />
+        <SkeletonBlock className="h-9 w-40 rounded-md border border-edge" />
+      </div>
+    </section>
+  );
+}
