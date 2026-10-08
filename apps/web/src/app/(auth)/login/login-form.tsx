@@ -58,7 +58,7 @@ export function LoginForm(): React.ReactElement {
         <p
           role="alert"
           aria-live="polite"
-          className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger"
+          className="rounded-control border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger"
         >
           {error}
         </p>

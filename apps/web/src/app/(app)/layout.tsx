@@ -40,7 +40,7 @@ export default async function AppLayout({
               viewBox="0 0 24 24"
               fill="currentColor"
               aria-hidden="true"
-              className="h-[15px] w-[15px] flex-none text-accent-text"
+              className="h-[15px] w-[15px] flex-none text-accent"
             >
               <path d="M12 0c1 6.5 5.5 11 12 12-6.5 1-11 5.5-12 12-1-6.5-5.5-11-12-12C5.5 11 10 6.5 12 0Z" />
             </svg>

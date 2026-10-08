@@ -28,10 +28,12 @@ export function SkeletonBlock({
 export function GameCardSkeleton(): React.ReactElement {
   return (
     <li className="min-w-0">
-      <div className="aspect-[3/4] w-full rounded-card border border-edge bg-surface-2" />
-      <div className="mt-2 min-w-0">
-        <SkeletonBlock className="h-5 w-3/4" />
-        <SkeletonBlock className="h-4 w-1/2" />
+      <div className="overflow-hidden rounded-card border border-edge bg-surface">
+        <div className="aspect-[3/4] w-full bg-surface-2" />
+        <div className="px-3.5 pt-3 pb-3.5">
+          <SkeletonBlock className="h-5 w-3/4" />
+          <SkeletonBlock className="h-4 w-1/2" />
+        </div>
       </div>
     </li>
   );
@@ -65,7 +67,7 @@ export async function CatalogSkeleton(): Promise<React.ReactElement> {
           <GameCardSkeleton key={i} />
         ))}
       </ul>
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center justify-center gap-4">
         <SkeletonBlock className="h-9 w-24 rounded-control border border-edge" />
         <SkeletonBlock className="h-4 w-24" />
         <SkeletonBlock className="h-9 w-24 rounded-control border border-edge" />

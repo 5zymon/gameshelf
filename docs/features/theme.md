@@ -4,7 +4,7 @@ title: Theme (light/dark/system)
 description: A per-user UI theme (light/dark/system) persisted server-side, carried to the web app in the NEXT_THEME cookie, applied class-based (Tailwind v4 `dark` variant) with a no-flash bootstrap script, and editable in the same Preferences view as the language.
 tags: [web, api, settings, theme]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T21:54:58Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T22:16:06Z }
 ---
 
 # Overview
@@ -177,8 +177,9 @@ outside the `--color-*` tokens:
 - **Cover placeholder** — `--cover-bottom` (`#14100b` / `#0b0d11`) and
   `--cover-scrim` (`rgba(20,15,8,.5)` / `rgba(9,10,13,.55)`) inside
   `.cover-placeholder`.
-- **Select chevron** — `.select-field`'s data-URI stroke `#6B675D` (light) /
-  `#8B93A2` (dark), i.e. the muted colour per theme.
+- **Select chevron** — `.select-field`'s same-origin SVG asset
+  (`/select-chevron.svg`, `/select-chevron-dark.svg` for dark), stroked
+  `#6B675D` (light) / `#8B93A2` (dark), i.e. the muted colour per theme.
 - **Nav hover** — the inactive main-nav links' `hover:bg-ink/5` (5% ink via
   `color-mix`, so it flips with the ink token).
 
