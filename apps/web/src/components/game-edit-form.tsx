@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   isApiError,
   type GameDetail,
@@ -158,6 +158,8 @@ export function GameEditForm({
   const syncedUpdatedAtRef = useRef(game.updatedAt);
   const syncedGameRef = useRef(game);
   const savingRef = useRef(false);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   // Reconcile against an external refresh (e.g. re-enrich) without discarding
   // the "Saved." banner, an in-flight save, or unsaved edits.
@@ -172,6 +174,28 @@ export function GameEditForm({
     if (savingRef.current) return;
     setDraft((current) => mergeDraft(previous, current, toDraft(game)));
   }, [game]);
+
+  /** Close the disclosure and return focus to its toggle (which stays mounted). */
+  const closeEditor = useCallback((): void => {
+    setOpen(false);
+    toggleRef.current?.focus();
+  }, []);
+
+  // Move focus into the disclosure when it opens, and close it on Escape.
+  useEffect(() => {
+    if (open) titleInputRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(event: KeyboardEvent): void {
+      if (event.key === 'Escape') closeEditor();
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [open, closeEditor]);
 
   const { delta, errors } = buildDelta(game, draft);
   const hasChanges = Object.keys(delta).length > 0;
@@ -194,7 +218,7 @@ export function GameEditForm({
       const updated = await api.games.update(game.id, delta);
       setSaved(true);
       setDraft(toDraft(updated));
-      setOpen(false);
+      closeEditor();
       router.refresh();
     } catch (caught) {
       if (isApiError(caught) && caught.status === 404) {
@@ -226,12 +250,18 @@ export function GameEditForm({
   return (
     <>
       <button
+        ref={toggleRef}
         type="button"
         aria-expanded={open}
+        aria-controls="game-edit-form"
         onClick={() => {
+          if (open) {
+            closeEditor();
+            return;
+          }
           setSaved(false);
           setError(null);
-          setOpen((current) => !current);
+          setOpen(true);
         }}
         className="rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
@@ -240,6 +270,7 @@ export function GameEditForm({
 
       {open && (
         <form
+          id="game-edit-form"
           noValidate
           onSubmit={(event) => {
             void handleSubmit(event);
@@ -261,6 +292,7 @@ export function GameEditForm({
                 Title
               </label>
               <input
+                ref={titleInputRef}
                 id="edit-title"
                 name="title"
                 type="text"

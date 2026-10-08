@@ -60,13 +60,12 @@ export default async function CatalogPage({
 
   return (
     <section className="space-y-6">
-      <header>
-        <p className="text-xs uppercase tracking-widest text-accent">Catalog</p>
+      <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
           Your shelf
         </h1>
         {items.length > 0 && (
-          <p className="mt-1 text-sm text-muted">
+          <p className="text-sm text-muted">
             {active
               ? `Showing ${String(first)}–${String(last)} of ${String(meta.total)} matching games`
               : `Showing ${String(first)}–${String(last)} of ${String(meta.total)} games`}
@@ -83,15 +82,17 @@ export default async function CatalogPage({
       {meta.total === 0 ? (
         <NoResults />
       ) : items.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-edge p-10 text-center text-muted">
-          That page has no games.{' '}
-          <Link
-            href={pageHref(params, 1)}
-            className="text-accent underline-offset-4 hover:underline hover:text-accent-strong"
-          >
-            Back to the first page
-          </Link>
-        </p>
+        <div className="rounded-lg border border-edge/70 bg-shelf/30 px-6 py-10">
+          <p className="text-sm text-muted">
+            That page has no games.{' '}
+            <Link
+              href={pageHref(params, 1)}
+              className="text-accent underline-offset-4 hover:underline hover:text-accent-strong"
+            >
+              Back to the first page
+            </Link>
+          </p>
+        </div>
       ) : (
         <ul className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-5">
           {items.map((game, index) => (
@@ -115,20 +116,20 @@ export default async function CatalogPage({
 function EmptyCatalog(): React.ReactElement {
   return (
     <section className="space-y-6">
-      <header>
-        <p className="text-xs uppercase tracking-widest text-accent">Catalog</p>
+      <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
           Your shelf
         </h1>
       </header>
-      <div className="rounded-2xl border border-dashed border-edge px-6 py-16 text-center">
+      <div className="rounded-lg border border-edge/70 bg-shelf/30 px-6 py-12 text-left">
+        <span aria-hidden className="mb-4 block h-0.5 w-10 bg-accent" />
         <h2 className="text-lg font-medium text-fog">
           Nothing on the shelf yet
         </h2>
-        <p className="mx-auto mt-2 max-w-md text-sm text-muted">
+        <p className="mt-2 max-w-md text-sm text-muted">
           Add a game by hand, or import photos of your shelf to fill it in.
         </p>
-        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+        <div className="mt-6 flex flex-wrap items-center gap-3">
           <Link
             href="/games/new"
             className="rounded-md bg-accent px-4 py-2 font-medium text-ink hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong"
@@ -149,11 +150,12 @@ function EmptyCatalog(): React.ReactElement {
 
 function NoResults(): React.ReactElement {
   return (
-    <div className="rounded-2xl border border-dashed border-edge px-6 py-16 text-center">
+    <div className="rounded-lg border border-edge/70 bg-shelf/30 px-6 py-12 text-left">
+      <span aria-hidden className="mb-4 block h-0.5 w-10 bg-accent" />
       <h2 className="text-lg font-medium text-fog">
         No games match these filters
       </h2>
-      <p className="mx-auto mt-2 max-w-md text-sm text-muted">
+      <p className="mt-2 max-w-md text-sm text-muted">
         Try broadening your search or removing a filter.
       </p>
       <Link

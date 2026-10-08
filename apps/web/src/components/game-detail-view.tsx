@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import type { GameDetail, GamePlatform } from '@/lib/api';
 import { DeleteGameButton } from './delete-game-button';
 import { GameCover } from './game-cover';
@@ -43,12 +44,21 @@ function Chip({
 }): React.ReactElement {
   const toneClass =
     tone === 'danger'
-      ? 'border-danger/40 bg-danger/10 text-danger'
+      ? 'text-danger'
       : tone === 'muted'
-        ? 'border-edge bg-shelf text-muted'
-        : 'border-edge bg-shelf text-fog';
+        ? 'text-muted'
+        : 'text-fog';
+  const dotClass =
+    tone === 'danger'
+      ? 'bg-danger'
+      : tone === 'muted'
+        ? 'bg-edge'
+        : 'bg-accent';
   return (
-    <span className={`rounded-full border px-3 py-1 text-xs ${toneClass}`}>
+    <span
+      className={`inline-flex items-center gap-1.5 rounded border border-edge bg-shelf px-2 py-0.5 text-xs ${toneClass}`}
+    >
+      <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
       {children}
     </span>
   );
@@ -65,7 +75,7 @@ function DataRow({
 }): React.ReactElement {
   return (
     <div className="flex flex-col gap-0.5 border-b border-edge/60 py-2 last:border-b-0">
-      <dt className="text-xs tracking-wide text-muted uppercase">{label}</dt>
+      <dt className="text-xs font-medium text-muted">{label}</dt>
       <dd className="text-sm text-fog">
         {value === null || value === '' ? (
           <span className="text-muted">Not set</span>
@@ -86,23 +96,33 @@ export function GameDetailView({
   platforms: GamePlatform[];
 }): React.ReactElement {
   const edited = new Set(game.userEditedFields);
-  const meta = [
+  const metaParts = [
     game.platform.name,
     game.edition,
     game.releaseYear === null ? null : String(game.releaseYear),
-  ]
-    .filter((part): part is string => part !== null && part !== '')
-    .join(' · ');
+  ].filter((part): part is string => part !== null && part !== '');
 
   return (
     <article className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div className="min-w-0 space-y-1">
-          <p className="text-xs tracking-widest text-accent uppercase">Game</p>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
             {game.title}
           </h1>
-          {meta !== '' && <p className="text-sm text-muted">{meta}</p>}
+          {metaParts.length > 0 && (
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted">
+              {metaParts.map((part, index) => (
+                <Fragment key={`${String(index)}-${part}`}>
+                  {index > 0 && (
+                    <span aria-hidden className="h-3 w-px bg-edge" />
+                  )}
+                  <span className={index === 0 ? 'text-fog' : undefined}>
+                    {part}
+                  </span>
+                </Fragment>
+              ))}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Chip>Source: {sourceLabel(game.source)}</Chip>
@@ -119,11 +139,12 @@ export function GameDetailView({
       </header>
 
       <div className="grid gap-6 md:grid-cols-[minmax(0,13rem)_minmax(0,1fr)]">
-        <div className="min-w-0 md:sticky md:top-6 md:self-start">
+        <div className="min-w-0 max-w-[10rem] sm:max-w-[12rem] md:sticky md:top-6 md:max-w-none md:self-start">
           <GameCover
             title={game.title}
             thumbUrl={game.coverUrl ?? game.coverThumbUrl}
             priority
+            alt={`${game.title} cover art`}
           />
         </div>
 
@@ -132,7 +153,7 @@ export function GameDetailView({
             <h2 id="record-heading" className="sr-only">
               Record
             </h2>
-            <dl className="rounded-xl border border-edge bg-shelf/40 px-4">
+            <dl className="grid gap-x-8 sm:grid-cols-2">
               <DataRow label="Platform" value={game.platform.name} />
               <DataRow label="Edition" value={game.edition} />
               <DataRow

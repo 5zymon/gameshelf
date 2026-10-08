@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { isApiError, type EnrichCandidate } from '@/lib/api';
 import { api } from '@/lib/api/browser';
 
@@ -29,6 +29,17 @@ export function ReEnrichControl({
 
   const busy = phase === 'searching' || phase === 'applying';
   const cover = candidate === null ? null : sameOriginPath(candidate.coverUrl);
+  const candidateMetaParts =
+    candidate === null
+      ? []
+      : [
+          candidate.releaseYear === null ? null : String(candidate.releaseYear),
+          candidate.publisher,
+          candidate.genre,
+          candidate.playerCount === null
+            ? null
+            : `${String(candidate.playerCount)} players`,
+        ].filter((part): part is string => part !== null && part !== '');
 
   async function handleSearch(): Promise<void> {
     setPhase('searching');
@@ -142,28 +153,24 @@ export function ReEnrichControl({
               // eslint-disable-next-line @next/next/no-img-element -- API-served same-origin signed preview; next/image would add a /_next/image hop behind SessionGuard
               <img
                 src={cover}
-                alt=""
+                alt={`${candidate.title} cover art`}
                 className="aspect-[3/4] w-20 shrink-0 rounded-md border border-edge object-cover"
               />
             )}
             <div className="min-w-0 space-y-1">
               <p className="text-sm font-medium text-fog">{candidate.title}</p>
-              <p className="text-xs text-muted">
-                {[
-                  candidate.releaseYear === null
-                    ? null
-                    : String(candidate.releaseYear),
-                  candidate.publisher,
-                  candidate.genre,
-                  candidate.playerCount === null
-                    ? null
-                    : `${String(candidate.playerCount)} players`,
-                ]
-                  .filter(
-                    (part): part is string => part !== null && part !== '',
-                  )
-                  .join(' · ')}
-              </p>
+              {candidateMetaParts.length > 0 && (
+                <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
+                  {candidateMetaParts.map((part, index) => (
+                    <Fragment key={`${String(index)}-${part}`}>
+                      {index > 0 && (
+                        <span aria-hidden className="h-3 w-px bg-edge" />
+                      )}
+                      <span>{part}</span>
+                    </Fragment>
+                  ))}
+                </p>
+              )}
               <p className="text-xs text-muted">
                 {candidate.platforms
                   .map((platform) => platform.name)
