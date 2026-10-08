@@ -1,3 +1,6 @@
+import type { Server } from 'node:http';
+import request from 'supertest';
+import { IgdbError, IgdbConfigError } from '../../src/game-catalog/igdb.errors';
 import { IgdbClient } from '../../src/game-catalog/igdb.client';
 import { ImportJobsService } from '../../src/import-jobs/import-jobs.service';
 import { PlatformsService } from '../../src/platforms/platforms.service';
@@ -26,6 +29,7 @@ describe('Platforms sync (e2e)', () => {
   beforeEach(async () => {
     fetchPlatforms.mockReset();
     await resetDatabase(test.prisma);
+    await test.login();
   });
 
   afterAll(async () => {
@@ -136,5 +140,78 @@ describe('Platforms sync (e2e)', () => {
 
     expect(platformId).toEqual(expect.any(Number));
     expect(fetchPlatforms).not.toHaveBeenCalled();
+  });
+
+  describe('POST /platforms/refresh', () => {
+    it('requires authentication (401)', async () => {
+      const server = test.app.getHttpServer() as Server;
+      await request.agent(server).post('/platforms/refresh').expect(401);
+    });
+
+    it('refreshes the reference list and reports the counts', async () => {
+      fetchPlatforms.mockResolvedValue([
+        {
+          id: 130,
+          name: 'PlayStation 5',
+          abbreviation: 'PS5',
+          platform_family: 1,
+        },
+        { id: 6, name: 'PC', abbreviation: 'PC' },
+      ]);
+
+      const res = await test.request.post('/platforms/refresh').expect(200);
+
+      expect(res.body).toEqual({
+        fetched: 2,
+        created: 2,
+        updated: 0,
+        unchanged: 0,
+      });
+      await expect(test.prisma.platform.count()).resolves.toBe(2);
+      await expect(
+        test.prisma.platform.findUnique({ where: { name: 'PC' } }),
+      ).resolves.toMatchObject({ igdbId: 6 });
+    });
+
+    it('restores a hidden reference platform without deleting it', async () => {
+      const pc = await seedPlatform(test.prisma, {
+        name: 'PC',
+        slug: 'pc',
+        igdbId: 6,
+        hidden: true,
+      });
+      fetchPlatforms.mockResolvedValue([{ id: 6, name: 'PC' }]);
+
+      await test.request.post('/platforms/refresh').expect(200);
+
+      await expect(
+        test.prisma.platform.findUnique({ where: { id: pc.id } }),
+      ).resolves.toMatchObject({ id: pc.id, hidden: false });
+    });
+
+    it('returns 503 and writes nothing on a transient IGDB failure', async () => {
+      fetchPlatforms.mockRejectedValue(
+        new IgdbError(true, 'IGDB rate-limited the request'),
+      );
+
+      const res = await test.request.post('/platforms/refresh').expect(503);
+
+      expect((res.body as { message: string }).message).toContain(
+        'could not be reached',
+      );
+      await expect(test.prisma.platform.count()).resolves.toBe(0);
+    });
+
+    it('returns 503 with the configuration message on a rejected credential', async () => {
+      fetchPlatforms.mockRejectedValue(
+        new IgdbConfigError('IGDB rejected the credentials'),
+      );
+
+      const res = await test.request.post('/platforms/refresh').expect(503);
+
+      expect((res.body as { message: string }).message).toContain(
+        'not configured or rejected',
+      );
+    });
   });
 });

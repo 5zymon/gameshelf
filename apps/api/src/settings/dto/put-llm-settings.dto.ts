@@ -10,7 +10,8 @@ export const LLM_API_KEY_MAX_LENGTH = 512;
 
 /**
  * Body of `PUT /settings/llm`. `apiKey` is write-only: omitted keeps the
- * stored key, `""` clears it, any other value replaces it. It is never
+ * stored key when `provider` is unchanged (otherwise the stored key is
+ * cleared), `""` clears it, any other value replaces it. It is never
  * echoed back by any endpoint.
  */
 export class PutLlmSettingsDto {
@@ -21,7 +22,9 @@ export class PutLlmSettingsDto {
   @ApiPropertyOptional({
     maxLength: LLM_MODEL_MAX_LENGTH,
     example: 'gemini-3.8-flash',
-    description: 'Omit to use the provider default; empty clears the override.',
+    description:
+      'Omit to keep when the provider is unchanged; reset to the provider ' +
+      'default when the provider changes. Empty clears the override.',
   })
   @IsOptional()
   @IsString()
@@ -33,7 +36,8 @@ export class PutLlmSettingsDto {
     maxLength: LLM_API_KEY_MAX_LENGTH,
     example: 'AIza...',
     description:
-      'Write-only. Omit to keep the stored key, send "" to clear it. Never returned.',
+      'Write-only. Omit to keep when the provider is unchanged; cleared when ' +
+      'the provider changes. Send "" to clear it. Never returned.',
   })
   @IsOptional()
   @IsString()

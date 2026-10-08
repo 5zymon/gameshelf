@@ -28,15 +28,16 @@ column):
 
 # Endpoint contract
 
-| Method   | Path                     | Purpose                                                                                  | Success                 | Errors              |
-| -------- | ------------------------ | ---------------------------------------------------------------------------------------- | ----------------------- | ------------------- |
-| `GET`    | `/platforms`             | All platforms with a `gameCount` each; import-created first, then name                   | `200` `PlatformModel[]` | —                   |
-| `GET`    | `/platforms/:id`         | One platform by id, with `gameCount`                                                     | `200` `PlatformModel`   | `400`, `404`        |
-| `POST`   | `/platforms`             | Create a custom platform (slug is generated)                                             | `201` `PlatformModel`   | `400`, `409`        |
-| `PATCH`  | `/platforms/:id`         | Rename (old name kept as an alias); set/clear canonical fields; toggle `hidden`          | `200` `PlatformModel`   | `400`, `404`, `409` |
-| `POST`   | `/platforms/:id/confirm` | Confirm an import-created platform (clears `addedByImport`)                              | `200` `PlatformModel`   | `400`, `404`        |
-| `POST`   | `/platforms/:id/merge`   | Merge a platform into a target (move games, keep name as an alias, delete it)            | `200` `PlatformModel`   | `400`, `404`, `409` |
-| `DELETE` | `/platforms/:id`         | Delete a custom platform, or hide a reference platform; refused while games reference it | `204` (no body)         | `400`, `404`, `409` |
+| Method   | Path                     | Purpose                                                                                  | Success                    | Errors              |
+| -------- | ------------------------ | ---------------------------------------------------------------------------------------- | -------------------------- | ------------------- |
+| `GET`    | `/platforms`             | All platforms with a `gameCount` each; import-created first, then name                   | `200` `PlatformModel[]`    | —                   |
+| `GET`    | `/platforms/:id`         | One platform by id, with `gameCount`                                                     | `200` `PlatformModel`      | `400`, `404`        |
+| `POST`   | `/platforms`             | Create a custom platform (slug is generated)                                             | `201` `PlatformModel`      | `400`, `409`        |
+| `PATCH`  | `/platforms/:id`         | Rename (old name kept as an alias); set/clear canonical fields; toggle `hidden`          | `200` `PlatformModel`      | `400`, `404`, `409` |
+| `POST`   | `/platforms/:id/confirm` | Confirm an import-created platform (clears `addedByImport`)                              | `200` `PlatformModel`      | `400`, `404`        |
+| `POST`   | `/platforms/:id/merge`   | Merge a platform into a target (move games, keep name as an alias, delete it)            | `200` `PlatformModel`      | `400`, `404`, `409` |
+| `DELETE` | `/platforms/:id`         | Delete a custom platform, or hide a reference platform; refused while games reference it | `204` (no body)            | `400`, `404`, `409` |
+| `POST`   | `/platforms/refresh`     | Refresh the reference platform list from IGDB; restores hidden reference platforms       | `200` `PlatformSyncResult` | `503`               |
 
 `POST /platforms/:id/merge` takes `{ "targetId": <number> }` in the body.
 `GET /platforms` orders `addedByImport: true` rows first, then by name, so the
@@ -101,13 +102,15 @@ first"). `DELETE /platforms/:id` therefore:
    (non-destructive).
 3. If the platform is a **reference** platform (`igdbId != null`), it is
    **hidden**, not deleted: `hidden` is set to `true` and `204` is returned.
-   The row stays (a later `platforms:sync` would bring a deleted reference row
-   back), and `GET /platforms/:id` still returns `200` with
-   `hidden: true`.
+   The row stays (a later `platforms:sync` or `POST /platforms/refresh` would
+   bring a hidden reference row back), and `GET /platforms/:id` still returns
+   `200` with `hidden: true`.
 4. Otherwise (custom or import-created) it is deleted and `204` is returned.
 
 Unhide with `PATCH /platforms/:id` sending the current `name` and
-`hidden: false`.
+`hidden: false`, or re-run the refresh (`POST /platforms/refresh`) — the
+reconcile clears `hidden` on any reference row it matches (see
+[Refresh endpoint](#refresh-endpoint)).
 
 The foreign key `games.platform_id → platforms.id` is `ON DELETE RESTRICT`,
 which is the backstop for the race where a game appears between the count and
@@ -242,6 +245,29 @@ Platforms synced: fetched=<n> created=<n> updated=<n> unchanged=<n>
 - The command is operator-run; concurrent runs could race on a slug/name
   insert, but because the operation is idempotent a retry is safe.
 
+## Refresh endpoint
+
+`POST /platforms/refresh` exposes the same reconcile over HTTP for the
+[LLM Settings UI](/llm-settings-ui.md) ("refresh platforms" button), backed by
+the same `PlatformsSyncService` the command uses.
+
+- Success → `200` with `PlatformSyncResult`:
+  `{ "fetched": 200, "created": 3, "updated": 1, "unchanged": 196 }`.
+- `IgdbConfigError` (missing/rejected credentials) → `503` —
+  "The game database is not configured or rejected the credentials".
+- Any other `IgdbError` (transient) → `503` —
+  "The game database could not be reached; try again later".
+- The fetch happens before any write, so a failure writes nothing.
+- Auth is the global `SessionGuard`; there is no `@Public()` opt-out.
+
+Unlike the command, the endpoint also **restores hidden reference platforms**:
+`PlatformsService.updateCanonical` treats a hidden row as changed even when
+every canonical field already matches and clears `hidden`, counting it as
+`updated`. A reference platform hidden via `DELETE /platforms/:id` therefore
+reappears (the same row, `hidden: false`) after a refresh; nothing is deleted.
+A hidden platform that later gains a game is likewise unhidden by a refresh,
+consistent with "refresh restores the reference list".
+
 ## Matching rules
 
 `findPlatformMatch` (`apps/api/src/platforms/platform-match.ts`) is the single
@@ -267,9 +293,9 @@ Because the list is stored locally, per-game imports make **zero**
 platform-list calls: `resolvePlatformId` reads the local `platforms` table (in
 one query, aliases included) and then matches — it never fetches IGDB.
 
-The spec's "refresh from Settings" (§4.6.1) is a later-stage concern; the
-documented refresh today is `npm run platforms:sync`. When the endpoint is
-built it will re-run this same reconcile flow.
+The spec's "refresh from Settings" (§4.6.1) is served by
+`POST /platforms/refresh` (see [Refresh endpoint](#refresh-endpoint)), which
+re-runs this same reconcile flow; the operator command remains for scripted use.
 
 # 400 semantics
 
@@ -298,6 +324,7 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
   concern; the row flag `addedByImport` is the durable record.
 - **Bulk platform-scoped reassignment** — per-game `PATCH /games/:id`
   ([Catalog API](/catalog-api.md)) already implements reassignment.
-- **The Settings "refresh platforms" endpoint** — later stage; today's
-  documented refresh is the `npm run platforms:sync` command (see
-  [Canonical platform list](#canonical-platform-list)).
+- **The full platforms management view** (default = platforms with ≥ 1 game,
+  toggle for all reference platforms) — frontend; `POST /platforms/refresh`
+  (see [Refresh endpoint](#refresh-endpoint)) and the `npm run platforms:sync`
+  command both drive the reconcile.

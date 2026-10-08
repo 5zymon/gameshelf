@@ -6,6 +6,7 @@ import type {
   DismissUnrecognizedItemRequest,
   EnrichGameRequest,
   EnrichGameResponse,
+  GameDatabaseStatus,
   GameDetail,
   GameSearchResponse,
   ImportBatchProgress,
@@ -16,10 +17,13 @@ import type {
   ListImportJobsQuery,
   ListImportJobsResponse,
   LlmSettingsModel,
+  LlmTestResult,
   LoginRequest,
   LoginResponse,
   MergePlatformRequest,
   Platform,
+  PlatformSyncResult,
+  PutLlmSettingsRequest,
   SearchGamesQuery,
   SetupRequest,
   SetupResponse,
@@ -172,6 +176,7 @@ export interface ApiClient {
       options?: ApiRequestOptions,
     ): Promise<Platform>;
     remove(id: number, options?: ApiRequestOptions): Promise<void>;
+    refresh(options?: ApiRequestOptions): Promise<PlatformSyncResult>;
   };
   importJobs: {
     list(
@@ -206,6 +211,14 @@ export interface ApiClient {
   settings: {
     llm: {
       get(options?: ApiRequestOptions): Promise<LlmSettingsModel>;
+      put(
+        body: PutLlmSettingsRequest,
+        options?: ApiRequestOptions,
+      ): Promise<LlmSettingsModel>;
+      test(options?: ApiRequestOptions): Promise<LlmTestResult>;
+    };
+    gameDatabases: {
+      status(options?: ApiRequestOptions): Promise<GameDatabaseStatus[]>;
     };
   };
   auth: {
@@ -316,6 +329,12 @@ export function createApiClient(transport: Transport): ApiClient {
           `/platforms/${String(id)}`,
           noBodyInit('DELETE', options),
         ),
+      refresh: (options) =>
+        request<PlatformSyncResult>(
+          transport,
+          '/platforms/refresh',
+          noBodyInit('POST', options),
+        ),
     },
     importJobs: {
       list: (query, options) =>
@@ -396,6 +415,26 @@ export function createApiClient(transport: Transport): ApiClient {
           request<LlmSettingsModel>(
             transport,
             '/settings/llm',
+            getInit(options),
+          ),
+        put: (body, options) =>
+          request<LlmSettingsModel>(
+            transport,
+            '/settings/llm',
+            jsonInit('PUT', body, options),
+          ),
+        test: (options) =>
+          request<LlmTestResult>(
+            transport,
+            '/settings/llm/test',
+            noBodyInit('POST', options),
+          ),
+      },
+      gameDatabases: {
+        status: (options) =>
+          request<GameDatabaseStatus[]>(
+            transport,
+            '/settings/game-databases',
             getInit(options),
           ),
       },

@@ -2,6 +2,7 @@ import { cache } from 'react';
 import { cookies } from 'next/headers';
 import type {
   AuthUser,
+  GameDatabaseStatus,
   GameDetail,
   ImportBatchProgress,
   ListGamesQuery,
@@ -77,6 +78,11 @@ export async function getLlmSettings(): Promise<LlmSettingsModel | null> {
     if (isApiError(error) && error.status === 401) return null;
     throw error;
   }
+}
+
+/** Game-database configuration status for the settings screen. */
+export async function getGameDatabaseStatus(): Promise<GameDatabaseStatus[]> {
+  return api.settings.gameDatabases.status();
 }
 
 /** Aggregated batch progress. 400/404 → null (unknown/invalid batch). */

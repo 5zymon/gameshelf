@@ -57,11 +57,12 @@ narrows a `409` carrying `code: 'GAME_ALREADY_IN_CATALOG'` and the existing
 
 `createApiClient` exposes `games` (list, search, get, create, addCopy, update,
 remove, enrich), `platforms` (list, get, create, update, confirm, merge,
-remove), `importJobs` (list, get, getBatch, retry, resume, listUnrecognized,
-dismiss, dismissUnrecognizedItem), `importUpload.upload`, `auth`
+remove, refresh), `importJobs` (list, get, getBatch, retry, resume,
+listUnrecognized, dismiss, dismissUnrecognizedItem), `importUpload.upload`,
+`settings.llm` (get, put, test), `settings.gameDatabases.status`, `auth`
 (login, logout, me) and `setup` (status, create). Server-side fetching is the
 default; client fetching is used only by the interactive login/setup/logout
-forms.
+forms and the settings/refresh controls.
 
 # Related
 

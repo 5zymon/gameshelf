@@ -115,8 +115,9 @@ export class PlatformsService {
 
   /**
    * Refreshes the canonical fields of an existing platform. Returns `true`
-   * only when a write happened (some field changed), `false` when the row is
-   * missing or already up to date. Never touches `name` or `slug`.
+   * only when a write happened (some field changed or a hidden reference row
+   * was restored), `false` when the row is missing or already up to date and
+   * visible. Never touches `name` or `slug`.
    */
   async updateCanonical(
     id: number,
@@ -129,17 +130,19 @@ export class PlatformsService {
         alternativeName: true,
         platformFamily: true,
         igdbId: true,
+        hidden: true,
       },
     });
     if (!existing) {
       return false;
     }
-    if (
+    const fieldsMatch =
       existing.abbreviation === input.abbreviation &&
       existing.alternativeName === input.alternativeName &&
       existing.platformFamily === input.platformFamily &&
-      existing.igdbId === input.igdbId
-    ) {
+      existing.igdbId === input.igdbId;
+    const needsUnhide = existing.hidden;
+    if (fieldsMatch && !needsUnhide) {
       return false;
     }
     await this.prisma.platform.update({
@@ -149,6 +152,7 @@ export class PlatformsService {
         alternativeName: input.alternativeName,
         platformFamily: input.platformFamily,
         igdbId: input.igdbId,
+        ...(needsUnhide && { hidden: false }),
       },
     });
     return true;

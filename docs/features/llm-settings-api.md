@@ -59,11 +59,11 @@ written. There is deliberately no key field.
 
 Body `{ provider, model?, apiKey? }`:
 
-| Field      | Required | Rules                                                        |
-| ---------- | -------- | ------------------------------------------------------------ |
-| `provider` | yes      | `gemini` or `openai` (anything else → `400`)                 |
-| `model`    | no       | string ≤ 128; omit to keep, empty clears back to the default |
-| `apiKey`   | no       | string ≤ 512, write-only; omit keeps, `""` clears            |
+| Field      | Required | Rules                                                                                                                                    |
+| ---------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `provider` | yes      | `gemini` or `openai` (anything else → `400`)                                                                                             |
+| `model`    | no       | string ≤ 128; omit keeps for the same `provider`, but resets to the provider default when `provider` changes; `""` clears to the default |
+| `apiKey`   | no       | string ≤ 512, write-only; omit keeps for the same `provider`, but is cleared when `provider` changes; `""` clears                        |
 
 Unknown fields are rejected (`400`) by the global validation pipe. The response
 is the same shape as `GET`. The service validates the provider against the
@@ -136,6 +136,7 @@ upload proceeds unchanged.
 
 # Out of scope
 
-- The recognition pipeline (ticket 3.5) and the frontend settings screen.
+- The recognition pipeline (ticket 3.5). The frontend screen is
+  [LLM Settings UI](/llm-settings-ui.md).
 - Anthropic and other providers (the registry makes adding one cheap).
 - Key rotation tooling, audit history, retry/backoff, and rate limiting.
