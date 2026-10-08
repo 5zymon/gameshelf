@@ -129,7 +129,7 @@ export function ReEnrichControl({
           void handleSearch();
         }}
         disabled={busy}
-        className="rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60"
+        className="inline-flex items-center justify-center rounded-control border border-edge bg-surface px-4 py-2.5 text-sm leading-none font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60"
       >
         {phase === 'searching'
           ? t('searching')
@@ -151,18 +151,18 @@ export function ReEnrichControl({
       )}
 
       {candidate !== null && (
-        <div className="w-full rounded-xl border border-edge bg-shelf/40 p-4">
+        <div className="w-full rounded-card border border-edge bg-surface p-4">
           <div className="flex flex-wrap gap-4">
             {cover !== null && (
               // eslint-disable-next-line @next/next/no-img-element -- API-served same-origin signed preview; next/image would add a /_next/image hop behind SessionGuard
               <img
                 src={cover}
                 alt={tDetail('coverAlt', { title: candidate.title })}
-                className="aspect-[3/4] w-20 shrink-0 rounded-md border border-edge object-cover"
+                className="aspect-[3/4] w-20 shrink-0 rounded-control border border-edge object-cover"
               />
             )}
             <div className="min-w-0 space-y-1">
-              <p className="text-sm font-medium text-fog">{candidate.title}</p>
+              <p className="text-sm font-medium text-ink">{candidate.title}</p>
               {candidateMetaParts.length > 0 && (
                 <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted">
                   {candidateMetaParts.map((part, index) => (
@@ -192,7 +192,7 @@ export function ReEnrichControl({
                 void handleApply(candidate);
               }}
               disabled={busy}
-              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong disabled:opacity-60"
+              className="inline-flex items-center justify-center rounded-control bg-accent px-4 py-2.5 text-sm leading-none font-semibold text-accent-ink transition-colors duration-[140ms] ease-[ease] hover:bg-accent-strong motion-reduce:transition-none disabled:opacity-60"
             >
               {t('apply')}
             </button>
@@ -204,7 +204,7 @@ export function ReEnrichControl({
                 setOutcome(null);
               }}
               disabled={busy}
-              className="rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60"
+              className="inline-flex items-center justify-center rounded-control border border-edge bg-surface px-4 py-2.5 text-sm leading-none font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60"
             >
               {t('cancel')}
             </button>

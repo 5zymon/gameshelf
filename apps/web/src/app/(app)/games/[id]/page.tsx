@@ -32,10 +32,10 @@ export default async function GameDetailPage({
   if (game === null) notFound();
   const t = await getTranslations('common');
   return (
-    <section className="space-y-6">
+    <section className="mx-auto w-full max-w-5xl space-y-6">
       <Link
         href="/"
-        className="text-sm text-accent underline-offset-4 hover:text-accent-strong hover:underline"
+        className="text-sm text-accent-text underline-offset-4 hover:underline"
       >
         ← {t('backToCatalog')}
       </Link>
