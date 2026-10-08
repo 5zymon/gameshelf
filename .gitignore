@@ -21,6 +21,9 @@ apps/api/src/generated/
 # Local dev data (MySQL data dir — persistent, never commit)
 data/
 
+# Backups (logical MySQL dumps)
+backups/
+
 # Logs
 *.log
 npm-debug.log*
