@@ -23,7 +23,7 @@ export default async function LoginPage({
       {setup === 'complete' && (
         <p
           role="status"
-          className="mb-4 rounded-md border border-edge bg-ink px-3 py-2 text-sm text-accent-strong"
+          className="mb-4 rounded-control border border-edge bg-surface px-3 py-2 text-sm text-accent-text"
         >
           {t('setupComplete')}
         </p>

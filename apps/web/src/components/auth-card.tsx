@@ -12,9 +12,11 @@ export function AuthCard({
   children,
 }: AuthCardProps): React.ReactElement {
   return (
-    <section className="w-full max-w-sm rounded-2xl border border-edge bg-shelf p-8 shadow-xl ring-1 ring-black/5 dark:ring-white/5">
-      <p className="text-xs uppercase tracking-widest text-accent">{eyebrow}</p>
-      <h1 className="mt-2 text-2xl font-semibold tracking-tight text-fog">
+    <section className="w-full max-w-sm rounded-card border border-edge bg-surface p-8 shadow-[var(--shadow-card)]">
+      <p className="text-xs font-medium tracking-widest text-accent-text uppercase">
+        {eyebrow}
+      </p>
+      <h1 className="mt-2 text-2xl font-bold tracking-[-0.02em] text-ink">
         {title}
       </h1>
       {description !== undefined && (

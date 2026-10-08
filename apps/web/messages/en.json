@@ -36,7 +36,8 @@
     "settings": "Settings",
     "signOut": "Sign out",
     "signingOut": "Signing out…",
-    "signOutError": "Couldn't sign out. Try again."
+    "signOutError": "Couldn't sign out. Try again.",
+    "account": "Signed in as {email}"
   },
   "common": {
     "tryAgain": "Try again",

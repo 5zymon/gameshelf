@@ -8,7 +8,6 @@ import { usePathname } from 'next/navigation';
 const NAV_ITEMS = [
   { href: '/', key: 'catalog' },
   { href: '/platforms', key: 'platforms' },
-  { href: '/games/new', key: 'addGame' },
   { href: '/import', key: 'import' },
   { href: '/settings', key: 'settings' },
 ] as const;
@@ -26,7 +25,7 @@ export function MainNav(): React.ReactElement {
   return (
     <nav
       aria-label={t('main')}
-      className="flex flex-wrap items-center gap-1 text-sm"
+      className="order-5 -mx-1 flex w-full items-center gap-0.5 overflow-x-auto px-1 md:order-none md:mx-0 md:w-auto md:overflow-visible md:px-0"
     >
       {NAV_ITEMS.map((item) => {
         const active = isActive(pathname, item.href);
@@ -35,10 +34,10 @@ export function MainNav(): React.ReactElement {
             key={item.href}
             href={item.href}
             aria-current={active ? 'page' : undefined}
-            className={`rounded-md px-3 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+            className={`rounded-full px-3 py-2 whitespace-nowrap text-sm font-medium transition-colors duration-[140ms] ease-[ease] motion-reduce:transition-none ${
               active
-                ? 'bg-shelf text-fog'
-                : 'text-muted hover:bg-shelf hover:text-fog'
+                ? 'bg-accent-soft text-accent-text'
+                : 'text-muted hover:bg-ink/5 hover:text-ink'
             }`}
           >
             {t(item.key)}

@@ -36,7 +36,8 @@
     "settings": "Ustawienia",
     "signOut": "Wyloguj się",
     "signingOut": "Wylogowywanie…",
-    "signOutError": "Nie udało się wylogować. Spróbuj ponownie."
+    "signOutError": "Nie udało się wylogować. Spróbuj ponownie.",
+    "account": "Zalogowano jako {email}"
   },
   "common": {
     "tryAgain": "Spróbuj ponownie",
