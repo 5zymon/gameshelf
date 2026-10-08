@@ -19,7 +19,12 @@ export function GameCard({
         aria-label={`${game.title} — ${game.platform.name}`}
         className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
-        <GameCover title={game.title} thumbUrl={thumbUrl} priority={priority} />
+        <GameCover
+          title={game.title}
+          thumbUrl={thumbUrl}
+          priority={priority}
+          alt=""
+        />
         <div className="mt-2 min-w-0">
           <p
             className="truncate text-sm font-medium text-fog"

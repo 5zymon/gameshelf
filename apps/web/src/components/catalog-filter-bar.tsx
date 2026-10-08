@@ -78,7 +78,7 @@ function Chip({
         type="button"
         aria-label={`Remove ${label} filter`}
         onClick={onRemove}
-        className="text-muted hover:text-danger"
+        className="-mr-1.5 ml-0.5 inline-flex h-6 w-6 items-center justify-center rounded text-muted hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         ×
       </button>
@@ -211,7 +211,7 @@ export function CatalogFilterBar({
   return (
     <div
       aria-busy={isPending}
-      className={`space-y-4 ${isPending ? 'opacity-60' : ''}`}
+      className={`space-y-3 sm:space-y-4 ${isPending ? 'opacity-60' : ''}`}
     >
       <form
         noValidate

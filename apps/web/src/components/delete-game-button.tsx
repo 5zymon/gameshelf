@@ -17,6 +17,7 @@ export function DeleteGameButton({
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const cancelRef = useRef<HTMLButtonElement>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const restoreFocusRef = useRef(false);
   const labelId = useId();
@@ -92,6 +93,22 @@ export function DeleteGameButton({
         aria-labelledby={labelId}
         aria-describedby={descriptionId}
         className="rounded-xl border border-danger/40 bg-danger/5 p-4"
+        onKeyDown={(event) => {
+          if (event.key !== 'Tab') return;
+          const first = cancelRef.current;
+          const last = confirmRef.current;
+          if (first === null || last === null) return;
+          // While `deleting`, both buttons are disabled and can't take focus;
+          // leave Tab to the browser instead of trapping focus on nothing.
+          if (first.disabled || last.disabled) return;
+          if (event.shiftKey && document.activeElement === first) {
+            event.preventDefault();
+            last.focus();
+          } else if (!event.shiftKey && document.activeElement === last) {
+            event.preventDefault();
+            first.focus();
+          }
+        }}
       >
         <p id={labelId} className="text-sm font-medium text-fog">
           Delete “{title}”?
@@ -115,6 +132,7 @@ export function DeleteGameButton({
             Cancel
           </button>
           <button
+            ref={confirmRef}
             type="button"
             onClick={() => {
               void handleConfirm();

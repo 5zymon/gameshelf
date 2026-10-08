@@ -14,7 +14,7 @@ export default async function AppLayout({
   return (
     <div className="min-h-dvh">
       <header className="border-b border-edge">
-        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-3 px-6 py-4">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-4 gap-y-3 px-4 py-4 sm:px-6">
           <Link
             href="/"
             className="font-semibold tracking-tight text-fog focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
@@ -23,12 +23,16 @@ export default async function AppLayout({
           </Link>
           <MainNav />
           <div className="ml-auto flex items-center gap-4">
-            <span className="text-sm text-muted">{user.email}</span>
+            <span className="max-w-[10rem] truncate text-sm text-muted sm:max-w-none">
+              {user.email}
+            </span>
             <LogoutButton />
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-6 py-10">{children}</main>
+      <main className="mx-auto max-w-5xl px-4 py-8 sm:px-6 sm:py-10">
+        {children}
+      </main>
     </div>
   );
 }

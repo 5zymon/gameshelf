@@ -31,33 +31,33 @@ Every filter is AND-combined server-side. Both the server parser and the client 
 
 # Behaviour
 
-| Concern           | Behaviour                                                                                                                                                                                                                           |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| URL is state      | Committed values come from `searchParams`; the bar pushes a new `/?…` URL. Reload, share, and browser back all reproduce the same filtered grid.                                                                                    |
-| Debounce          | All five text fields (`q`, `year`, `publisher`, `genre`, `playerCount`) share one 300 ms debounce, so a query is sent at most once per typing pause (not per keystroke). Enter flushes immediately.                                 |
-| Selects           | Platform and edition are native `<select>`s; options come from `games.filters.platforms` / `games.filters.editions` (global facets), so they stay populated even when the current result set is empty. Options are never hardcoded. |
-| Active filters    | A chip row derived from the committed values shows every active filter; each chip's `×` removes that one filter.                                                                                                                    |
-| Clear all         | A **Clear all** button resets to `/` (all filters removed, `page` dropped).                                                                                                                                                         |
-| Page reset        | Every filter/search change drops `page`, so a filter starts a fresh result set; pagination then restores `page` while preserving the filters.                                                                                       |
-| Filtered count    | The range line reads `Showing X–Y of N matching games` when any filter is active (N is `meta.total` of the filtered set).                                                                                                           |
-| No results        | `meta.total === 0` with an active filter renders the `NoResults` state (message plus a **Clear all filters** link) **with the bar still visible**.                                                                                  |
-| Empty library     | `meta.total === 0` with no active filter keeps the existing `EmptyCatalog` entry state (add a game / import photos) and renders no bar.                                                                                             |
-| Out-of-range page | A non-empty filtered set whose requested `page` has no items keeps the existing "That page has no games" message.                                                                                                                   |
-| Pending           | `useTransition` dims the bar (`aria-busy`, `opacity-60`) while the RSC payload is in flight; text inputs are not disabled.                                                                                                          |
-| Back/forward      | Incoming URL values are reconciled per field so a back/forward navigation updates only the changed fields and never clobbers in-flight typing.                                                                                      |
+| Concern           | Behaviour                                                                                                                                                                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| URL is state      | Committed values come from `searchParams`; the bar pushes a new `/?…` URL. Reload, share, and browser back all reproduce the same filtered grid.                                                                                           |
+| Debounce          | All five text fields (`q`, `year`, `publisher`, `genre`, `playerCount`) share one 300 ms debounce, so a query is sent at most once per typing pause (not per keystroke). Enter flushes immediately.                                        |
+| Selects           | Platform and edition are native `<select>`s; options come from `games.filters.platforms` / `games.filters.editions` (global facets), so they stay populated even when the current result set is empty. Options are never hardcoded.        |
+| Active filters    | A chip row derived from the committed values shows every active filter; each chip's `×` removes that one filter and has a 24 px hit area with a visible focus ring (see [Catalog Loading, Error & Responsive States](/catalog-states.md)). |
+| Clear all         | A **Clear all** button resets to `/` (all filters removed, `page` dropped).                                                                                                                                                                |
+| Page reset        | Every filter/search change drops `page`, so a filter starts a fresh result set; pagination then restores `page` while preserving the filters.                                                                                              |
+| Filtered count    | The range line reads `Showing X–Y of N matching games` when any filter is active (N is `meta.total` of the filtered set).                                                                                                                  |
+| No results        | `meta.total === 0` with an active filter renders the `NoResults` state (message plus a **Clear all filters** link) **with the bar still visible**.                                                                                         |
+| Empty library     | `meta.total === 0` with no active filter keeps the existing `EmptyCatalog` entry state (add a game / import photos) and renders no bar.                                                                                                    |
+| Out-of-range page | A non-empty filtered set whose requested `page` has no items keeps the existing "That page has no games" message.                                                                                                                          |
+| Pending           | `useTransition` dims the bar (`aria-busy`, `opacity-60`) while the RSC payload is in flight; text inputs are not disabled.                                                                                                                 |
+| Back/forward      | Incoming URL values are reconciled per field so a back/forward navigation updates only the changed fields and never clobbers in-flight typing.                                                                                             |
 
 # Components
 
 - `apps/web/src/lib/catalog-filters.ts` — server/client-shared pure helpers: `CatalogFilterValues`, `CatalogSearchParams`, `FILTER_KEYS`, `parseCatalogFilters` (whitelist + bounds), `hasActiveFilters`, `catalogHref` (builds `/?…` from valid values, always dropping `page`).
 - `apps/web/src/components/catalog-filter-bar.tsx` — the `'use client'` `CatalogFilterBar`: controls, 300 ms debounce, active-filter chips, and clear-all. Receives committed values and API options as props.
-- `apps/web/src/app/(app)/page.tsx` — parses filters, sends them to `getGames`, renders the bar between the header and the grid, chooses `EmptyCatalog` vs `NoResults`, and renders the filtered range line.
+- `apps/web/src/app/(app)/(catalog)/page.tsx` — parses filters, sends them to `getGames`, renders the bar between the header and the grid, chooses `EmptyCatalog` vs `NoResults`, and renders the filtered range line.
 
 # Out of scope
 
 - Sort UI (`sort`/`order` exist in the query layer but are not requested by this ticket).
 - Facet lists for the extended fields (year/publisher/genre/playerCount) — the contract exposes `platforms`/`editions` only, so those fields are free-text exact-match inputs.
 - Backend or contract changes (none needed) and any new facet endpoint.
-- Game detail links (ticket 5.4), error boundaries/skeletons (5.6), and i18n (7.2).
+- Game detail links (ticket 5.4) and i18n (7.2).
 
 # Manual acceptance
 
