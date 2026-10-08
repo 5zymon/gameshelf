@@ -1,6 +1,10 @@
 import { notFound } from 'next/navigation';
 import { ImportProgressView } from '@/components/import-progress-view';
-import { getImportBatch, getImportJobsForBatch } from '@/lib/api/server';
+import {
+  getImportBatch,
+  getImportJobsForBatch,
+  getPlatforms,
+} from '@/lib/api/server';
 import { requireUser } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +24,7 @@ export default async function ImportProgressPage({
   const progress = await getImportBatch(batchId);
   if (progress === null) notFound();
   const jobs = await getImportJobsForBatch(batchId);
+  const platforms = await getPlatforms();
 
   return (
     <ImportProgressView
@@ -27,6 +32,7 @@ export default async function ImportProgressPage({
       batchId={batchId}
       initialProgress={progress}
       initialItems={jobs.items}
+      platforms={platforms}
     />
   );
 }

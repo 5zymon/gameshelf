@@ -1,4 +1,5 @@
 import type {
+  GamePlatform,
   ImportBatchProgress,
   ImportJob,
   ImportJobStatus,
@@ -131,4 +132,61 @@ export function pauseCopy(source: ImportPauseSource | null): PauseCopy {
     hint: 'Fix the configuration, then resume the import.',
     settingsHref: null,
   };
+}
+
+/** The per-photo counts sentence (games committed / flagged for review). */
+export function photoCountsLine(photo: ImportJob): string {
+  if (photo.status === 'queued') return 'Waiting in the queue.';
+  if (photo.status === 'processing') return 'Reading the photo…';
+  const counts = jobCounts(photo);
+  const parts = [
+    `Added ${String(counts.added)} ${plural(counts.added, 'game')}.`,
+  ];
+  if (counts.flagged > 0) {
+    parts.push(
+      `${String(counts.flagged)} ${plural(counts.flagged, 'game')} need review.`,
+    );
+  }
+  return parts.join(' ');
+}
+
+/** Declared vs recognized sentence, plus whether to flag the mismatch. */
+export function recognitionLine(photo: ImportJob): {
+  text: string;
+  mismatch: boolean;
+} {
+  const recognized = jobCounts(photo).recognized;
+  if (photo.declaredCount === null) {
+    return {
+      text: `Recognized ${String(recognized)} ${plural(recognized, 'game')}.`,
+      mismatch: false,
+    };
+  }
+  return {
+    text: `You declared ${String(photo.declaredCount)}; recognized ${String(recognized)}.`,
+    mismatch: photo.declaredCountMismatch,
+  };
+}
+
+/** A photo the owner must act on: needs review, or failed. (D1) */
+export function needsReview(photo: ImportJob): boolean {
+  return photo.needsAttention || photo.status === 'failed';
+}
+
+/**
+ * Resolve a photo's raw platform label to a known platform id for the manual
+ * form, or '' when unknown. Case-insensitive match on name or slug.
+ */
+export function matchPlatformId(
+  platforms: readonly GamePlatform[],
+  raw: string | null,
+): string {
+  if (raw === null) return '';
+  const target = raw.trim().toLowerCase();
+  if (target === '') return '';
+  const match = platforms.find(
+    (p) =>
+      p.name.trim().toLowerCase() === target || p.slug.toLowerCase() === target,
+  );
+  return match === undefined ? '' : String(match.id);
 }
