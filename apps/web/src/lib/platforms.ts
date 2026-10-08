@@ -38,14 +38,18 @@ export function platformKindHint(
 
 /**
  * 4c + 4b: the default list shows platforms with games, plus unreviewed
- * imports (which stay visible until confirmed or merged). A hidden platform is
- * excluded even when it has games — `showAll` is the only path that reveals
- * it.
+ * imports (which stay visible until confirmed or merged), plus every
+ * custom/user-created platform (`igdbId === null`) so a freshly added row is
+ * visible immediately even with zero games. A hidden platform is excluded even
+ * when it has games — `showAll` is the only path that reveals it. Reference
+ * platforms (`igdbId !== null`) still need at least one game to appear.
  */
 export function inDefaultView(
-  p: Pick<Platform, 'gameCount' | 'addedByImport' | 'hidden'>,
+  p: Pick<Platform, 'gameCount' | 'addedByImport' | 'hidden' | 'igdbId'>,
 ): boolean {
-  return (p.gameCount > 0 && !p.hidden) || p.addedByImport;
+  return (
+    p.addedByImport || (!p.hidden && (p.gameCount > 0 || p.igdbId === null))
+  );
 }
 
 export function filterPlatforms(

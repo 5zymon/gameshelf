@@ -52,16 +52,23 @@ stays true until confirmed, but `igdbId` is set) — gets **Hide**/**Show**, sin
 `GET /platforms` returns every row (roughly 200 IGDB reference platforms in a
 synced install), so the view filters client-side rather than rendering them all:
 
-- **Default** — platforms with `gameCount > 0` that are not hidden, plus every
-  unreviewed import row (which is always shown in its own review block,
+- **Default** — non-hidden platforms with `gameCount > 0`, plus non-hidden
+  custom/user-created platforms (`igdbId == null && !addedByImport`), which are
+  always shown so a freshly added row appears immediately even with zero games,
+  plus every unreviewed import row (always shown in its own review block,
   regardless of the toggle). A hidden platform is excluded even when it still
   has games, so **Hide** has a visible effect; the toggle is the only path that
-  reveals hidden rows.
+  reveals hidden rows. Reference platforms (`igdbId != null`) with no games stay
+  hidden unless the toggle is on.
 - **Show empty and hidden reference platforms** — a checkbox that reveals the
   full list, including reference platforms with no games and hidden ones.
 
-With the toggle off and nothing to show, the list reads "No platforms with
-games…"; on a genuinely empty catalog it reads "No platforms yet. Add one, or
+A custom platform that a sync/refresh later links to an IGDB id becomes a
+reference row, and with zero games it leaves the default view until the toggle
+is on.
+
+With the toggle off and nothing to show, the list reads "No platforms to
+show…"; on a genuinely empty catalog it reads "No platforms yet. Add one, or
 import games to create them."
 
 # Actions
@@ -126,9 +133,10 @@ the per-game edit remains the fine-grained path.
 
 1. Open `/platforms`. The heading and the "canonical list" explanation render;
    every visible row shows its game count.
-2. **Add a platform**: type a new name and submit → the row appears (count 0
-   only when the full-list toggle is on). Submitting an existing name shows the
-   `409` message and "It already exists — rename or merge it instead."
+2. **Add a platform**: type a new name and submit → the row appears in the
+   default list immediately with count 0 (custom platforms are always visible).
+   Submitting an existing name shows the `409` message and "It already exists —
+   rename or merge it instead."
 3. **Rename** a row → the inline form opens with the current name focused; save
    → the row reflects the new name, and a later re-import reading the old name
    still resolves to it (the API wrote the alias).
@@ -148,8 +156,8 @@ the per-game edit remains the fine-grained path.
    import** badge and **Keep as is**; confirming clears the badge and the block
    once the list refreshes.
 9. Toggle **Show empty and hidden reference platforms** → the full (≈200-row)
-   list appears; with it off only non-hidden platforms with games plus
-   unreviewed imports render.
+   list appears; with it off the default list renders — non-hidden platforms
+   with games, non-hidden custom platforms, and unreviewed imports.
 10. The console shows no CSP violations.
 
 # Related
@@ -171,6 +179,7 @@ the per-game edit remains the fine-grained path.
 - A merge-preview endpoint (the preview reuses `GET /games?platformId=`).
 - A dedicated hide/unhide endpoint (hide/show reuses `PATCH`).
 - Moving "Refresh platforms" off `/settings`.
-- i18n (ticket 7.2), theme (ticket 7.3), pagination, and a frontend test
-  runner; verification is typecheck + lint + build plus the manual acceptance
-  script above.
+- i18n (ticket 7.2), theme (ticket 7.3), and pagination; verification is
+  typecheck + lint + build, the `node --test` unit tests (including
+  `test/platforms.test.mjs` for the default-view filter), and the manual
+  acceptance script above.

@@ -318,13 +318,15 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
 - **Reassigning games between platforms** — done via the games API
   ([Catalog API](/catalog-api.md)); this API only refuses deletes that would
   orphan games.
-- **The platforms view** (default = platforms with ≥ 1 game, toggle for all
-  reference platforms) — frontend; this API serves the data it needs.
+- **The platforms view** (default = non-hidden platforms with games +
+  non-hidden custom platforms + unreviewed imports; toggle for the full list)
+  — frontend; this API serves the data it needs.
 - **Per-import "platforms added by this import" listing** — a later import
   concern; the row flag `addedByImport` is the durable record.
 - **Bulk platform-scoped reassignment** — per-game `PATCH /games/:id`
   ([Catalog API](/catalog-api.md)) already implements reassignment.
-- **The full platforms management view** (default = platforms with ≥ 1 game,
-  toggle for all reference platforms) — frontend; `POST /platforms/refresh`
+- **The full platforms management view** (default = non-hidden platforms with
+  games + non-hidden custom platforms + unreviewed imports; toggle for the full
+  list) — frontend; `POST /platforms/refresh`
   (see [Refresh endpoint](#refresh-endpoint)) and the `npm run platforms:sync`
   command both drive the reconcile.

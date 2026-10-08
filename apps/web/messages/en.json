@@ -31,6 +31,7 @@
     "main": "Main",
     "catalog": "Catalog",
     "platforms": "Platforms",
+    "addGame": "Add game",
     "import": "Import",
     "settings": "Settings",
     "signOut": "Sign out",
@@ -479,7 +480,7 @@
     "showAll": "Show empty and hidden reference platforms",
     "empty": {
       "none": "No platforms yet. Add one, or import games to create them.",
-      "filtered": "No platforms with games. Tick “Show empty and hidden reference platforms” to see the full list."
+      "filtered": "No platforms to show. Tick “Show empty and hidden reference platforms” to see the full list."
     },
     "kind": {
       "import": "Added by import",
