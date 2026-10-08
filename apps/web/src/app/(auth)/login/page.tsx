@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server';
 import { redirect } from 'next/navigation';
 import { AuthCard } from '@/components/auth-card';
 import { getSetupStatus } from '@/lib/api/server';
@@ -12,18 +13,19 @@ export default async function LoginPage({
 }): Promise<React.ReactElement> {
   if (await getSetupStatus()) redirect('/setup');
   const { setup } = await searchParams;
+  const t = await getTranslations('auth');
   return (
     <AuthCard
       eyebrow="GameShelf"
-      title="Sign in"
-      description="Your shelf is waiting."
+      title={t('signIn')}
+      description={t('description')}
     >
       {setup === 'complete' && (
         <p
           role="status"
           className="mb-4 rounded-md border border-edge bg-ink px-3 py-2 text-sm text-accent-strong"
         >
-          Setup complete. Sign in with your new account.
+          {t('setupComplete')}
         </p>
       )}
       <LoginForm />

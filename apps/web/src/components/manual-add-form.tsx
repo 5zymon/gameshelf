@@ -1,8 +1,10 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
+import type { TranslatorFor } from '@/i18n/translate';
 import {
   isApiError,
   isGameConflict,
@@ -39,11 +41,16 @@ function readIntent(event: React.SubmitEvent<HTMLFormElement>): Intent {
     : 'save';
 }
 
-function savedMessage(game: GameDetail, intent: Intent): string {
-  const action = intent === 'save-and-add-another' ? 'Added' : 'Saved';
-  const linked =
-    game.externalId === null ? ' Not linked to a game database.' : '';
-  return `${action} “${game.title}”.${linked}`;
+function savedMessage(
+  game: GameDetail,
+  intent: Intent,
+  t: TranslatorFor<'manualAdd'>,
+): string {
+  const base =
+    intent === 'save-and-add-another'
+      ? t('savedAndAnother', { title: game.title })
+      : t('saved', { title: game.title });
+  return game.externalId === null ? `${base} ${t('notLinked')}` : base;
 }
 
 export interface ManualAddFormProps {
@@ -52,7 +59,7 @@ export interface ManualAddFormProps {
   initialTitle?: string;
   /** Prefilled platform id (the select's string value). Default ''. */
   initialPlatformId?: string;
-  /** Primary submit label. Default 'Save game'. */
+  /** Primary submit label. Defaults to the translated `saveGame` message. */
   submitLabel?: string;
   /** Called with the created game after a successful save. */
   onSaved?: (game: GameDetail) => void;
@@ -62,10 +69,13 @@ export function ManualAddForm({
   platforms: initialPlatforms,
   initialTitle = '',
   initialPlatformId = '',
-  submitLabel = 'Save game',
+  submitLabel,
   onSaved,
 }: ManualAddFormProps): React.ReactElement {
   const router = useRouter();
+  const t = useTranslations('manualAdd');
+  // The inline platform-create Cancel reuses the shared common label.
+  const tCommon = useTranslations('common');
   // DOM ids come from `useId` so several forms can share one document (e.g. a
   // manual-add form per flagged item) without label/description collisions.
   const uid = useId();
@@ -138,7 +148,7 @@ export function ManualAddForm({
     if (busy) return;
 
     const intent = readIntent(event);
-    const { request, errors } = buildCreateRequest(draft);
+    const { request, errors } = buildCreateRequest(draft, t);
     if (request === null) {
       setFieldErrors(errors);
       setFormError(null);
@@ -154,7 +164,7 @@ export function ManualAddForm({
     setConflict(null);
     try {
       const created = await api.games.create(request);
-      setStatus(savedMessage(created, intent));
+      setStatus(savedMessage(created, intent, t));
       setLastCreated(created);
       onSaved?.(created);
       setPlatformError(null);
@@ -180,7 +190,7 @@ export function ManualAddForm({
       setFormError(
         isApiError(caught) && caught.status !== 0
           ? caught.userMessage
-          : "We couldn't save this game. Check your connection and try again.",
+          : t('error.generic'),
       );
     } finally {
       setSaving(false);
@@ -195,7 +205,7 @@ export function ManualAddForm({
     try {
       const updated = await api.games.addCopy(target.id);
       setStatus(
-        `Added a copy of “${updated.title}” — now ${String(updated.copyCount)} copies.`,
+        t('addCopyStatus', { title: updated.title, count: updated.copyCount }),
       );
       setLastCreated(updated);
       onSaved?.(updated);
@@ -211,7 +221,7 @@ export function ManualAddForm({
       setFormError(
         isApiError(caught) && caught.status !== 0
           ? caught.userMessage
-          : "We couldn't add a copy. Check your connection and try again.",
+          : t('error.copyGeneric'),
       );
     } finally {
       setAddingCopy(false);
@@ -260,7 +270,7 @@ export function ManualAddForm({
   async function handleCreatePlatform(): Promise<void> {
     const name = newPlatformName.trim();
     if (name === '') {
-      setPlatformError('Enter a platform name.');
+      setPlatformError(t('error.platformNameRequired'));
       return;
     }
     setCreatingPlatform(true);
@@ -290,7 +300,7 @@ export function ManualAddForm({
       setPlatformError(
         isApiError(caught) && caught.status !== 0
           ? caught.userMessage
-          : "We couldn't create the platform. Check your connection and try again.",
+          : t('error.platformGeneric'),
       );
     } finally {
       setCreatingPlatform(false);
@@ -300,11 +310,7 @@ export function ManualAddForm({
   const conflictMeta = [
     conflict?.platform.name ?? null,
     conflict?.edition ?? null,
-    conflict === null
-      ? null
-      : `${String(conflict.copyCount)} ${
-          conflict.copyCount === 1 ? 'copy' : 'copies'
-        }`,
+    conflict === null ? null : t('copyCount', { count: conflict.copyCount }),
   ]
     .filter((part): part is string => part !== null && part !== '')
     .join(' · ');
@@ -341,7 +347,7 @@ export function ManualAddForm({
                 href={`/games/${String(lastCreated.id)}`}
                 className="text-accent underline-offset-4 hover:text-accent-strong hover:underline"
               >
-                View game
+                {t('viewGame')}
               </Link>
             </>
           )}
@@ -359,10 +365,10 @@ export function ManualAddForm({
             id={`${uid}-conflict-title`}
             className="text-sm font-medium text-fog"
           >
-            “{conflict.title}” is already in the catalog.
+            {t('conflict.title', { title: conflict.title })}
           </p>
           <p id={`${uid}-conflict-body`} className="mt-1 text-sm text-muted">
-            {conflictMeta}. Add another copy?
+            {t('conflict.body', { meta: conflictMeta })}
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <button
@@ -375,7 +381,7 @@ export function ManualAddForm({
               disabled={addingCopy}
               className={SECONDARY_BUTTON}
             >
-              Not now
+              {t('notNow')}
             </button>
             <button
               type="button"
@@ -385,7 +391,7 @@ export function ManualAddForm({
               disabled={addingCopy}
               className={PRIMARY_BUTTON}
             >
-              {addingCopy ? 'Adding…' : 'Add another copy'}
+              {addingCopy ? t('adding') : t('addAnotherCopy')}
             </button>
           </div>
         </div>
@@ -394,7 +400,7 @@ export function ManualAddForm({
       <div className="grid gap-3 rounded-xl border border-edge bg-shelf/40 p-4 sm:grid-cols-2 sm:p-6">
         <div className="space-y-1.5 sm:col-span-2">
           <label htmlFor={`${uid}-title`} className={LABEL}>
-            Title
+            {t('field.title')}
           </label>
           <input
             id={`${uid}-title`}
@@ -422,7 +428,7 @@ export function ManualAddForm({
 
         <div className="space-y-1.5 sm:col-span-2">
           <label htmlFor={`${uid}-platform`} className={LABEL}>
-            Platform
+            {t('field.platform')}
           </label>
           <div className="flex flex-wrap items-center gap-2">
             <select
@@ -442,7 +448,7 @@ export function ManualAddForm({
               }
             >
               <option value="" disabled>
-                Choose a platform…
+                {t('choosePlatform')}
               </option>
               {platforms.map((platform) => (
                 <option key={platform.id} value={platform.id}>
@@ -456,18 +462,16 @@ export function ManualAddForm({
               onClick={togglePlatformCreate}
               className={SECONDARY_BUTTON}
             >
-              {platformOpen ? 'Close new platform' : 'New platform'}
+              {platformOpen ? t('closeNewPlatform') : t('newPlatform')}
             </button>
           </div>
           {platforms.length === 0 && !platformOpen && (
-            <p className="text-xs text-muted">
-              No platforms yet — create one to get started.
-            </p>
+            <p className="text-xs text-muted">{t('noPlatforms')}</p>
           )}
           {platformOpen && (
             <div className="mt-2 rounded-lg border border-edge bg-ink/40 p-3">
               <label htmlFor={`${uid}-new-platform`} className={LABEL}>
-                New platform name
+                {t('newPlatformName')}
               </label>
               <input
                 id={`${uid}-new-platform`}
@@ -508,7 +512,7 @@ export function ManualAddForm({
                   disabled={creatingPlatform}
                   className={PRIMARY_BUTTON}
                 >
-                  {creatingPlatform ? 'Creating…' : 'Create platform'}
+                  {creatingPlatform ? t('creating') : t('createPlatform')}
                 </button>
                 <button
                   type="button"
@@ -516,7 +520,7 @@ export function ManualAddForm({
                   disabled={creatingPlatform}
                   className={SECONDARY_BUTTON}
                 >
-                  Cancel
+                  {tCommon('cancel')}
                 </button>
               </div>
             </div>
@@ -535,7 +539,7 @@ export function ManualAddForm({
 
         <div className="space-y-1.5">
           <label htmlFor={`${uid}-edition`} className={LABEL}>
-            Edition
+            {t('field.edition')}
           </label>
           <input
             id={`${uid}-edition`}
@@ -563,7 +567,7 @@ export function ManualAddForm({
 
         <div className="space-y-1.5">
           <label htmlFor={`${uid}-year`} className={LABEL}>
-            Release year (1000–2100)
+            {t('field.releaseYear')}
           </label>
           <input
             id={`${uid}-year`}
@@ -593,7 +597,7 @@ export function ManualAddForm({
 
         <div className="space-y-1.5">
           <label htmlFor={`${uid}-players`} className={LABEL}>
-            Players (1–100)
+            {t('field.players')}
           </label>
           <input
             id={`${uid}-players`}
@@ -623,7 +627,7 @@ export function ManualAddForm({
 
         <div className="space-y-1.5">
           <label htmlFor={`${uid}-publisher`} className={LABEL}>
-            Publisher
+            {t('field.publisher')}
           </label>
           <input
             id={`${uid}-publisher`}
@@ -651,7 +655,7 @@ export function ManualAddForm({
 
         <div className="space-y-1.5">
           <label htmlFor={`${uid}-genre`} className={LABEL}>
-            Genre
+            {t('field.genre')}
           </label>
           <input
             id={`${uid}-genre`}
@@ -684,7 +688,7 @@ export function ManualAddForm({
           disabled={busy}
           className={PRIMARY_BUTTON}
         >
-          {saving ? 'Saving…' : submitLabel}
+          {saving ? t('saving') : (submitLabel ?? t('saveGame'))}
         </button>
         <button
           type="submit"
@@ -693,7 +697,7 @@ export function ManualAddForm({
           disabled={busy}
           className={SECONDARY_BUTTON}
         >
-          {saving ? 'Saving…' : 'Save and add another'}
+          {saving ? t('saving') : t('saveAndAddAnother')}
         </button>
       </div>
     </form>

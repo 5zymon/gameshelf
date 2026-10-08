@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
 import { isApiError, type Platform } from '@/lib/api';
@@ -7,10 +8,10 @@ import { api } from '@/lib/api/browser';
 import {
   deleteBlockedHint,
   gameCountLabel,
-  PLATFORM_KIND_LABEL,
   platformErrorMessage,
   platformKind,
   platformKindHint,
+  platformKindLabel,
   type PlatformKind,
 } from '@/lib/platforms';
 
@@ -45,6 +46,9 @@ export function PlatformRow({
   onMerge: (source: Platform) => void;
 }): React.ReactElement {
   const router = useRouter();
+  const t = useTranslations('platforms');
+  // The rename-save busy state reuses the shared saving label.
+  const tCommon = useTranslations('common');
   const uid = useId();
   const kind = platformKind(platform);
   // Any linked row (reference, or an import row a sync matched) is hidden,
@@ -141,8 +145,8 @@ export function PlatformRow({
       setRenaming(false);
       setStatus(
         name === platform.name
-          ? 'Name unchanged.'
-          : `Renamed to “${name}”. The previous name is kept as an alias.`,
+          ? t('status.unchanged')
+          : t('status.renamed', { name }),
       );
       onChanged();
     } catch (caught) {
@@ -151,16 +155,11 @@ export function PlatformRow({
         return;
       }
       if (isApiError(caught) && caught.status === 404) {
-        setRenameError('This platform no longer exists.');
+        setRenameError(t('error.notFound'));
         onChanged();
         return;
       }
-      setRenameError(
-        platformErrorMessage(
-          caught,
-          'We couldn’t rename this platform. Check your connection and try again.',
-        ),
-      );
+      setRenameError(platformErrorMessage(caught, t('error.rename')));
     } finally {
       setSavingRename(false);
     }
@@ -182,8 +181,8 @@ export function PlatformRow({
       });
       setStatus(
         nextHidden
-          ? `“${platform.name}” is hidden from this list.`
-          : `“${platform.name}” is visible again.`,
+          ? t('status.hidden', { name: platform.name })
+          : t('status.visible', { name: platform.name }),
       );
       onChanged();
     } catch (caught) {
@@ -192,16 +191,11 @@ export function PlatformRow({
         return;
       }
       if (isApiError(caught) && caught.status === 404) {
-        setActionError('This platform no longer exists.');
+        setActionError(t('error.notFound'));
         onChanged();
         return;
       }
-      setActionError(
-        platformErrorMessage(
-          caught,
-          'We couldn’t update this platform. Check your connection and try again.',
-        ),
-      );
+      setActionError(platformErrorMessage(caught, t('error.update')));
     } finally {
       setActionBusy(false);
     }
@@ -214,7 +208,7 @@ export function PlatformRow({
     setStatus(null);
     try {
       await api.platforms.confirm(platform.id);
-      setStatus(`“${platform.name}” confirmed as is.`);
+      setStatus(t('status.confirmed', { name: platform.name }));
       onChanged();
     } catch (caught) {
       if (isApiError(caught) && caught.status === 401) {
@@ -222,16 +216,11 @@ export function PlatformRow({
         return;
       }
       if (isApiError(caught) && caught.status === 404) {
-        setActionError('This platform no longer exists.');
+        setActionError(t('error.notFound'));
         onChanged();
         return;
       }
-      setActionError(
-        platformErrorMessage(
-          caught,
-          'We couldn’t confirm this platform. Check your connection and try again.',
-        ),
-      );
+      setActionError(platformErrorMessage(caught, t('error.confirm')));
     } finally {
       setActionBusy(false);
     }
@@ -260,12 +249,7 @@ export function PlatformRow({
         setDeleteBlocked(true);
         return;
       }
-      setDeleteError(
-        platformErrorMessage(
-          caught,
-          'We couldn’t delete this platform. Check your connection and try again.',
-        ),
-      );
+      setDeleteError(platformErrorMessage(caught, t('error.delete')));
     } finally {
       setDeleting(false);
     }
@@ -280,19 +264,19 @@ export function PlatformRow({
               {platform.name}
             </p>
             <span
-              title={platformKindHint(kind)}
+              title={platformKindHint(kind, t)}
               className={`${CHIP} ${KIND_CHIP[kind]}`}
             >
-              {PLATFORM_KIND_LABEL[kind]}
+              {platformKindLabel(kind, t)}
             </span>
             {platform.hidden && (
               <span className={`${CHIP} border-danger/40 text-danger`}>
-                Hidden
+                {t('hidden')}
               </span>
             )}
           </div>
           <p className="text-xs text-muted">
-            {gameCountLabel(platform.gameCount)}
+            {gameCountLabel(platform.gameCount, t)}
           </p>
         </div>
 
@@ -306,7 +290,7 @@ export function PlatformRow({
               disabled={actionBusy}
               className={SMALL_BUTTON}
             >
-              Keep as is
+              {t('keepAsIs')}
             </button>
           )}
           <button
@@ -322,7 +306,7 @@ export function PlatformRow({
             }}
             className={SMALL_BUTTON}
           >
-            {renaming ? 'Close rename' : 'Rename'}
+            {renaming ? t('closeRename') : t('rename')}
           </button>
           <button
             type="button"
@@ -332,19 +316,23 @@ export function PlatformRow({
             disabled={actionBusy}
             className={SMALL_BUTTON}
           >
-            Merge into…
+            {t('mergeInto')}
           </button>
           {isReference ? (
             <button
               type="button"
-              title="Reference platforms can’t be deleted — hiding removes them from this list; Refresh platforms restores them."
+              title={t('hideHint')}
               onClick={() => {
                 void toggleHidden();
               }}
               disabled={actionBusy}
               className={SMALL_BUTTON}
             >
-              {actionBusy ? 'Working…' : platform.hidden ? 'Show' : 'Hide'}
+              {actionBusy
+                ? t('working')
+                : platform.hidden
+                  ? t('show')
+                  : t('hide')}
             </button>
           ) : (
             <button
@@ -358,7 +346,7 @@ export function PlatformRow({
               disabled={actionBusy}
               className={SMALL_DANGER_BUTTON}
             >
-              Delete
+              {t('delete')}
             </button>
           )}
         </div>
@@ -373,7 +361,7 @@ export function PlatformRow({
           className="space-y-2 rounded-lg border border-edge bg-ink/40 p-3"
         >
           <label htmlFor={`${uid}-rename`} className={LABEL}>
-            New name
+            {t('newName')}
           </label>
           <input
             id={`${uid}-rename`}
@@ -400,8 +388,7 @@ export function PlatformRow({
             }
           />
           <p id={`${uid}-rename-help`} className="text-xs text-muted">
-            The previous name is kept as an alias, so future imports still match
-            it.
+            {t('renameHelp')}
           </p>
           {renameError !== null && (
             <p
@@ -418,7 +405,7 @@ export function PlatformRow({
               disabled={savingRename || renameValue.trim() === ''}
               className={PRIMARY_BUTTON}
             >
-              {savingRename ? 'Saving…' : 'Save name'}
+              {savingRename ? tCommon('saving') : t('saveName')}
             </button>
             <button
               type="button"
@@ -426,7 +413,7 @@ export function PlatformRow({
               disabled={savingRename}
               className={SECONDARY_BUTTON}
             >
-              Cancel
+              {t('cancel')}
             </button>
           </div>
         </form>
@@ -454,12 +441,12 @@ export function PlatformRow({
           }}
         >
           <p id={labelId} className="text-sm font-medium text-fog">
-            Delete “{platform.name}”?
+            {t('confirmDelete.title', { name: platform.name })}
           </p>
           <p id={descriptionId} className="mt-1 text-sm text-muted">
             {deleteBlocked
-              ? 'It still has games, so it can’t be deleted yet.'
-              : 'This can’t be undone. A platform with games can’t be deleted — you’ll be offered a merge instead.'}
+              ? t('confirmDelete.blocked')
+              : t('confirmDelete.body')}
           </p>
           {deleteError !== null && (
             <p role="alert" className="mt-2 text-sm text-danger">
@@ -467,7 +454,7 @@ export function PlatformRow({
             </p>
           )}
           {deleteBlocked && (
-            <p className="mt-1 text-xs text-muted">{deleteBlockedHint()}</p>
+            <p className="mt-1 text-xs text-muted">{deleteBlockedHint(t)}</p>
           )}
           <div className="mt-3 flex flex-wrap gap-2">
             <button
@@ -477,7 +464,7 @@ export function PlatformRow({
               disabled={deleting}
               className={SECONDARY_BUTTON}
             >
-              Cancel
+              {t('cancel')}
             </button>
             {deleteBlocked ? (
               <button
@@ -489,7 +476,7 @@ export function PlatformRow({
                 disabled={deleting}
                 className={PRIMARY_BUTTON}
               >
-                Merge into…
+                {t('mergeInto')}
               </button>
             ) : (
               <button
@@ -501,7 +488,7 @@ export function PlatformRow({
                 disabled={deleting}
                 className={DANGER_BUTTON}
               >
-                {deleting ? 'Deleting…' : 'Delete'}
+                {deleting ? t('deleting') : t('delete')}
               </button>
             )}
           </div>

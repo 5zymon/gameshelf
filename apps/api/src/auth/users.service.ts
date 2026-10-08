@@ -34,6 +34,7 @@ export interface SetPasswordInput {
 export interface CreatedUser {
   id: number;
   email: string;
+  language: string;
   createdAt: Date;
 }
 
@@ -42,6 +43,7 @@ export interface UserCredentials {
   id: number;
   email: string;
   passwordHash: string;
+  language: string;
   createdAt: Date;
 }
 
@@ -64,7 +66,7 @@ export class UsersService {
     try {
       return await this.prisma.user.create({
         data: { email, passwordHash },
-        select: { id: true, email: true, createdAt: true },
+        select: { id: true, email: true, language: true, createdAt: true },
       });
     } catch (error) {
       if (
@@ -86,7 +88,7 @@ export class UsersService {
       return await this.prisma.user.update({
         where: { email },
         data: { passwordHash },
-        select: { id: true, email: true, createdAt: true },
+        select: { id: true, email: true, language: true, createdAt: true },
       });
     } catch (error) {
       if (
@@ -137,7 +139,7 @@ export class UsersService {
         }
         const created = await this.prisma.user.findUnique({
           where: { email },
-          select: { id: true, email: true, createdAt: true },
+          select: { id: true, email: true, language: true, createdAt: true },
         });
         if (created === null) {
           throw new ConflictException(SETUP_COMPLETED_MESSAGE); // defensive
@@ -177,14 +179,20 @@ export class UsersService {
     }
     return this.prisma.user.findUnique({
       where: { email: normalized },
-      select: { id: true, email: true, passwordHash: true, createdAt: true },
+      select: {
+        id: true,
+        email: true,
+        passwordHash: true,
+        language: true,
+        createdAt: true,
+      },
     });
   }
 
   async findById(id: number): Promise<CreatedUser | null> {
     return this.prisma.user.findUnique({
       where: { id },
-      select: { id: true, email: true, createdAt: true },
+      select: { id: true, email: true, language: true, createdAt: true },
     });
   }
 

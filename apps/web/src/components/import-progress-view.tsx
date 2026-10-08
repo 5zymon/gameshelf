@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -16,7 +17,6 @@ import {
   batchCounts,
   pauseCopy,
   photoCountsLine,
-  plural,
   recognitionLine,
   sortPhotos,
   statusView,
@@ -96,6 +96,9 @@ export function ImportProgressView({
   platforms: GamePlatform[];
 }): React.ReactElement {
   const router = useRouter();
+  const t = useTranslations('importProgress');
+  // The paused banner's "Open settings" link reuses the import namespace.
+  const tImport = useTranslations('import');
   const [progress, setProgress] =
     useState<ImportBatchProgress>(initialProgress);
   const [items, setItems] = useState<readonly ImportJob[]>(initialItems);
@@ -119,7 +122,7 @@ export function ImportProgressView({
   const total = progress.total;
   const percent =
     total > 0 ? Math.round((progress.completedCount / total) * 100) : 0;
-  const pause = pauseCopy(progress.pauseSource);
+  const pause = pauseCopy(progress.pauseSource, t);
 
   // Snapshot requests are sequenced. Each request takes the next number and a
   // response is applied only while it is still the newest request, so a slow
@@ -246,9 +249,7 @@ export function ImportProgressView({
         router.replace('/login');
         return;
       }
-      setResumeError(
-        "We couldn't resume the queue. Check your connection and try again.",
-      );
+      setResumeError(t('error.resume'));
     } finally {
       setResuming(false);
     }
@@ -277,12 +278,10 @@ export function ImportProgressView({
     <section className="space-y-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          {finished ? 'Import finished' : 'Importing photos'}
+          {finished ? t('titleDone') : t('title')}
         </h1>
         <p className="text-sm text-muted">
-          {finished
-            ? `All ${String(total)} ${plural(total, 'photo')} processed.`
-            : 'You can leave this page — the import keeps running.'}
+          {finished ? t('subtitleDone', { count: total }) : t('subtitle')}
         </p>
       </header>
 
@@ -293,7 +292,7 @@ export function ImportProgressView({
         >
           <div className="space-y-1">
             <p className="text-sm font-medium text-accent-strong">
-              Queue paused
+              {t('paused')}
             </p>
             <p className="text-sm text-fog">
               {progress.pauseReason ?? pause.reasonFallback}
@@ -303,7 +302,7 @@ export function ImportProgressView({
           <div className="flex flex-wrap items-center gap-2">
             {pause.settingsHref !== null && (
               <Link href={pause.settingsHref} className={SECONDARY_BUTTON}>
-                Open settings
+                {tImport('openSettings')}
               </Link>
             )}
             <button
@@ -314,7 +313,7 @@ export function ImportProgressView({
               disabled={resuming}
               className={PRIMARY_BUTTON}
             >
-              {resuming ? 'Resuming…' : 'Resume queue'}
+              {resuming ? t('resuming') : t('resume')}
             </button>
           </div>
           {resumeError !== null && (
@@ -328,7 +327,10 @@ export function ImportProgressView({
       <div className="space-y-3">
         <div
           role="progressbar"
-          aria-label={`${String(progress.completedCount)} of ${String(total)} photos processed`}
+          aria-label={t('progressAria', {
+            done: progress.completedCount,
+            total,
+          })}
           aria-valuenow={percent}
           aria-valuemin={0}
           aria-valuemax={100}
@@ -340,14 +342,16 @@ export function ImportProgressView({
           />
         </div>
         <p role="status" aria-live="polite" className="text-sm text-muted">
-          {String(progress.completedCount)} of {String(total)}{' '}
-          {plural(total, 'photo')} processed
+          {t('processed', { done: progress.completedCount, total })}
         </p>
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <CountCell label="Added" value={counts.added} />
-          <CountCell label="Needs review" value={counts.flagged} />
-          <CountCell label="Failed" value={counts.failed} />
-          <CountCell label="Still to process" value={progress.pendingCount} />
+          <CountCell label={t('counts.added')} value={counts.added} />
+          <CountCell label={t('counts.needsReview')} value={counts.flagged} />
+          <CountCell label={t('counts.failed')} value={counts.failed} />
+          <CountCell
+            label={t('counts.pending')}
+            value={progress.pendingCount}
+          />
         </dl>
       </div>
 
@@ -359,14 +363,14 @@ export function ImportProgressView({
       />
 
       {photos.length === 0 ? (
-        <p className="text-sm text-muted">Waiting for the first photo…</p>
+        <p className="text-sm text-muted">{t('waiting')}</p>
       ) : (
         <div className="space-y-2">
-          <h2 className="text-lg font-medium text-fog">Photos</h2>
+          <h2 className="text-lg font-medium text-fog">{t('photos')}</h2>
           <ul className="space-y-2">
             {photos.map((photo) => {
-              const view = statusView(photo.status);
-              const recognition = recognitionLine(photo);
+              const view = statusView(photo.status, t);
+              const recognition = recognitionLine(photo, t);
               const tone = photo.needsAttention
                 ? 'border-accent-strong/40 bg-accent-strong/10'
                 : photo.status === 'failed'
@@ -384,14 +388,14 @@ export function ImportProgressView({
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                       <p className="text-sm font-medium text-fog">
-                        Photo {photoIndex.get(photo.id) ?? 0}
+                        {t('photo', { n: photoIndex.get(photo.id) ?? 0 })}
                       </p>
                       <p className={`text-xs ${TONE_TEXT[view.tone]}`}>
                         {view.label}
                       </p>
                     </div>
                     <p className="text-sm text-muted">
-                      {photoCountsLine(photo)}
+                      {photoCountsLine(photo, t)}
                     </p>
                     {isTerminal(photo.status) && (
                       <p
@@ -420,14 +424,14 @@ export function ImportProgressView({
 
       <div className="flex flex-wrap items-center gap-3 border-t border-edge pt-4">
         <Link href="/" className={SECONDARY_BUTTON}>
-          Back to catalog
+          {t('backToCatalog')}
         </Link>
         <Link href="/import" className={SECONDARY_BUTTON}>
-          Import more photos
+          {t('importMore')}
         </Link>
         {reconnecting && (
           <p role="status" aria-live="polite" className="text-sm text-muted">
-            Reconnecting…
+            {t('reconnecting')}
           </p>
         )}
       </div>

@@ -19,11 +19,12 @@ interface GameCoverProps {
   thumbUrl: string | null;
   priority?: boolean;
   /**
-   * Descriptive alt for standalone use (detail hero, re-enrich preview). Tiles
-   * pass `""` because the surrounding link already names the game, so the image
-   * is decorative and would otherwise be announced twice.
+   * Alt text, decided by the caller: a translated description (e.g. the
+   * `gameDetail.coverAlt` message) for standalone use, or `""` for tiles,
+   * where the surrounding link already names the game and the image is
+   * decorative.
    */
-  alt?: string;
+  alt: string;
 }
 
 /**
@@ -95,7 +96,7 @@ export function GameCover({
       <img
         ref={imgRef}
         src={src}
-        alt={alt ?? `${title} cover art`}
+        alt={alt}
         loading={priority ? 'eager' : 'lazy'}
         fetchPriority={priority ? 'high' : 'auto'}
         decoding="async"

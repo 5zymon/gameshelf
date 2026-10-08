@@ -21,11 +21,16 @@ There is exactly **one permission level** — no roles, no permission checks
 
 # Endpoints
 
-| Method | Path           | Auth        | Success | Body / result                        |
-| ------ | -------------- | ----------- | ------- | ------------------------------------ |
-| `POST` | `/auth/login`  | `@Public()` | `200`   | `{ user: { id, email, createdAt } }` |
-| `POST` | `/auth/logout` | session     | `204`   | —                                    |
-| `GET`  | `/auth/me`     | session     | `200`   | `{ id, email, createdAt }`           |
+| Method | Path           | Auth        | Success | Body / result                                  |
+| ------ | -------------- | ----------- | ------- | ---------------------------------------------- |
+| `POST` | `/auth/login`  | `@Public()` | `200`   | `{ user: { id, email, language, createdAt } }` |
+| `POST` | `/auth/logout` | session     | `204`   | —                                              |
+| `GET`  | `/auth/me`     | session     | `200`   | `{ id, email, language, createdAt }`           |
+
+`language` is the user's stored UI language (`'pl' | 'en'`, default `pl`,
+coerced by `toLanguage()` so a corrupt row can never reach the body). Login
+and setup also (re)write the `NEXT_LOCALE` cookie and logout clears it — see
+[Internationalization (PL default, EN)](/i18n.md).
 
 `POST /auth/login` accepts `{ email, password }` (both strings, `email` ≤ 255,
 `password` ≤ 1024). It intentionally does **not** apply `@IsEmail()`: the

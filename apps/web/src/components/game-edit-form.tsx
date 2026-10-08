@@ -1,7 +1,9 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { TranslatorFor } from '@/i18n/translate';
 import {
   isApiError,
   type GameDetail,
@@ -91,13 +93,17 @@ interface DeltaResult {
  * Only changed keys are sent: `PATCH /games/:id` marks every present tracked
  * field as hand-edited, so echoing untouched fields would pollute provenance.
  */
-function buildDelta(game: GameDetail, draft: Draft): DeltaResult {
+function buildDelta(
+  game: GameDetail,
+  draft: Draft,
+  t: TranslatorFor<'gameEdit'>,
+): DeltaResult {
   const delta: UpdateGameRequest = {};
   const errors: FieldErrors = {};
 
   const title = draft.title.trim();
   if (title === '') {
-    errors.title = 'Title is required.';
+    errors.title = t('error.titleRequired');
   } else if (title !== game.title) {
     delta.title = title;
   }
@@ -123,7 +129,7 @@ function buildDelta(game: GameDetail, draft: Draft): DeltaResult {
 
   const releaseYear = boundedInt(draft.releaseYear, 1000, 2100);
   if (releaseYear === 'invalid') {
-    errors.releaseYear = 'Enter a year between 1000 and 2100.';
+    errors.releaseYear = t('error.yearRange');
   } else if (releaseYear === undefined) {
     if (game.releaseYear !== null) delta.releaseYear = null;
   } else if (releaseYear !== game.releaseYear) {
@@ -132,7 +138,7 @@ function buildDelta(game: GameDetail, draft: Draft): DeltaResult {
 
   const playerCount = boundedInt(draft.playerCount, 1, 100);
   if (playerCount === 'invalid') {
-    errors.playerCount = 'Enter a player count between 1 and 100.';
+    errors.playerCount = t('error.playersRange');
   } else if (playerCount === undefined) {
     if (game.playerCount !== null) delta.playerCount = null;
   } else if (playerCount !== game.playerCount) {
@@ -150,6 +156,7 @@ export function GameEditForm({
   platforms: GamePlatform[];
 }): React.ReactElement {
   const router = useRouter();
+  const t = useTranslations('gameEdit');
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>(() => toDraft(game));
   const [saving, setSaving] = useState(false);
@@ -197,7 +204,7 @@ export function GameEditForm({
     };
   }, [open, closeEditor]);
 
-  const { delta, errors } = buildDelta(game, draft);
+  const { delta, errors } = buildDelta(game, draft, t);
   const hasChanges = Object.keys(delta).length > 0;
   const hasErrors = Object.keys(errors).length > 0;
 
@@ -223,7 +230,7 @@ export function GameEditForm({
     } catch (caught) {
       if (isApiError(caught) && caught.status === 404) {
         router.refresh();
-        setError('This game no longer exists.');
+        setError(t('error.notFound'));
         return;
       }
       if (isApiError(caught) && caught.status === 401) {
@@ -238,9 +245,7 @@ export function GameEditForm({
         setError(caught.userMessage);
         return;
       }
-      setError(
-        "We couldn't save your changes. Check your connection and try again.",
-      );
+      setError(t('error.generic'));
     } finally {
       savingRef.current = false;
       setSaving(false);
@@ -265,7 +270,7 @@ export function GameEditForm({
         }}
         className="rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
-        {open ? 'Close editor' : 'Edit record'}
+        {open ? t('toggleClose') : t('toggleOpen')}
       </button>
 
       {open && (
@@ -289,7 +294,7 @@ export function GameEditForm({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
               <label htmlFor="edit-title" className={LABEL}>
-                Title
+                {t('field.title')}
               </label>
               <input
                 ref={titleInputRef}
@@ -311,7 +316,7 @@ export function GameEditForm({
 
             <div className="space-y-1.5">
               <label htmlFor="edit-platform" className={LABEL}>
-                Platform
+                {t('field.platform')}
               </label>
               <select
                 id="edit-platform"
@@ -332,7 +337,7 @@ export function GameEditForm({
 
             <div className="space-y-1.5">
               <label htmlFor="edit-edition" className={LABEL}>
-                Edition
+                {t('field.edition')}
               </label>
               <input
                 id="edit-edition"
@@ -349,7 +354,7 @@ export function GameEditForm({
 
             <div className="space-y-1.5">
               <label htmlFor="edit-year" className={LABEL}>
-                Release year (1000–2100)
+                {t('field.releaseYear')}
               </label>
               <input
                 id="edit-year"
@@ -371,7 +376,7 @@ export function GameEditForm({
 
             <div className="space-y-1.5">
               <label htmlFor="edit-player-count" className={LABEL}>
-                Players (1–100)
+                {t('field.players')}
               </label>
               <input
                 id="edit-player-count"
@@ -393,7 +398,7 @@ export function GameEditForm({
 
             <div className="space-y-1.5">
               <label htmlFor="edit-publisher" className={LABEL}>
-                Publisher
+                {t('field.publisher')}
               </label>
               <input
                 id="edit-publisher"
@@ -410,7 +415,7 @@ export function GameEditForm({
 
             <div className="space-y-1.5">
               <label htmlFor="edit-genre" className={LABEL}>
-                Genre
+                {t('field.genre')}
               </label>
               <input
                 id="edit-genre"
@@ -432,10 +437,10 @@ export function GameEditForm({
               disabled={saving || hasErrors || !hasChanges}
               className="rounded-md bg-accent px-4 py-2 font-medium text-ink hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong disabled:opacity-60"
             >
-              {saving ? 'Saving…' : 'Save changes'}
+              {saving ? t('saving') : t('save')}
             </button>
             {!hasChanges && !hasErrors && (
-              <span className="text-sm text-muted">No changes</span>
+              <span className="text-sm text-muted">{t('noChanges')}</span>
             )}
           </div>
         </form>
@@ -447,7 +452,7 @@ export function GameEditForm({
           aria-live="polite"
           className="w-full rounded-md border border-edge bg-shelf px-3 py-2 text-sm text-muted"
         >
-          Saved.
+          {t('saved')}
         </p>
       )}
     </>

@@ -82,12 +82,19 @@ The root layout loads Geist through `next/font/google`:
 ```ts
 import { Geist } from 'next/font/google';
 
+// `latin-ext` covers the Polish diacritics (ą, ć, ę, ł, ń, ó, ś, ź, ż); without
+// it the browser would fall back to a non-Geist font for accented characters.
 const geistSans = Geist({
-  subsets: ['latin'],
+  subsets: ['latin', 'latin-ext'],
   display: 'swap',
   variable: '--font-geist-sans',
 });
 ```
+
+`latin-ext` is required because the UI's default locale is Polish (see
+[Internationalization (PL default, EN)](/i18n.md)): the base `latin` subset
+does not contain the accented characters, and without the extra subset the
+browser would fall back to a different font for every ą/ę/ł/ó/ś/ź/ż.
 
 `next/font` downloads the font files **at build time** and emits them under
 `/_next/static/media/*.woff2`, served by the app itself. At runtime the browser

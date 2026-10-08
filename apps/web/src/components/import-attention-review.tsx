@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -50,19 +51,17 @@ export function ImportAttentionReview({
   photoIndex: ReadonlyMap<number, number>;
   onChanged: () => Promise<void>;
 }): React.ReactElement | null {
+  const t = useTranslations('importAttention');
   const attention = photos.filter(needsReview);
   if (attention.length === 0) return null;
   return (
     <section aria-labelledby="attention-heading" className="space-y-3">
       <div className="space-y-1">
         <h2 id="attention-heading" className="text-lg font-medium text-fog">
-          Needs attention
+          {t('heading')}
         </h2>
         <p className="text-sm text-muted">
-          {String(attention.length)}{' '}
-          {attention.length === 1 ? 'photo needs' : 'photos need'} a decision.
-          Add the missing games, retry a failed photo, or dismiss what you don’t
-          need to act on.
+          {t('summary', { count: attention.length })}
         </p>
       </div>
       <ul className="space-y-3">
@@ -93,8 +92,13 @@ function AttentionCard({
   onChanged: () => Promise<void>;
 }): React.ReactElement {
   const router = useRouter();
-  const view = statusView(photo.status);
-  const recognition = recognitionLine(photo);
+  const t = useTranslations('importAttention');
+  // Status labels, per-photo counts and the "Photo N" heading live in the
+  // progress namespace; the flagged-item reload reuses the shared retry label.
+  const tProgress = useTranslations('importProgress');
+  const tCommon = useTranslations('common');
+  const view = statusView(photo.status, tProgress);
+  const recognition = recognitionLine(photo, tProgress);
   const [items, setItems] = useState<UnrecognizedItem[] | null>(null);
   const [itemsError, setItemsError] = useState<string | null>(null);
   const [itemsReloadKey, setItemsReloadKey] = useState(0);
@@ -162,13 +166,20 @@ function AttentionCard({
           router.replace('/login');
           return;
         }
-        setItemsError('We couldn’t load the flagged items for this photo.');
+        setItemsError(t('loadError'));
       }
     })();
     return () => {
       controller.abort();
     };
-  }, [photo.id, photo.unrecognizedCount, photo.status, router, itemsReloadKey]);
+  }, [
+    photo.id,
+    photo.unrecognizedCount,
+    photo.status,
+    router,
+    itemsReloadKey,
+    t,
+  ]);
 
   async function retry(): Promise<void> {
     if (retrying) return;
@@ -186,7 +197,7 @@ function AttentionCard({
       setActionError(
         isApiError(caught) && caught.status !== 0
           ? caught.userMessage
-          : 'We couldn’t retry this photo. Check your connection and try again.',
+          : t('error.retry'),
       );
     } finally {
       setRetrying(false);
@@ -208,7 +219,7 @@ function AttentionCard({
       setActionError(
         isApiError(caught) && caught.status !== 0
           ? caught.userMessage
-          : 'We couldn’t dismiss this photo. Check your connection and try again.',
+          : t('error.dismissPhoto'),
       );
     } finally {
       setDismissing(false);
@@ -234,7 +245,7 @@ function AttentionCard({
       setActionError(
         isApiError(caught) && caught.status !== 0
           ? caught.userMessage
-          : 'We couldn’t dismiss this item. Check your connection and try again.',
+          : t('error.dismissItem'),
       );
       return false;
     } finally {
@@ -252,9 +263,7 @@ function AttentionCard({
     // a failed PATCH surfaces through `actionError` alone.
     const dismissed = await dismissItem(item);
     if (dismissed) {
-      setStatus(
-        `Added “${game.title}”. This flagged item is now marked as reviewed.`,
-      );
+      setStatus(t('added', { title: game.title }));
     }
   }
 
@@ -263,11 +272,13 @@ function AttentionCard({
       className={`space-y-3 rounded-lg border p-4 ${failed ? 'border-danger/40 bg-danger/5' : 'border-accent-strong/50 bg-accent-strong/5'}`}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <p className="text-sm font-medium text-fog">Photo {photoNumber}</p>
+        <p className="text-sm font-medium text-fog">
+          {tProgress('photo', { n: photoNumber })}
+        </p>
         <span className={`text-xs ${TONE_TEXT[view.tone]}`}>{view.label}</span>
       </div>
 
-      <p className="text-sm text-muted">{photoCountsLine(photo)}</p>
+      <p className="text-sm text-muted">{photoCountsLine(photo, tProgress)}</p>
       {!failed && (
         <p
           className={
@@ -277,25 +288,25 @@ function AttentionCard({
           {recognition.text}
           {photo.declaredCountMismatch && (
             <span className="ml-2 rounded-full border border-danger/40 px-2 py-0.5 text-xs text-danger">
-              Count mismatch
+              {t('countMismatch')}
             </span>
           )}
         </p>
       )}
       {failed && (
         <p className="text-sm text-danger">
-          {photo.errorMessage ?? 'The photo could not be processed.'}
+          {photo.errorMessage ?? t('error.processing')}
         </p>
       )}
 
       {photo.unrecognizedCount > 0 && (
         <div className="space-y-2">
           <h3 className="text-xs font-medium tracking-wide text-muted uppercase">
-            Flagged items
+            {t('flaggedItems')}
           </h3>
           {items === null && itemsError === null && (
             <p role="status" className="text-sm text-muted">
-              Loading flagged items…
+              {t('loading')}
             </p>
           )}
           {itemsError !== null && (
@@ -310,14 +321,12 @@ function AttentionCard({
                 }}
                 className={SMALL_BUTTON}
               >
-                Try again
+                {tCommon('tryAgain')}
               </button>
             </div>
           )}
           {items !== null && items.length === 0 && itemsError === null && (
-            <p className="text-sm text-muted">
-              All flagged items for this photo have been reviewed.
-            </p>
+            <p className="text-sm text-muted">{t('allReviewed')}</p>
           )}
           {items !== null && items.length > 0 && (
             <ul className="space-y-2">
@@ -337,7 +346,9 @@ function AttentionCard({
                         }}
                         className={SMALL_DANGER_BUTTON}
                       >
-                        {itemBusyId === item.id ? 'Dismissing…' : 'Dismiss'}
+                        {itemBusyId === item.id
+                          ? t('dismissing')
+                          : t('dismiss')}
                       </button>
                       <button
                         type="button"
@@ -351,7 +362,7 @@ function AttentionCard({
                         }}
                         className={SMALL_BUTTON}
                       >
-                        {addItemId === item.id ? 'Close' : 'Add manually'}
+                        {addItemId === item.id ? t('close') : t('addManually')}
                       </button>
                     </div>
                   </div>
@@ -371,7 +382,7 @@ function AttentionCard({
                           platforms,
                           item.rawPlatform,
                         )}
-                        submitLabel="Add to catalog"
+                        submitLabel={t('addToCatalog')}
                         onSaved={(game) => {
                           void onItemSaved(item, game);
                         }}
@@ -407,12 +418,9 @@ function AttentionCard({
               disabled={retrying}
               className={PRIMARY_BUTTON}
             >
-              {retrying ? 'Retrying…' : 'Retry photo'}
+              {retrying ? t('retrying') : t('retry')}
             </button>
-            <p className="w-full text-xs text-muted">
-              Retry re-runs only the games that aren’t saved yet. Games already
-              in your catalog won’t be added again.
-            </p>
+            <p className="w-full text-xs text-muted">{t('retryHint')}</p>
           </>
         )}
         {!confirmingDismiss && (
@@ -426,7 +434,7 @@ function AttentionCard({
             disabled={dismissing}
             className={DANGER_BUTTON}
           >
-            Dismiss photo
+            {t('dismissPhoto')}
           </button>
         )}
       </div>
@@ -438,11 +446,10 @@ function AttentionCard({
           className="space-y-2 rounded-md border border-danger/40 bg-danger/5 p-3"
         >
           <p id={`${idBase}-title`} className="text-sm font-medium text-fog">
-            Dismiss this photo?
+            {t('confirmTitle')}
           </p>
           <p id={`${idBase}-body`} className="text-sm text-muted">
-            It leaves the review list and can’t be brought back. Its record is
-            kept.
+            {t('confirmBody')}
           </p>
           <div className="flex flex-wrap gap-2">
             <button
@@ -455,7 +462,7 @@ function AttentionCard({
               disabled={dismissing}
               className={SECONDARY_BUTTON}
             >
-              Cancel
+              {t('cancel')}
             </button>
             <button
               type="button"
@@ -465,7 +472,7 @@ function AttentionCard({
               disabled={dismissing}
               className={DANGER_BUTTON}
             >
-              {dismissing ? 'Dismissing…' : 'Dismiss'}
+              {dismissing ? t('dismissing') : t('dismiss')}
             </button>
           </div>
         </div>

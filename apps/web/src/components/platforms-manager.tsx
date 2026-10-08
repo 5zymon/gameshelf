@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { PlatformAddForm } from '@/components/platform-add-form';
@@ -16,6 +17,7 @@ export function PlatformsManager({
   platforms: readonly Platform[];
 }): React.ReactElement {
   const router = useRouter();
+  const t = useTranslations('platforms');
   const [showAll, setShowAll] = useState(false);
   const [mergeSource, setMergeSource] = useState<Platform | null>(null);
 
@@ -35,14 +37,9 @@ export function PlatformsManager({
               id="import-review-heading"
               className="text-lg font-medium text-fog"
             >
-              Added by import — review
+              {t('importReview.title')}
             </h2>
-            <p className="text-sm text-muted">
-              These platforms were created while importing for names that
-              weren’t recognized. Keep them as they are, merge them into an
-              existing platform, or rename them. Either way the name stays
-              matchable.
-            </p>
+            <p className="text-sm text-muted">{t('importReview.body')}</p>
           </div>
           <ul
             className={`${LIST_CLASS} border-accent-strong/40 bg-accent-strong/5`}
@@ -68,7 +65,7 @@ export function PlatformsManager({
             id="platform-list-heading"
             className="text-lg font-medium text-fog"
           >
-            All platforms
+            {t('all.title')}
           </h2>
           <label className="flex items-center gap-2 text-sm text-muted">
             <input
@@ -79,15 +76,13 @@ export function PlatformsManager({
               }}
               className="h-4 w-4 accent-accent"
             />
-            Show empty and hidden reference platforms
+            {t('showAll')}
           </label>
         </div>
 
         {visible.length === 0 ? (
           <p className="rounded-xl border border-edge bg-shelf/40 px-4 py-6 text-sm text-muted">
-            {platforms.length === 0
-              ? 'No platforms yet. Add one, or import games to create them.'
-              : 'No platforms with games. Tick “Show empty and hidden reference platforms” to see the full list.'}
+            {platforms.length === 0 ? t('empty.none') : t('empty.filtered')}
           </p>
         ) : (
           <ul className={`${LIST_CLASS} border-edge bg-shelf/40`}>

@@ -1,0 +1,542 @@
+{
+  "metadata": {
+    "title": "GameShelf",
+    "description": "Track, organize, and discover your video game library."
+  },
+  "auth": {
+    "signIn": "Sign in",
+    "email": "Email",
+    "password": "Password",
+    "signingIn": "Signing in…",
+    "description": "Your shelf is waiting.",
+    "setupComplete": "Setup complete. Sign in with your new account.",
+    "loginError": {
+      "credentials": "Incorrect email or password.",
+      "input": "Enter an email and a password, then try again.",
+      "generic": "We couldn't sign you in right now. Check your connection and try again."
+    },
+    "setup": {
+      "eyebrow": "First-run setup",
+      "title": "Set up your shelf",
+      "description": "This account is created once and becomes the owner of this GameShelf instance.",
+      "email": "Email",
+      "password": "Password",
+      "creating": "Creating…",
+      "createAccount": "Create account",
+      "inputError": "Enter an email and a password, then try again.",
+      "genericError": "We couldn't create your account right now. Please try again."
+    }
+  },
+  "nav": {
+    "main": "Main",
+    "catalog": "Catalog",
+    "platforms": "Platforms",
+    "import": "Import",
+    "settings": "Settings",
+    "signOut": "Sign out",
+    "signingOut": "Signing out…",
+    "signOutError": "Couldn't sign out. Try again."
+  },
+  "common": {
+    "tryAgain": "Try again",
+    "backToCatalog": "Back to catalog",
+    "reloadPage": "Reload page",
+    "cancel": "Cancel",
+    "dismiss": "Dismiss",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "noChanges": "No changes",
+    "notSet": "Not set",
+    "handEdited": "Hand-edited",
+    "errorTitle": "Something went wrong",
+    "errorBody": "The shelf didn't respond. Check your connection, then try again.",
+    "notFoundTitle": "Page not found",
+    "notFoundBody": "That shelf does not exist."
+  },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Configure game recognition and game-database access.",
+    "loadError": "Couldn't load the LLM settings. Reload to try again.",
+    "llm": {
+      "heading": "Game recognition",
+      "recommended": "Recommended default: Google Gemini (<code>{geminiModel}</code>) — a generous free tier, fast, and reliable at reading box text. OpenAI (<code>{openaiModel}</code>) is a solid paid alternative. Each photo costs one vision call, roughly a fraction of a cent to a few cents depending on provider and image size; recognition is only charged for imported photos.",
+      "provider": "Provider",
+      "providerHint": "Switching provider resets the saved key and model unless you enter new ones.",
+      "model": "Model",
+      "modelHint": "Leave as the default <code>{model}</code> unless you need a specific model.",
+      "apiKey": "API key",
+      "keySaved": "A key is saved for {provider}.",
+      "replaceKey": "Replace key",
+      "removeKey": "Remove key",
+      "keyWillRemove": "The key will be removed when you save.",
+      "undo": "Undo",
+      "keyHint": "Paste a key from {provider}. It is stored encrypted and never shown again.",
+      "save": "Save changes",
+      "saving": "Saving…",
+      "noChanges": "No changes",
+      "testConnection": "Test connection",
+      "testing": "Testing…",
+      "testHint": "The test uses the saved settings. Save your changes before testing.",
+      "unsaved": "You have unsaved changes.",
+      "saved": "Saved.",
+      "savedImportEnabled": "Saved. Photo import is enabled.",
+      "goToImport": "Go to photo import",
+      "test": {
+        "ok": "Connection succeeded — the provider accepted the request.",
+        "not_configured": "No API key is saved for this provider yet. Save a key first.",
+        "unauthorized": "The provider rejected the API key. Check the key and try again.",
+        "model_not_found": "The configured model does not exist for this provider. Choose a different model.",
+        "rate_limited": "The provider rate-limited the request. Wait a moment and try again.",
+        "timeout": "The provider did not respond in time. Try again.",
+        "bad_response": "The provider returned an unexpected response.",
+        "network": "Couldn't reach the provider. Check the connection and try again.",
+        "server_error": "The provider had a server error. Try again later.",
+        "unknown_provider": "That provider is not available.",
+        "fallback": "The connection test returned an unexpected result."
+      },
+      "error": {
+        "save": "We couldn't save the LLM settings. Check your connection and try again.",
+        "test": "Couldn't run the connection test. Check your connection and try again."
+      }
+    }
+  },
+  "preferences": {
+    "heading": "Preferences",
+    "body": "Choose the interface language.",
+    "language": "Language",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Saved.",
+    "error": "Couldn't save your preferences. Try again.",
+    "languageName": {
+      "pl": "Polski",
+      "en": "English"
+    }
+  },
+  "gameDatabases": {
+    "heading": "Game databases",
+    "loadError": "Couldn't load game-database status.",
+    "state": {
+      "configured": "Configured",
+      "missing": "Not configured",
+      "rejected": "Key rejected"
+    }
+  },
+  "catalog": {
+    "title": "Your shelf",
+    "showing": "Showing {first}–{last} of {total, number} games",
+    "showingFiltered": "Showing {first}–{last} of {total, number} matching games",
+    "empty": {
+      "title": "Nothing on the shelf yet",
+      "body": "Add a game by hand, or import photos of your shelf to fill it in.",
+      "addGame": "Add a game",
+      "import": "Import from photos"
+    },
+    "noResults": {
+      "title": "No games match these filters",
+      "body": "Try broadening your search or removing a filter.",
+      "clear": "Clear all filters"
+    },
+    "pageEmpty": "That page has no games.",
+    "backToFirst": "Back to the first page"
+  },
+  "loading": {
+    "catalog": "Loading games…",
+    "gameDetail": "Loading game…",
+    "importProgress": "Loading import progress…"
+  },
+  "catalogFilters": {
+    "searchTitles": "Search titles",
+    "platform": "Platform",
+    "allPlatforms": "All platforms",
+    "edition": "Edition",
+    "allEditions": "All editions",
+    "year": "Year (1000–2100)",
+    "players": "Players (1–100)",
+    "publisher": "Publisher",
+    "genre": "Genre",
+    "clearAll": "Clear all",
+    "removeFilter": "Remove {label} filter",
+    "platformFallback": "Platform #{id}",
+    "chip": {
+      "search": "Search: “{q}”",
+      "platform": "Platform: {name}",
+      "edition": "Edition: {edition}",
+      "year": "Year: {year}",
+      "publisher": "Publisher: {publisher}",
+      "genre": "Genre: {genre}",
+      "players": "Players: {count}"
+    }
+  },
+  "pagination": {
+    "ariaLabel": "Catalog pages",
+    "previous": "Previous",
+    "next": "Next",
+    "pageOf": "Page {page} of {totalPages}"
+  },
+  "gameDetail": {
+    "record": "Record",
+    "source": {
+      "manual": "Manual"
+    },
+    "neverEnriched": "Never enriched",
+    "lastEnriched": "Last enriched: {date}",
+    "platformUnverified": "Platform unverified",
+    "notLinked": "Not linked",
+    "field": {
+      "platform": "Platform",
+      "edition": "Edition",
+      "releaseYear": "Release year",
+      "publisher": "Publisher",
+      "genre": "Genre",
+      "players": "Players",
+      "copies": "Copies",
+      "platformId": "Platform ID",
+      "externalId": "External ID",
+      "source": "Source",
+      "added": "Added",
+      "updated": "Updated",
+      "recordId": "Record ID"
+    },
+    "notSet": "Not set",
+    "handEdited": "hand-edited",
+    "rawMetadata": "Raw metadata (archival)",
+    "noRawMetadata": "No raw metadata stored.",
+    "never": "Never",
+    "unknown": "Unknown",
+    "coverAlt": "{title} cover art"
+  },
+  "gameEdit": {
+    "toggleOpen": "Edit record",
+    "toggleClose": "Close editor",
+    "field": {
+      "title": "Title",
+      "platform": "Platform",
+      "edition": "Edition",
+      "releaseYear": "Release year (1000–2100)",
+      "players": "Players (1–100)",
+      "publisher": "Publisher",
+      "genre": "Genre"
+    },
+    "error": {
+      "titleRequired": "Title is required.",
+      "yearRange": "Enter a year between 1000 and 2100.",
+      "playersRange": "Enter a player count between 1 and 100.",
+      "notFound": "This game no longer exists.",
+      "generic": "We couldn't save your changes. Check your connection and try again."
+    },
+    "save": "Save changes",
+    "saving": "Saving…",
+    "saved": "Saved.",
+    "noChanges": "No changes"
+  },
+  "deleteGame": {
+    "open": "Delete game",
+    "confirmTitle": "Delete “{title}”?",
+    "confirmBody": "This can’t be undone.",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "deleting": "Deleting…",
+    "error": {
+      "generic": "We couldn't delete this game. Check your connection and try again."
+    }
+  },
+  "reEnrich": {
+    "search": "Re-enrich from title",
+    "searching": "Searching…",
+    "applying": "Applying…",
+    "usesTitle": "Uses the current title “{title}”.",
+    "apply": "Apply metadata",
+    "cancel": "Cancel",
+    "players": "{count, plural, one {# player} other {# players}}",
+    "source": "Source: {source}",
+    "outcome": {
+      "found": "Found a match.",
+      "noMatch": "No match found for “{title}”. Nothing changed.",
+      "noMatchReason": "No match found for “{title}”. {reason} Nothing changed.",
+      "applied": "Fresh metadata applied.",
+      "upToDate": "Already up to date — nothing changed.",
+      "noMatchApply": "No match found. Nothing changed."
+    },
+    "error": {
+      "generic": "We couldn't reach the game database. Try again.",
+      "unavailable": "We couldn't apply the match. Try again.",
+      "stale": "That match is no longer available. Run the search again."
+    }
+  },
+  "manualAdd": {
+    "eyebrow": "Add",
+    "heading": "Add a game",
+    "subheading": "Enter a game by hand. Records added here aren’t linked to a game database.",
+    "field": {
+      "title": "Title",
+      "platform": "Platform",
+      "edition": "Edition",
+      "releaseYear": "Release year (1000–2100)",
+      "players": "Players (1–100)",
+      "publisher": "Publisher",
+      "genre": "Genre"
+    },
+    "choosePlatform": "Choose a platform…",
+    "newPlatform": "New platform",
+    "closeNewPlatform": "Close new platform",
+    "noPlatforms": "No platforms yet — create one to get started.",
+    "newPlatformName": "New platform name",
+    "createPlatform": "Create platform",
+    "creating": "Creating…",
+    "saveGame": "Save game",
+    "saveAndAddAnother": "Save and add another",
+    "saving": "Saving…",
+    "saved": "Saved “{title}”.",
+    "savedAndAnother": "Added “{title}”.",
+    "notLinked": "Not linked to a game database.",
+    "viewGame": "View game",
+    "conflict": {
+      "title": "“{title}” is already in the catalog.",
+      "body": "{meta}. Add another copy?"
+    },
+    "notNow": "Not now",
+    "addAnotherCopy": "Add another copy",
+    "adding": "Adding…",
+    "addCopyStatus": "Added a copy of “{title}” — now {count, plural, one {1 copy} other {# copies}}.",
+    "copyCount": "{count, plural, one {# copy} other {# copies}}",
+    "error": {
+      "titleRequired": "Title is required.",
+      "titleMax": "Title must be 255 characters or fewer.",
+      "choosePlatform": "Choose a platform.",
+      "editionMax": "Edition must be 255 characters or fewer.",
+      "yearRange": "Enter a year between 1000 and 2100.",
+      "playersRange": "Enter a player count between 1 and 100.",
+      "publisherMax": "Publisher must be 255 characters or fewer.",
+      "genreMax": "Genre must be 255 characters or fewer.",
+      "platformNameRequired": "Enter a platform name.",
+      "generic": "We couldn't save this game. Check your connection and try again.",
+      "platformGeneric": "We couldn't create the platform. Check your connection and try again.",
+      "copyGeneric": "We couldn't add a copy. Check your connection and try again."
+    }
+  },
+  "import": {
+    "title": "Import from photos",
+    "subtitle": "Photograph your shelf, pick the photos here, and we’ll recognise the games.",
+    "recentImport": "Check your most recent import",
+    "gate": {
+      "disabled": "Photo import is off because no LLM API key is set. Add a key in Settings, then come back — or add games by hand.",
+      "unknown": "We couldn’t read the LLM settings, so photo import is paused. Try again — or add games by hand."
+    },
+    "addByHand": "Add a game by hand",
+    "openSettings": "Open settings",
+    "providerNotice": "Photos are sent to your configured LLM ({provider}).",
+    "dropzone": "Drop shelf photos here, or browse.",
+    "dropzoneHint": "JPEG, PNG, WebP or HEIC. Up to 20 MB each, up to 50 photos.",
+    "rejections": {
+      "title": "Some photos were not added.",
+      "unsupported": "Unsupported file type. Use JPEG, PNG, WebP or HEIC.",
+      "tooMany": "Only {limit, plural, one {# photo} other {# photos}} can be imported at once."
+    },
+    "dismiss": "Dismiss",
+    "countsHint": "If you know how many games are in a photo, add the number. We check it against what the model recognises and flag any difference. Leave it blank if you’d rather not count.",
+    "countLabel": "Games (optional)",
+    "countError": {
+      "notNumber": "Enter a whole number, or leave it blank.",
+      "range": "Enter a number from 1 to {max}, or leave it blank."
+    },
+    "remove": "Remove",
+    "unreadable": "Unreadable",
+    "converting": "Converting…",
+    "tooLarge": "Too large ({size}). The limit is {limit}.",
+    "heicError": "We couldn’t read this HEIC photo.",
+    "uploading": "Uploading…",
+    "uploadProgress": "Upload progress",
+    "ready": "{count, plural, one {# photo ready ({size})} other {# photos ready ({size})}}",
+    "noPhotos": "No photos selected yet.",
+    "uploadButton": {
+      "none": "Upload photos",
+      "one": "Upload 1 photo",
+      "other": "Upload {count} photos"
+    },
+    "error": {
+      "unavailable": "Photo import is unavailable right now — no LLM API key is set.",
+      "generic": "We couldn’t start the import. Check your connection and try again."
+    }
+  },
+  "importProgress": {
+    "title": "Importing photos",
+    "titleDone": "Import finished",
+    "subtitle": "You can leave this page — the import keeps running.",
+    "subtitleDone": "All {count, plural, one {# photo} other {# photos}} processed.",
+    "paused": "Queue paused",
+    "resume": "Resume queue",
+    "resuming": "Resuming…",
+    "error": {
+      "resume": "We couldn’t resume the queue. Check your connection and try again."
+    },
+    "progressAria": "{done} of {total, plural, one {# photo} other {# photos}} processed",
+    "processed": "{done} of {total, plural, one {# photo} other {# photos}} processed",
+    "counts": {
+      "added": "Added",
+      "needsReview": "Needs review",
+      "failed": "Failed",
+      "pending": "Still to process"
+    },
+    "photos": "Photos",
+    "waiting": "Waiting for the first photo…",
+    "photo": "Photo {n}",
+    "reconnecting": "Reconnecting…",
+    "backToCatalog": "Back to catalog",
+    "importMore": "Import more photos",
+    "status": {
+      "queued": "Queued",
+      "processing": "Reading",
+      "done": "Completed",
+      "needs_attention": "Completed · needs review",
+      "failed": "Failed",
+      "dismissed": "Dismissed"
+    },
+    "photoCounts": {
+      "queued": "Waiting in the queue.",
+      "processing": "Reading the photo…",
+      "added": "Added {count, plural, one {# game} other {# games}}.",
+      "flagged": "{count, plural, one {# game needs} other {# games need}} review."
+    },
+    "recognition": {
+      "recognized": "Recognized {count, plural, one {# game} other {# games}}.",
+      "declared": "You declared {declared}; recognized {recognized}."
+    },
+    "pause": {
+      "llm": {
+        "reason": "The language model rejected the request.",
+        "hint": "Check your API key in Settings, then resume the import."
+      },
+      "igdb": {
+        "reason": "The game database rejected its credentials.",
+        "hint": "Fix the IGDB credentials in the server environment, then resume the import."
+      },
+      "none": {
+        "reason": "Photo import is paused until the configuration is fixed.",
+        "hint": "Fix the configuration, then resume the import."
+      }
+    }
+  },
+  "importAttention": {
+    "heading": "Needs attention",
+    "summary": "{count, plural, one {# photo needs} other {# photos need}} a decision. Add the missing games, retry a failed photo, or dismiss what you don’t need to act on.",
+    "flaggedItems": "Flagged items",
+    "loading": "Loading flagged items…",
+    "loadError": "We couldn’t load the flagged items for this photo.",
+    "allReviewed": "All flagged items for this photo have been reviewed.",
+    "dismiss": "Dismiss",
+    "dismissing": "Dismissing…",
+    "addManually": "Add manually",
+    "close": "Close",
+    "addToCatalog": "Add to catalog",
+    "countMismatch": "Count mismatch",
+    "retry": "Retry photo",
+    "retrying": "Retrying…",
+    "retryHint": "Retry re-runs only the games that aren’t saved yet. Games already in your catalog won’t be added again.",
+    "dismissPhoto": "Dismiss photo",
+    "confirmTitle": "Dismiss this photo?",
+    "confirmBody": "It leaves the review list and can’t be brought back. Its record is kept.",
+    "cancel": "Cancel",
+    "added": "Added “{title}”. This flagged item is now marked as reviewed.",
+    "error": {
+      "retry": "We couldn’t retry this photo. Check your connection and try again.",
+      "dismissPhoto": "We couldn’t dismiss this photo. Check your connection and try again.",
+      "dismissItem": "We couldn’t dismiss this item. Check your connection and try again.",
+      "processing": "The photo could not be processed."
+    }
+  },
+  "platforms": {
+    "title": "Platforms",
+    "subtitle": "The canonical list every import matches against. Rename keeps the old name as an alias; merge moves games and keeps the merged name matchable.",
+    "importReview": {
+      "title": "Added by import — review",
+      "body": "These platforms were created while importing for names that weren’t recognized. Keep them as they are, merge them into an existing platform, or rename them. Either way the name stays matchable."
+    },
+    "add": {
+      "title": "Add a platform",
+      "body": "Create a platform the import will match against. Names are compared case- and punctuation-insensitively.",
+      "conflict": "It already exists — rename or merge it instead."
+    },
+    "name": "Name",
+    "addPlatform": "Add platform",
+    "adding": "Adding…",
+    "all": {
+      "title": "All platforms"
+    },
+    "showAll": "Show empty and hidden reference platforms",
+    "empty": {
+      "none": "No platforms yet. Add one, or import games to create them.",
+      "filtered": "No platforms with games. Tick “Show empty and hidden reference platforms” to see the full list."
+    },
+    "kind": {
+      "import": "Added by import",
+      "canonical": "Reference",
+      "manual": "Manual"
+    },
+    "kindHint": {
+      "import": "Created by an import for a name it did not recognize. Keep it as is, or merge it into an existing platform.",
+      "canonical": "Part of the reference list synced from the game database. Matching targets, not user data.",
+      "manual": "A platform you added by hand."
+    },
+    "gameCount": "{count, plural, one {# game} other {# games}}",
+    "hidden": "Hidden",
+    "keepAsIs": "Keep as is",
+    "rename": "Rename",
+    "closeRename": "Close rename",
+    "newName": "New name",
+    "renameHelp": "The previous name is kept as an alias, so future imports still match it.",
+    "saveName": "Save name",
+    "deleting": "Deleting…",
+    "mergeInto": "Merge into…",
+    "hide": "Hide",
+    "show": "Show",
+    "delete": "Delete",
+    "working": "Working…",
+    "hideHint": "Reference platforms can’t be deleted — hiding removes them from this list; Refresh platforms restores them.",
+    "confirmDelete": {
+      "title": "Delete “{name}”?",
+      "body": "This can’t be undone. A platform with games can’t be deleted — you’ll be offered a merge instead.",
+      "blocked": "It still has games, so it can’t be deleted yet.",
+      "hint": "Reassign its games first — merge it into another platform, or edit each game."
+    },
+    "merge": {
+      "title": "Merge “{name}” into another platform",
+      "loading": "Loading games…",
+      "willMove": "{count, plural, one {# game will} other {# games will}} move to the target.",
+      "move": "Move {count, plural, one {# game} other {# games}} from “{source}”.",
+      "more": "+{count} more",
+      "none": "There is no other platform to merge into yet. Add one first.",
+      "into": "Merge into",
+      "confirm": "Move {count, plural, one {# game} other {# games}} from “{source}” to “{target}”? “{source}” is kept as an alias so future imports still match it; the platform is then removed.",
+      "button": "Merge",
+      "close": "Close"
+    },
+    "merging": "Merging…",
+    "cancel": "Cancel",
+    "status": {
+      "unchanged": "Name unchanged.",
+      "renamed": "Renamed to “{name}”. The previous name is kept as an alias.",
+      "hidden": "“{name}” is hidden from this list.",
+      "visible": "“{name}” is visible again.",
+      "confirmed": "“{name}” confirmed as is."
+    },
+    "error": {
+      "add": "Couldn’t reach the shelf. Try again.",
+      "notFound": "This platform no longer exists.",
+      "rename": "We couldn’t rename this platform. Check your connection and try again.",
+      "update": "We couldn’t update this platform. Check your connection and try again.",
+      "confirm": "We couldn’t confirm this platform. Check your connection and try again.",
+      "delete": "We couldn’t delete this platform. Check your connection and try again.",
+      "merge": "We couldn’t merge the platform. Check your connection and try again.",
+      "refresh": "Couldn’t refresh the platform list. Try again."
+    },
+    "refresh": {
+      "heading": "Reference platforms",
+      "body": "Reload the platform list from the game database. Hidden reference platforms come back; nothing is deleted.",
+      "button": "Refresh platforms",
+      "refreshing": "Refreshing…",
+      "summary": "Platform list refreshed — {fetched} fetched, {created} added, {updated} updated, {unchanged} unchanged."
+    }
+  }
+}

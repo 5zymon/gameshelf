@@ -1,6 +1,7 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import nextEnv from '@next/env';
+import createNextIntlPlugin from 'next-intl/plugin';
 
 // GameShelf keeps a single `.env` at the monorepo root. Next.js only reads
 // env files from the app directory by default, so load the root one here
@@ -30,4 +31,8 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+// Links `src/i18n/request.ts` to next-intl so Server Components can resolve the
+// locale (from the NEXT_LOCALE cookie) and load the matching message catalog.
+const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
+
+export default withNextIntl(nextConfig);

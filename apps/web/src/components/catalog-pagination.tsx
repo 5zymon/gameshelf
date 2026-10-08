@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server';
 import Link from 'next/link';
 
 interface CatalogPaginationProps {
@@ -12,37 +13,36 @@ const LINK =
 const DISABLED =
   'rounded-md border border-edge px-3 py-1.5 text-sm text-muted opacity-40';
 
-export function CatalogPagination({
+export async function CatalogPagination({
   page,
   totalPages,
   prevHref,
   nextHref,
-}: CatalogPaginationProps): React.ReactElement | null {
+}: CatalogPaginationProps): Promise<React.ReactElement | null> {
   if (totalPages <= 1) return null;
+  const t = await getTranslations('pagination');
   return (
     <nav
-      aria-label="Catalog pages"
+      aria-label={t('ariaLabel')}
       className="flex items-center justify-between gap-4"
     >
       {prevHref === null ? (
         <span aria-disabled="true" className={DISABLED}>
-          Previous
+          {t('previous')}
         </span>
       ) : (
         <Link href={prevHref} rel="prev" className={LINK}>
-          Previous
+          {t('previous')}
         </Link>
       )}
-      <p className="text-sm text-muted">
-        Page {page} of {totalPages}
-      </p>
+      <p className="text-sm text-muted">{t('pageOf', { page, totalPages })}</p>
       {nextHref === null ? (
         <span aria-disabled="true" className={DISABLED}>
-          Next
+          {t('next')}
         </span>
       ) : (
         <Link href={nextHref} rel="next" className={LINK}>
-          Next
+          {t('next')}
         </Link>
       )}
     </nav>

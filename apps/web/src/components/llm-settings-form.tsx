@@ -1,8 +1,10 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
+import type { TranslatorFor } from '@/i18n/translate';
 import {
   isApiError,
   type LlmSettingsModel,
@@ -23,33 +25,34 @@ const LLM_MODEL_MAX_LENGTH = 128;
 const LLM_API_KEY_MAX_LENGTH = 512;
 
 /** Maps the saved-config test's stable code to a specific, safe message. */
-function testMessage({ code, message }: LlmTestResult): string {
+function testMessage(
+  { code, message }: LlmTestResult,
+  t: TranslatorFor<'settings'>,
+): string {
   switch (code) {
     case 'ok':
-      return 'Connection succeeded — the provider accepted the request.';
+      return t('llm.test.ok');
     case 'not_configured':
-      return 'No API key is saved for this provider yet. Save a key first.';
+      return t('llm.test.not_configured');
     case 'unauthorized':
-      return 'The provider rejected the API key. Check the key and try again.';
+      return t('llm.test.unauthorized');
     case 'model_not_found':
-      return 'The configured model does not exist for this provider. Choose a different model.';
+      return t('llm.test.model_not_found');
     case 'rate_limited':
-      return 'The provider rate-limited the request. Wait a moment and try again.';
+      return t('llm.test.rate_limited');
     case 'timeout':
-      return 'The provider did not respond in time. Try again.';
+      return t('llm.test.timeout');
     case 'bad_response':
-      return 'The provider returned an unexpected response.';
+      return t('llm.test.bad_response');
     case 'network':
-      return 'Couldn’t reach the provider. Check the connection and try again.';
+      return t('llm.test.network');
     case 'server_error':
-      return 'The provider had a server error. Try again later.';
+      return t('llm.test.server_error');
     case 'unknown_provider':
-      return 'That provider is not available.';
+      return t('llm.test.unknown_provider');
     default:
       // Unknown or future code: fall back to the backend's own message.
-      return message.trim() !== ''
-        ? message
-        : 'The connection test returned an unexpected result.';
+      return message.trim() !== '' ? message : t('llm.test.fallback');
   }
 }
 
@@ -59,6 +62,7 @@ export function LlmSettingsForm({
   settings: LlmSettingsModel;
 }): React.ReactElement {
   const router = useRouter();
+  const t = useTranslations('settings');
   // The PUT response is authoritative, so a local snapshot drives the UI
   // instead of the (stale until reload) server prop.
   const [current, setCurrent] = useState<LlmSettingsModel>(settings);
@@ -134,9 +138,7 @@ export function LlmSettingsForm({
         setError(caught.userMessage);
         return;
       }
-      setError(
-        "We couldn't save the LLM settings. Check your connection and try again.",
-      );
+      setError(t('llm.error.save'));
     } finally {
       setSaving(false);
     }
@@ -154,15 +156,19 @@ export function LlmSettingsForm({
         router.refresh();
         return;
       }
-      setTestError(
-        "Couldn't run the connection test. Check your connection and try again.",
-      );
+      setTestError(t('llm.error.test'));
     } finally {
       setTesting(false);
     }
   }
 
   const modelPlaceholder = selected?.defaultModel ?? '';
+  // The recommended-defaults copy names both providers' default models so it
+  // stays accurate if the API's defaults change.
+  const geminiModel =
+    providers.find((provider) => provider.id === 'gemini')?.defaultModel ?? '';
+  const openaiModel =
+    providers.find((provider) => provider.id === 'openai')?.defaultModel ?? '';
   const showSavedKey =
     isActiveProvider && current.keyPresent && !keyReplace && !clearKey;
 
@@ -175,15 +181,15 @@ export function LlmSettingsForm({
       className="space-y-4 rounded-xl border border-edge bg-shelf/40 p-4"
     >
       <div className="space-y-1">
-        <h2 className="text-lg font-medium text-fog">Game recognition</h2>
+        <h2 className="text-lg font-medium text-fog">{t('llm.heading')}</h2>
         <p className="text-sm text-muted">
-          Recommended default: <span className="text-fog">Google Gemini</span> (
-          <code className="font-mono text-xs">gemini-3.8-flash</code>) — a
-          generous free tier, fast, and reliable at reading box text. OpenAI (
-          <code className="font-mono text-xs">gpt-4o-mini</code>) is a solid
-          paid alternative. Each photo costs one vision call, roughly a fraction
-          of a cent to a few cents depending on provider and image size;
-          recognition is only charged for imported photos.
+          {t.rich('llm.recommended', {
+            code: (chunks) => (
+              <code className="font-mono text-xs">{chunks}</code>
+            ),
+            geminiModel,
+            openaiModel,
+          })}
         </p>
       </div>
 
@@ -198,7 +204,7 @@ export function LlmSettingsForm({
 
       <div className="space-y-1.5">
         <label htmlFor="llm-provider" className={LABEL}>
-          Provider
+          {t('llm.provider')}
         </label>
         <select
           id="llm-provider"
@@ -214,15 +220,12 @@ export function LlmSettingsForm({
             </option>
           ))}
         </select>
-        <p className="text-xs text-muted">
-          Switching provider resets the saved key and model unless you enter new
-          ones.
-        </p>
+        <p className="text-xs text-muted">{t('llm.providerHint')}</p>
       </div>
 
       <div className="space-y-1.5">
         <label htmlFor="llm-model" className={LABEL}>
-          Model
+          {t('llm.model')}
         </label>
         <input
           id="llm-model"
@@ -237,21 +240,22 @@ export function LlmSettingsForm({
           className={FIELD}
         />
         <p className="text-xs text-muted">
-          Leave as the default{' '}
-          <code className="font-mono">{modelPlaceholder}</code> unless you need
-          a specific model.
+          {t.rich('llm.modelHint', {
+            code: (chunks) => <code className="font-mono">{chunks}</code>,
+            model: modelPlaceholder,
+          })}
         </p>
       </div>
 
       <div className="space-y-1.5">
         <label htmlFor="llm-api-key" className={LABEL}>
-          API key
+          {t('llm.apiKey')}
         </label>
 
         {showSavedKey ? (
           <div className="space-y-2">
             <p role="status" className="text-sm text-muted">
-              A key is saved for {selected?.label ?? providerId}.
+              {t('llm.keySaved', { provider: selected?.label ?? providerId })}
             </p>
             <div className="flex flex-wrap gap-2">
               <button
@@ -262,7 +266,7 @@ export function LlmSettingsForm({
                 }}
                 className={SECONDARY_BUTTON}
               >
-                Replace key
+                {t('llm.replaceKey')}
               </button>
               <button
                 type="button"
@@ -272,14 +276,14 @@ export function LlmSettingsForm({
                 }}
                 className={SECONDARY_BUTTON}
               >
-                Remove key
+                {t('llm.removeKey')}
               </button>
             </div>
           </div>
         ) : clearKey ? (
           <div className="space-y-2">
             <p role="status" className="text-sm text-muted">
-              The key will be removed when you save.
+              {t('llm.keyWillRemove')}
             </p>
             <button
               type="button"
@@ -289,7 +293,7 @@ export function LlmSettingsForm({
               }}
               className={SECONDARY_BUTTON}
             >
-              Undo
+              {t('llm.undo')}
             </button>
           </div>
         ) : (
@@ -308,8 +312,7 @@ export function LlmSettingsForm({
               className={FIELD}
             />
             <p className="text-xs text-muted">
-              Paste a key from {selected?.label ?? providerId}. It is stored
-              encrypted and never shown again.
+              {t('llm.keyHint', { provider: selected?.label ?? providerId })}
             </p>
           </>
         )}
@@ -322,9 +325,11 @@ export function LlmSettingsForm({
             disabled={saving || !dirty}
             className={PRIMARY_BUTTON}
           >
-            {saving ? 'Saving…' : 'Save changes'}
+            {saving ? t('llm.saving') : t('llm.save')}
           </button>
-          {!dirty && <span className="text-sm text-muted">No changes</span>}
+          {!dirty && (
+            <span className="text-sm text-muted">{t('llm.noChanges')}</span>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -336,13 +341,11 @@ export function LlmSettingsForm({
             disabled={testing}
             className={SECONDARY_BUTTON}
           >
-            {testing ? 'Testing…' : 'Test connection'}
+            {testing ? t('llm.testing') : t('llm.testConnection')}
           </button>
           <p className="text-xs text-muted">
-            The test uses the saved settings. Save your changes before testing.
-            {dirty && (
-              <span className="text-danger"> You have unsaved changes.</span>
-            )}
+            {t('llm.testHint')}
+            {dirty && <span className="text-danger"> {t('llm.unsaved')}</span>}
           </p>
         </div>
 
@@ -354,16 +357,16 @@ export function LlmSettingsForm({
           >
             {current.importEnabled ? (
               <>
-                Saved. Photo import is enabled.{' '}
+                {t('llm.savedImportEnabled')}{' '}
                 <Link
                   href="/import"
                   className="text-accent underline underline-offset-4"
                 >
-                  Go to photo import
+                  {t('llm.goToImport')}
                 </Link>
               </>
             ) : (
-              'Saved.'
+              t('llm.saved')
             )}
           </p>
         )}
@@ -378,7 +381,7 @@ export function LlmSettingsForm({
                 : 'rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger'
             }
           >
-            {testMessage(testResult)}
+            {testMessage(testResult, t)}
           </p>
         )}
 

@@ -49,10 +49,11 @@ describe('Auth HTTP API (e2e)', () => {
     expect(res.status).toBe(200);
     expect(res.body).not.toHaveProperty('user.passwordHash');
 
+    // Login sets two cookies: the session token and the NEXT_LOCALE preference
+    // (ticket 7.2). Locate the session cookie by name rather than by position.
     const cookies = res.headers['set-cookie'] as unknown as string[];
-    expect(cookies).toHaveLength(1);
-    const cookie = cookies[0];
-    expect(cookie).toContain('gameshelf_session=');
+    const cookie = cookies.find((c) => c.startsWith('gameshelf_session='));
+    expect(cookie).toBeDefined();
     expect(cookie).toContain('HttpOnly');
     expect(cookie).toContain('SameSite=Lax');
     expect(cookie).toContain('Path=/');
@@ -156,8 +157,11 @@ describe('Auth HTTP API (e2e)', () => {
 
       expect(res.status).toBe(200);
       const cookies = res.headers['set-cookie'] as unknown as string[];
-      expect(cookies[0]).toContain('gameshelf_session=');
-      expect(cookies[0]).toContain('Secure');
+      const sessionCookie = cookies.find((c) =>
+        c.startsWith('gameshelf_session='),
+      );
+      expect(sessionCookie).toBeDefined();
+      expect(sessionCookie).toContain('Secure');
     });
   });
 });

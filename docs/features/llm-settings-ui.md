@@ -175,7 +175,9 @@ refresh.
 
 - Immediate game-database (IGDB/MobyGames) rejection probing — status is derived
   from config plus the durable import pause (see above).
-- Language and theme settings (tickets 7.2 / 7.3).
+- Theme settings (ticket 7.3). The language preference is no longer out of
+  scope: it lives in the Preferences section of this screen (see
+  [Internationalization (PL default, EN)](/i18n.md)).
 - Anthropic/other providers; per-provider key storage for several providers at
   once; key rotation/audit tooling.
 - The full `/platforms` management view (still a placeholder).

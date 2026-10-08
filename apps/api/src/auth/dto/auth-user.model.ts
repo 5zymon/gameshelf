@@ -7,6 +7,9 @@ export class AuthUserModel {
   @ApiProperty({ example: 'player@example.com' })
   email!: string;
 
+  @ApiProperty({ enum: ['pl', 'en'], example: 'pl' })
+  language!: string;
+
   @ApiProperty({ example: '2026-10-05T12:00:00.000Z' })
   createdAt!: Date;
 }

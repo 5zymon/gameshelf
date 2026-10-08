@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { isApiError } from '@/lib/api';
@@ -10,6 +11,7 @@ const SECONDARY_BUTTON =
 
 export function RefreshPlatformsControl(): React.ReactElement {
   const router = useRouter();
+  const t = useTranslations('platforms');
   const [refreshing, setRefreshing] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -21,11 +23,12 @@ export function RefreshPlatformsControl(): React.ReactElement {
     try {
       const result = await api.platforms.refresh();
       setOutcome(
-        `Platform list refreshed — ${String(result.fetched)} fetched, ${String(
-          result.created,
-        )} added, ${String(result.updated)} updated, ${String(
-          result.unchanged,
-        )} unchanged.`,
+        t('refresh.summary', {
+          fetched: result.fetched,
+          created: result.created,
+          updated: result.updated,
+          unchanged: result.unchanged,
+        }),
       );
       router.refresh();
     } catch (caught) {
@@ -37,7 +40,7 @@ export function RefreshPlatformsControl(): React.ReactElement {
       setError(
         isApiError(caught) && caught.status !== 0
           ? caught.userMessage
-          : 'Couldn’t refresh the platform list. Try again.',
+          : t('error.refresh'),
       );
     } finally {
       setRefreshing(false);
@@ -50,12 +53,9 @@ export function RefreshPlatformsControl(): React.ReactElement {
       aria-labelledby="platforms-heading"
     >
       <h2 id="platforms-heading" className="text-lg font-medium text-fog">
-        Reference platforms
+        {t('refresh.heading')}
       </h2>
-      <p className="text-sm text-muted">
-        Reload the platform list from the game database. Hidden reference
-        platforms come back; nothing is deleted.
-      </p>
+      <p className="text-sm text-muted">{t('refresh.body')}</p>
       <button
         type="button"
         onClick={() => {
@@ -64,7 +64,7 @@ export function RefreshPlatformsControl(): React.ReactElement {
         disabled={refreshing}
         className={SECONDARY_BUTTON}
       >
-        {refreshing ? 'Refreshing…' : 'Refresh platforms'}
+        {refreshing ? t('refresh.refreshing') : t('refresh.button')}
       </button>
 
       {outcome !== null && (

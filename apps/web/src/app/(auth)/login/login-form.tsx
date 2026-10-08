@@ -1,17 +1,14 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { isApiError } from '@/lib/api';
 import { api } from '@/lib/api/browser';
 
-const INVALID_CREDENTIALS = 'Incorrect email or password.';
-const INVALID_INPUT = 'Enter an email and a password, then try again.';
-const GENERIC_ERROR =
-  "We couldn't sign you in right now. Check your connection and try again.";
-
 export function LoginForm(): React.ReactElement {
   const router = useRouter();
+  const t = useTranslations('auth');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -30,14 +27,14 @@ export function LoginForm(): React.ReactElement {
       return;
     } catch (error) {
       if (isApiError(error) && error.status === 401) {
-        setError(INVALID_CREDENTIALS);
+        setError(t('loginError.credentials'));
         return;
       }
       if (isApiError(error) && error.status === 400) {
-        setError(INVALID_INPUT);
+        setError(t('loginError.input'));
         return;
       }
-      setError(GENERIC_ERROR);
+      setError(t('loginError.generic'));
     } finally {
       setSubmitting(false);
     }
@@ -62,7 +59,7 @@ export function LoginForm(): React.ReactElement {
       )}
       <div className="space-y-1.5">
         <label htmlFor="login-email" className="block text-sm text-muted">
-          Email
+          {t('email')}
         </label>
         <input
           id="login-email"
@@ -80,7 +77,7 @@ export function LoginForm(): React.ReactElement {
       </div>
       <div className="space-y-1.5">
         <label htmlFor="login-password" className="block text-sm text-muted">
-          Password
+          {t('password')}
         </label>
         <input
           id="login-password"
@@ -100,7 +97,7 @@ export function LoginForm(): React.ReactElement {
         disabled={submitting}
         className="w-full rounded-md bg-accent px-3 py-2 font-medium text-ink hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong disabled:opacity-60"
       >
-        {submitting ? 'Signing in…' : 'Sign in'}
+        {submitting ? t('signingIn') : t('signIn')}
       </button>
     </form>
   );

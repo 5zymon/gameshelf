@@ -1,6 +1,7 @@
 import { FlatCompat } from '@eslint/eslintrc';
 import eslintConfigPrettier from 'eslint-config-prettier/flat';
 import base from '../../eslint.config.base.mjs';
+import gameshelf from './eslint-rules/no-hardcoded-strings.mjs';
 
 const compat = new FlatCompat({ baseDirectory: import.meta.dirname });
 
@@ -21,6 +22,15 @@ export default [
       next: {
         rootDir: import.meta.dirname,
       },
+    },
+  },
+  // Ticket 7.2: fail lint on a newly hardcoded user-facing string. The rule
+  // is tuned to JSX text + user-facing attributes only (see the rule file).
+  {
+    files: ['src/**/*.{ts,tsx}'],
+    plugins: { gameshelf },
+    rules: {
+      'gameshelf/no-hardcoded-strings': 'error',
     },
   },
   eslintConfigPrettier,

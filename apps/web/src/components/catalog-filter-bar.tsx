@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import type { GamePlatform } from '@/lib/api';
@@ -71,12 +72,13 @@ function Chip({
   label: string;
   onRemove: () => void;
 }): React.ReactElement {
+  const t = useTranslations('catalogFilters');
   return (
     <span className="inline-flex items-center gap-1 rounded-full border border-edge bg-shelf px-3 py-1 text-xs text-fog">
       {label}
       <button
         type="button"
-        aria-label={`Remove ${label} filter`}
+        aria-label={t('removeFilter', { label })}
         onClick={onRemove}
         className="-mr-1.5 ml-0.5 inline-flex h-6 w-6 items-center justify-center rounded text-muted hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
@@ -101,6 +103,7 @@ export function CatalogFilterBar({
   editions,
 }: CatalogFilterBarProps): React.ReactElement {
   const router = useRouter();
+  const t = useTranslations('catalogFilters');
   const [draft, setDraft] = useState<Draft>(() => toDraft(values));
   const [isPending, startTransition] = useTransition();
   const draftRef = useRef<Draft>(draft);
@@ -206,7 +209,7 @@ export function CatalogFilterBar({
     values.platformId === undefined
       ? ''
       : (platforms.find((p) => p.id === values.platformId)?.name ??
-        `Platform #${String(values.platformId)}`);
+        t('platformFallback', { id: values.platformId }));
 
   return (
     <div
@@ -224,7 +227,7 @@ export function CatalogFilterBar({
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
             <label htmlFor="catalog-q" className={LABEL}>
-              Search titles
+              {t('searchTitles')}
             </label>
             <input
               id="catalog-q"
@@ -242,7 +245,7 @@ export function CatalogFilterBar({
 
           <div className="space-y-1.5">
             <label htmlFor="catalog-platform" className={LABEL}>
-              Platform
+              {t('platform')}
             </label>
             <select
               id="catalog-platform"
@@ -256,7 +259,7 @@ export function CatalogFilterBar({
               }}
               className={FIELD}
             >
-              <option value="">All platforms</option>
+              <option value="">{t('allPlatforms')}</option>
               {platforms.map((platform) => (
                 <option key={platform.id} value={platform.id}>
                   {platform.name}
@@ -267,7 +270,7 @@ export function CatalogFilterBar({
 
           <div className="space-y-1.5">
             <label htmlFor="catalog-edition" className={LABEL}>
-              Edition
+              {t('edition')}
             </label>
             <select
               id="catalog-edition"
@@ -279,7 +282,7 @@ export function CatalogFilterBar({
               }}
               className={FIELD}
             >
-              <option value="">All editions</option>
+              <option value="">{t('allEditions')}</option>
               {editions.map((edition) => (
                 <option key={edition} value={edition}>
                   {edition}
@@ -290,7 +293,7 @@ export function CatalogFilterBar({
 
           <div className="space-y-1.5">
             <label htmlFor="catalog-year" className={LABEL}>
-              Year (1000–2100)
+              {t('year')}
             </label>
             <input
               id="catalog-year"
@@ -309,7 +312,7 @@ export function CatalogFilterBar({
 
           <div className="space-y-1.5">
             <label htmlFor="catalog-player-count" className={LABEL}>
-              Players (1–100)
+              {t('players')}
             </label>
             <input
               id="catalog-player-count"
@@ -328,7 +331,7 @@ export function CatalogFilterBar({
 
           <div className="space-y-1.5">
             <label htmlFor="catalog-publisher" className={LABEL}>
-              Publisher
+              {t('publisher')}
             </label>
             <input
               id="catalog-publisher"
@@ -345,7 +348,7 @@ export function CatalogFilterBar({
 
           <div className="space-y-1.5">
             <label htmlFor="catalog-genre" className={LABEL}>
-              Genre
+              {t('genre')}
             </label>
             <input
               id="catalog-genre"
@@ -366,7 +369,7 @@ export function CatalogFilterBar({
         <div className="flex flex-wrap items-center gap-2">
           {values.q !== undefined && (
             <Chip
-              label={`Search: “${values.q}”`}
+              label={t('chip.search', { q: values.q })}
               onRemove={() => {
                 resetField('q');
                 commit({ q: undefined });
@@ -375,7 +378,7 @@ export function CatalogFilterBar({
           )}
           {values.platformId !== undefined && (
             <Chip
-              label={`Platform: ${platformLabel}`}
+              label={t('chip.platform', { name: platformLabel })}
               onRemove={() => {
                 commit({ platformId: undefined });
               }}
@@ -383,7 +386,7 @@ export function CatalogFilterBar({
           )}
           {values.edition !== undefined && (
             <Chip
-              label={`Edition: ${values.edition}`}
+              label={t('chip.edition', { edition: values.edition })}
               onRemove={() => {
                 commit({ edition: undefined });
               }}
@@ -391,7 +394,7 @@ export function CatalogFilterBar({
           )}
           {values.year !== undefined && (
             <Chip
-              label={`Year: ${String(values.year)}`}
+              label={t('chip.year', { year: values.year })}
               onRemove={() => {
                 resetField('year');
                 commit({ year: undefined });
@@ -400,7 +403,7 @@ export function CatalogFilterBar({
           )}
           {values.publisher !== undefined && (
             <Chip
-              label={`Publisher: ${values.publisher}`}
+              label={t('chip.publisher', { publisher: values.publisher })}
               onRemove={() => {
                 resetField('publisher');
                 commit({ publisher: undefined });
@@ -409,7 +412,7 @@ export function CatalogFilterBar({
           )}
           {values.genre !== undefined && (
             <Chip
-              label={`Genre: ${values.genre}`}
+              label={t('chip.genre', { genre: values.genre })}
               onRemove={() => {
                 resetField('genre');
                 commit({ genre: undefined });
@@ -418,7 +421,7 @@ export function CatalogFilterBar({
           )}
           {values.playerCount !== undefined && (
             <Chip
-              label={`Players: ${String(values.playerCount)}`}
+              label={t('chip.players', { count: values.playerCount })}
               onRemove={() => {
                 resetField('playerCount');
                 commit({ playerCount: undefined });
@@ -430,7 +433,7 @@ export function CatalogFilterBar({
             onClick={clearAll}
             className="text-sm text-accent underline-offset-4 hover:underline hover:text-accent-strong"
           >
-            Clear all
+            {t('clearAll')}
           </button>
         </div>
       )}

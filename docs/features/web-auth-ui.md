@@ -118,6 +118,14 @@ client never writes a token to `localStorage` or `sessionStorage`, and there is
 no client-side token to leak: after login the browser is redirected and the
 session is resolved on the server from the cookie.
 
+Alongside the session cookie, the API manages a second `httpOnly` cookie,
+`NEXT_LOCALE`, which carries the user's UI language to the web app: it is set
+on login and first-run setup (healing a stale or missing value from the
+stored preference) and cleared on logout and passive session expiry, so a
+shared device never renders the login screen in the previous user's language.
+The web app reads it in `getRequestConfig` and falls back to the Polish
+default — see [Internationalization (PL default, EN)](/i18n.md).
+
 A repository check confirms the absence:
 
 ```bash

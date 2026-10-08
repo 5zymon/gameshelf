@@ -1,5 +1,7 @@
 import Link from 'next/link';
+import { getTranslations } from 'next-intl/server';
 import { redirect } from 'next/navigation';
+import type { TranslatorFor } from '@/i18n/translate';
 import { getGames } from '@/lib/api/server';
 import { CatalogFilterBar } from '@/components/catalog-filter-bar';
 import { CatalogPagination } from '@/components/catalog-pagination';
@@ -50,10 +52,11 @@ export default async function CatalogPage({
   const query: ListGamesQuery = { page, limit: PAGE_SIZE, ...filters };
   const games = await getGames(query);
   if (games === null) redirect('/login');
+  const t = await getTranslations('catalog');
 
   const { items, meta, filters: options } = games;
   const active = hasActiveFilters(filters);
-  if (meta.total === 0 && !active) return <EmptyCatalog />;
+  if (meta.total === 0 && !active) return <EmptyCatalog t={t} />;
 
   const first = (meta.page - 1) * meta.limit + 1;
   const last = first + items.length - 1;
@@ -62,13 +65,13 @@ export default async function CatalogPage({
     <section className="space-y-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          Your shelf
+          {t('title')}
         </h1>
         {items.length > 0 && (
           <p className="text-sm text-muted">
             {active
-              ? `Showing ${String(first)}–${String(last)} of ${String(meta.total)} matching games`
-              : `Showing ${String(first)}–${String(last)} of ${String(meta.total)} games`}
+              ? t('showingFiltered', { first, last, total: meta.total })
+              : t('showing', { first, last, total: meta.total })}
           </p>
         )}
       </header>
@@ -80,16 +83,16 @@ export default async function CatalogPage({
       />
 
       {meta.total === 0 ? (
-        <NoResults />
+        <NoResults t={t} />
       ) : items.length === 0 ? (
         <div className="rounded-lg border border-edge/70 bg-shelf/30 px-6 py-10">
           <p className="text-sm text-muted">
-            That page has no games.{' '}
+            {t('pageEmpty')}{' '}
             <Link
               href={pageHref(params, 1)}
               className="text-accent underline-offset-4 hover:underline hover:text-accent-strong"
             >
-              Back to the first page
+              {t('backToFirst')}
             </Link>
           </p>
         </div>
@@ -113,34 +116,34 @@ export default async function CatalogPage({
   );
 }
 
-function EmptyCatalog(): React.ReactElement {
+function EmptyCatalog({
+  t,
+}: {
+  t: TranslatorFor<'catalog'>;
+}): React.ReactElement {
   return (
     <section className="space-y-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          Your shelf
+          {t('title')}
         </h1>
       </header>
       <div className="rounded-lg border border-edge/70 bg-shelf/30 px-6 py-12 text-left">
         <span aria-hidden className="mb-4 block h-0.5 w-10 bg-accent" />
-        <h2 className="text-lg font-medium text-fog">
-          Nothing on the shelf yet
-        </h2>
-        <p className="mt-2 max-w-md text-sm text-muted">
-          Add a game by hand, or import photos of your shelf to fill it in.
-        </p>
+        <h2 className="text-lg font-medium text-fog">{t('empty.title')}</h2>
+        <p className="mt-2 max-w-md text-sm text-muted">{t('empty.body')}</p>
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <Link
             href="/games/new"
             className="rounded-md bg-accent px-4 py-2 font-medium text-ink hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong"
           >
-            Add a game
+            {t('empty.addGame')}
           </Link>
           <Link
             href="/import"
             className="rounded-md border border-edge px-4 py-2 font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
-            Import from photos
+            {t('empty.import')}
           </Link>
         </div>
       </div>
@@ -148,21 +151,17 @@ function EmptyCatalog(): React.ReactElement {
   );
 }
 
-function NoResults(): React.ReactElement {
+function NoResults({ t }: { t: TranslatorFor<'catalog'> }): React.ReactElement {
   return (
     <div className="rounded-lg border border-edge/70 bg-shelf/30 px-6 py-12 text-left">
       <span aria-hidden className="mb-4 block h-0.5 w-10 bg-accent" />
-      <h2 className="text-lg font-medium text-fog">
-        No games match these filters
-      </h2>
-      <p className="mt-2 max-w-md text-sm text-muted">
-        Try broadening your search or removing a filter.
-      </p>
+      <h2 className="text-lg font-medium text-fog">{t('noResults.title')}</h2>
+      <p className="mt-2 max-w-md text-sm text-muted">{t('noResults.body')}</p>
       <Link
         href="/"
         className="mt-6 inline-block rounded-md border border-edge px-4 py-2 font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
-        Clear all filters
+        {t('noResults.clear')}
       </Link>
     </div>
   );

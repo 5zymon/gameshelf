@@ -23,7 +23,9 @@ import type {
   MergePlatformRequest,
   Platform,
   PlatformSyncResult,
+  PreferencesModel,
   PutLlmSettingsRequest,
+  PutPreferencesRequest,
   SearchGamesQuery,
   SetupRequest,
   SetupResponse,
@@ -219,6 +221,13 @@ export interface ApiClient {
     };
     gameDatabases: {
       status(options?: ApiRequestOptions): Promise<GameDatabaseStatus[]>;
+    };
+    preferences: {
+      get(options?: ApiRequestOptions): Promise<PreferencesModel>;
+      put(
+        body: PutPreferencesRequest,
+        options?: ApiRequestOptions,
+      ): Promise<PreferencesModel>;
     };
   };
   auth: {
@@ -436,6 +445,20 @@ export function createApiClient(transport: Transport): ApiClient {
             transport,
             '/settings/game-databases',
             getInit(options),
+          ),
+      },
+      preferences: {
+        get: (options) =>
+          request<PreferencesModel>(
+            transport,
+            '/settings/preferences',
+            getInit(options),
+          ),
+        put: (body, options) =>
+          request<PreferencesModel>(
+            transport,
+            '/settings/preferences',
+            jsonInit('PUT', body, options),
           ),
       },
     },
