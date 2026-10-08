@@ -14,12 +14,12 @@ import {
 import { api } from '@/lib/api/browser';
 
 const FIELD =
-  'w-full rounded-md border border-edge bg-ink px-3 py-2 text-fog outline-none focus-visible:ring-2 focus-visible:ring-accent';
+  'w-full h-10 rounded-control border border-edge bg-field px-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent/55 focus:ring-[3px] focus:ring-accent/15 disabled:opacity-60';
 const LABEL = 'block text-sm text-muted';
 const PRIMARY_BUTTON =
-  'rounded-md bg-accent px-4 py-2 font-medium text-on-accent hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control bg-accent px-4 py-2.5 text-sm leading-none font-semibold text-accent-ink transition-colors duration-[140ms] ease-[ease] hover:bg-accent-strong motion-reduce:transition-none disabled:opacity-60';
 const SECONDARY_BUTTON =
-  'rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control border border-edge bg-surface px-4 py-2.5 text-sm leading-none font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60';
 
 const LLM_MODEL_MAX_LENGTH = 128;
 const LLM_API_KEY_MAX_LENGTH = 512;
@@ -193,10 +193,10 @@ export function LlmSettingsForm({
       onSubmit={(event) => {
         void handleSubmit(event);
       }}
-      className="space-y-4 rounded-xl border border-edge bg-shelf/40 p-4"
+      className="space-y-4 rounded-card border border-edge bg-surface p-4 shadow-[var(--shadow-card)]"
     >
       <div className="space-y-1">
-        <h2 className="text-lg font-medium text-fog">{t('llm.heading')}</h2>
+        <h2 className="text-lg font-semibold text-ink">{t('llm.heading')}</h2>
         <p className="text-sm text-muted">
           {t.rich('llm.recommended', {
             code: (chunks) => (
@@ -211,7 +211,7 @@ export function LlmSettingsForm({
       {error !== null && (
         <p
           role="alert"
-          className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger"
+          className="rounded-control border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger"
         >
           {error}
         </p>
@@ -227,7 +227,7 @@ export function LlmSettingsForm({
           onChange={(event) => {
             onProviderChange(event.target.value);
           }}
-          className={FIELD}
+          className={`${FIELD} select-field`}
         >
           {providers.map((provider) => (
             <option key={provider.id} value={provider.id}>
@@ -394,7 +394,7 @@ export function LlmSettingsForm({
           <p
             role="status"
             aria-live="polite"
-            className="rounded-md border border-edge bg-shelf px-3 py-2 text-sm text-muted"
+            className="rounded-control border border-edge bg-surface px-3 py-2 text-sm text-muted"
           >
             {current.importEnabled ? (
               <>
@@ -418,8 +418,8 @@ export function LlmSettingsForm({
             aria-live="polite"
             className={
               testResult.ok
-                ? 'rounded-md border border-edge bg-shelf px-3 py-2 text-sm text-muted'
-                : 'rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger'
+                ? 'rounded-control border border-edge bg-surface px-3 py-2 text-sm text-muted'
+                : 'rounded-control border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger'
             }
           >
             {testMessage(testResult, t)}
@@ -429,7 +429,7 @@ export function LlmSettingsForm({
         {testError !== null && (
           <p
             role="alert"
-            className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger"
+            className="rounded-control border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger"
           >
             {testError}
           </p>

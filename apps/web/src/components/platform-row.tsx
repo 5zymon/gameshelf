@@ -16,22 +16,22 @@ import {
 } from '@/lib/platforms';
 
 const FIELD =
-  'w-full rounded-md border border-edge bg-ink px-3 py-2 text-fog outline-none focus-visible:ring-2 focus-visible:ring-accent';
+  'w-full h-10 rounded-control border border-edge bg-field px-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent/55 focus:ring-[3px] focus:ring-accent/15 disabled:opacity-60';
 const LABEL = 'block text-sm text-muted';
 const PRIMARY_BUTTON =
-  'rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control bg-accent px-4 py-2.5 text-sm leading-none font-semibold text-accent-ink transition-colors duration-[140ms] ease-[ease] hover:bg-accent-strong motion-reduce:transition-none disabled:opacity-60';
 const SECONDARY_BUTTON =
-  'rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control border border-edge bg-surface px-4 py-2.5 text-sm leading-none font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60';
 const SMALL_BUTTON =
-  'rounded-md border border-edge px-3 py-1.5 text-xs font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control border border-edge bg-surface px-3 py-1.5 text-xs leading-none font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60';
 const DANGER_BUTTON =
-  'rounded-md border border-danger/40 px-4 py-2 text-sm font-medium text-danger hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control border border-danger/40 px-4 py-2.5 text-sm leading-none font-medium text-danger transition-colors duration-[140ms] ease-[ease] hover:bg-danger/10 motion-reduce:transition-none disabled:opacity-60';
 const SMALL_DANGER_BUTTON =
-  'rounded-md border border-danger/40 px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-60';
-const CHIP = 'rounded-full border px-2 py-0.5 text-xs';
+  'inline-flex items-center justify-center rounded-control border border-danger/40 px-3 py-1.5 text-xs leading-none font-medium text-danger transition-colors duration-[140ms] ease-[ease] hover:bg-danger/10 motion-reduce:transition-none disabled:opacity-60';
+const CHIP = 'rounded-full border px-2.5 py-1 text-xs';
 
 const KIND_CHIP: Readonly<Record<PlatformKind, string>> = {
-  import: 'border-accent-strong/50 text-accent-strong',
+  import: 'border-accent/40 text-accent-text',
   canonical: 'border-edge text-muted',
   manual: 'border-edge text-muted',
 };
@@ -260,7 +260,7 @@ export function PlatformRow({
       <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-3">
         <div className="min-w-0 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="truncate text-sm font-medium text-fog">
+            <p className="truncate text-sm font-medium text-ink">
               {platform.name}
             </p>
             <span
@@ -358,7 +358,7 @@ export function PlatformRow({
           onSubmit={(event) => {
             void submitRename(event);
           }}
-          className="space-y-2 rounded-lg border border-edge bg-ink/40 p-3"
+          className="space-y-2 rounded-control border border-edge bg-canvas p-3"
         >
           <label htmlFor={`${uid}-rename`} className={LABEL}>
             {t('newName')}
@@ -424,7 +424,7 @@ export function PlatformRow({
           role="alertdialog"
           aria-labelledby={labelId}
           aria-describedby={descriptionId}
-          className="rounded-lg border border-danger/40 bg-danger/5 p-3"
+          className="rounded-control border border-danger/40 bg-danger/5 p-3"
           onKeyDown={(event) => {
             if (event.key !== 'Tab') return;
             const first = cancelRef.current;
@@ -440,7 +440,7 @@ export function PlatformRow({
             }
           }}
         >
-          <p id={labelId} className="text-sm font-medium text-fog">
+          <p id={labelId} className="text-sm font-medium text-ink">
             {t('confirmDelete.title', { name: platform.name })}
           </p>
           <p id={descriptionId} className="mt-1 text-sm text-muted">
