@@ -12,6 +12,11 @@ tasks:
     cmds:
       - npm install
 
+  setup:
+    desc: One-command local setup (install, .env, start MySQL+Redis, migrate, generate)
+    cmds:
+      - bash scripts/setup.sh
+
   dev:
     desc: Start the API and the web app in watch mode
     cmds:

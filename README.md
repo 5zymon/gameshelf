@@ -9,6 +9,22 @@ GameShelf is an npm-workspaces monorepo with two packages:
 | `@gameshelf/api` | `apps/api` | HTTP API built with [NestJS](https://nestjs.com/)  |
 | `@gameshelf/web` | `apps/web` | Frontend built with [Next.js](https://nextjs.org/) |
 
+## Scope
+
+GameShelf is a **single-user, single-origin** app for one operator's own library.
+Two things are deliberately out of scope, and **no requirement in this project
+depends on them**:
+
+- **Deployment is out of scope.** There is no production deployment story — no
+  reverse proxy, no TLS terminator, no load balancing, no multi-instance setup.
+  The app runs on one host, reachable at `http://localhost` (or a LAN IP), by its
+  operator.
+- **No requirement depends on a container.** `docker-compose.yml` is a
+  _convenience_ that starts a local MySQL and Redis. The application has no
+  dependency on Docker or on that file: it needs only a MySQL 8.4 server at
+  `MYSQL_HOST:MYSQL_PORT` and a Redis 7.4 server at `REDIS_HOST:REDIS_PORT`.
+  System-installed servers work identically.
+
 ## Prerequisites
 
 - **Node.js 24 LTS** (`>=24 <25`) — pinned in `.nvmrc` and `package.json` (`engines.node`).
@@ -20,23 +36,52 @@ The root scripts call `concurrently` and the workspace CLIs, so everything runs 
 
 ## Setup
 
+### One command
+
+From a clean clone, one command takes you from nothing to a running, migrated,
+client-generated local install:
+
 ```bash
-# 1. Install the pinned Node version
-nvm install    # reads .nvmrc
-nvm use
-
-# 2. Install dependencies for both workspaces (run at the repo root)
-npm install
-
-# 3. Create your local environment file
-cp .env.example .env
-# then edit .env and fill in real values
-
-# 4. Start the local dev database (optional — see "Database (local dev)")
-docker compose up -d mysql
+npm run setup        # or: task setup
 ```
 
-`.env` is gitignored; `.env.example` lists every variable the app reads with placeholder values only.
+It runs, in order (idempotent — safe to re-run):
+
+1. `npm install` — install both workspaces and set up git hooks.
+2. `cp .env.example .env` — **only if `.env` is missing**, and generates a random
+   `SESSION_SECRET` in the copy so you never ship the placeholder.
+3. `docker compose up -d mysql redis` — start the pinned `mysql:8.4` + `redis:7.4`
+   (convenience only — see "Scope").
+4. Wait until both services report **healthy**.
+5. `npm run db:deploy` — apply the committed Prisma migrations (creates every
+   table; `migrate deploy` needs no shadow DB).
+6. `npm run db:generate` — generate the Prisma client (a gitignored build artifact).
+
+Then start the app:
+
+```bash
+npm run dev          # API on :3001, web on :3000
+```
+
+Open <http://localhost:3000> — the app redirects to `/setup` when no users exist; create your first account there.
+
+### Manual fallback
+
+If you prefer to do it by hand (or `task`/the script is unavailable):
+
+```bash
+nvm install && nvm use          # reads .nvmrc (Node 24)
+npm install
+cp .env.example .env            # then edit .env (at minimum set SESSION_SECRET)
+docker compose up -d mysql redis
+docker compose ps               # wait until both are "healthy"
+npm run db:deploy               # apply committed migrations
+npm run db:generate             # generate the Prisma client
+npm run dev
+```
+
+`.env` is gitignored; `.env.example` lists every variable the app reads with
+placeholder values only.
 
 ## Running
 
@@ -412,6 +457,158 @@ kill -TERM $!        # process exits in well under a second
 
 Measured on the compiled app: **~0.1 s** to exit after the fix, versus **still running after 25 s** (then `SIGKILL`ed) on the pre-fix build.
 
+## Backup and restore
+
+The only durable, user-created data is the **`gameshelf` MySQL database**
+(library, users, sessions, LLM settings, import history). Everything else is
+rebuildable or ephemeral:
+
+- **Schema** — fully rebuildable from the committed Prisma migrations (ADR-003);
+  you back up _data_, never schema.
+- **`gameshelf_shadow` / `gameshelf_test`** — disposable; never back them up.
+- **Redis queue** — ephemeral by design (ADR-002): jobs are retried and photos are
+  re-uploadable, so a lost queue is not data loss. Back it up only to preserve
+  in-flight jobs across a rebuild.
+- **Cover cache** (`COVERS_DIR`, default `~/.gameshelf/covers`) — re-downloadable
+  via `npm run covers:redownload`.
+
+> **⚠️ ADR-001 — the app cannot verify your data directory is durable.** GameShelf
+> assumes the MySQL data directory is on durable storage, but it **cannot check
+> this itself** — that is a human check. Confirm `data/mysql` (or your system
+> MySQL's data dir) is on real, backed-up storage, not an ephemeral container
+> layer, tmpfs, or an unbacked disk.
+
+### Backup (recommended: logical dump)
+
+A logical `mysqldump` is consistent (`--single-transaction` for InnoDB),
+portable, restorable to a fresh database, and does **not** require stopping the app:
+
+> **Credentials.** The commands below assume the default `gameshelf`/`gameshelf`
+> credentials from `.env.example`. If you changed `MYSQL_USER`/`MYSQL_PASSWORD`,
+> substitute them in the `-u`/`-p` flags.
+
+```bash
+mkdir -p backups
+docker compose exec -T mysql mysqldump -ugameshelf -pgameshelf \
+  --single-transaction --routines --triggers --no-tablespaces \
+  gameshelf > "backups/gameshelf-$(date +%Y%m%d-%H%M%S).sql"
+```
+
+The dump lands in `backups/` (gitignored). Store it somewhere durable — it _is_
+your library.
+
+### Restore (the critical procedure)
+
+Load a dump into a **fresh, empty** `gameshelf` database — after data loss, a
+rebuild, or a move to a new host:
+
+```bash
+# 1. Stop the app so it does not write while you restore (Ctrl-C `npm run dev`).
+
+# 2. Ensure MySQL is up and healthy.
+docker compose up -d mysql && docker compose ps    # wait for "healthy"
+
+# 3. Drop and recreate an empty gameshelf database.
+docker compose exec mysql mysql -ugameshelf -pgameshelf -e \
+  "DROP DATABASE IF EXISTS gameshelf; CREATE DATABASE gameshelf CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+
+# 4. Load the dump (recreates schema + data).
+docker compose exec -T mysql mysql -ugameshelf -pgameshelf gameshelf \
+  < "backups/gameshelf-<your-timestamp>.sql"
+
+# 5. Verify the data came back.
+docker compose exec mysql mysql -ugameshelf -pgameshelf gameshelf -e \
+  "SELECT COUNT(*) AS users FROM users; SELECT COUNT(*) AS games FROM games;"
+
+# 6. Start the app; confirm you can log in and see your library.
+npm run dev
+```
+
+Expected: `users`/`games` counts match the source, you can log in, and the
+library is intact. On a **brand-new host** the same steps work — `docker compose
+up -d mysql` creates an empty `gameshelf` database, then run steps 3–6. The
+committed migrations are not needed for a restore (the dump already contains the
+schema); they are only needed for a from-scratch setup (see "Setup").
+
+### Alternative: physical data-directory snapshot
+
+For a full point-in-time snapshot of the durable data dir (MySQL **and** Redis),
+stop the services and copy the bind-mounted directories (a live InnoDB copy is
+unsafe, so MySQL must be stopped):
+
+```bash
+docker compose stop mysql redis
+ts=$(date +%s)
+cp -a data/mysql "data/mysql.bak.$ts"
+cp -a data/redis "data/redis.bak.$ts"
+docker compose start mysql redis
+```
+
+Restore: `docker compose stop mysql && rm -rf data/mysql && cp -a "data/mysql.bak.$ts" data/mysql && docker compose start mysql`.
+Use this when you also need the Redis queue state; prefer the logical dump for
+game data.
+
+## External services (LLM, IGDB, MobyGames)
+
+Photo import calls an LLM (vision) and validates titles against IGDB, with an
+optional MobyGames fallback. You obtain all three sets of credentials yourself.
+**None are required to run the app** — they are only needed for import/enrichment.
+
+### LLM (vision) — required for photo import
+
+The active provider/model/key is set **at runtime** through the settings screen
+(`PUT /settings/llm`; the key is stored encrypted at rest) — no env edit or
+restart. The env vars are the **fallback** used only when no key is stored in the
+DB. Key precedence for the active provider: (1) the encrypted `llm_settings` key
+when its provider matches, (2) the provider's env var, (3) none → recognition
+disabled (uploads refused `503`).
+
+- **Provider** — `gemini` (default) or `openai`; set at runtime or via
+  `LLM_PROVIDER` when no DB row exists.
+- **Model** — optional `LLM_MODEL` override; blank = provider default.
+- **Key** — `GEMINI_API_KEY` / `OPENAI_API_KEY` (the active provider's key
+  counts); store at runtime or set the env var as fallback.
+- **Encryption secret** — `LLM_SETTINGS_SECRET` derives the AES-256-GCM key for
+  the stored key; falls back to `SESSION_SECRET`.
+
+Verify a key with the live test `POST /settings/llm/test`
+(`ok` / `unauthorized` / `not_configured` / …). See
+`docs/features/llm-settings-api.md`.
+
+### IGDB — required for title validation
+
+IGDB is reached via **Twitch OAuth client credentials**. Create a Twitch
+application (https://dev.twitch.tv/console/apps, no scopes) and copy its Client
+ID + Secret:
+
+| Variable             | Required | Purpose                                    |
+| -------------------- | -------- | ------------------------------------------ |
+| `IGDB_CLIENT_ID`     | yes      | Twitch client id (sent as `Client-ID`)     |
+| `IGDB_CLIENT_SECRET` | yes      | Twitch client secret (token endpoint only) |
+| `IGDB_TOKEN_URL`     | no       | Token endpoint override (default Twitch)   |
+
+The secret is never logged or surfaced in errors. Check with `GET /health/igdb`
+(`{"status":"ok","token":"cached"}` or `acquired`). See `docs/features/igdb-client.md`.
+
+### MobyGames — optional fallback
+
+Consulted only for titles IGDB missed. It is **absent from the chain entirely
+when `MOBYGAMES_API_KEY` is unset**, so an unconfigured fallback degrades to
+IGDB-only and never fails a job.
+
+> **⚠️ Approval step — start early.** Free non-commercial MobyGames access is
+> granted **by application and is not instant**. Request it at
+> https://www.mobygames.com/ and wait for approval before you need it. Until then
+> leave `MOBYGAMES_API_KEY` **commented out**. Do **not** set a placeholder: a
+> configured-but-rejected key (`401`/`403`) **pauses the photo-import queue**
+> exactly like a broken IGDB credential.
+
+| Variable            | Required | Purpose                                     |
+| ------------------- | -------- | ------------------------------------------- |
+| `MOBYGAMES_API_KEY` | no       | MobyGames v2 key; blank disables the source |
+
+See `docs/features/mobygames-fallback.md`.
+
 ## Environment variables
 
 All variables live in a single root `.env` file (see `.env.example`):
@@ -453,6 +650,26 @@ All variables live in a single root `.env` file (see `.env.example`):
 | `IGDB_TOKEN_URL`                | `apps/api` | Optional OAuth token endpoint override (default `https://id.twitch.tv/oauth2/token`)                                                                                               |
 | `MOBYGAMES_API_KEY`             | `apps/api` | Optional MobyGames fallback key; blank = fallback disabled, IGDB-only                                                                                                              |
 
+## Operational checks
+
+Run these after setup and after any incident. All are read-only and safe while
+the app is up.
+
+| Check                  | Command                                                                 | Expected                                                              |
+| ---------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| API health             | `curl -fsS http://localhost:3001/health`                                | `{"status":"ok"}`                                                     |
+| Queue health           | `curl -fsS http://localhost:3001/health/queue`                          | job counts + worker ready (HTTP 200)                                  |
+| IGDB connectivity      | `curl -fsS http://localhost:3001/health/igdb`                           | `{"status":"ok","token":"cached"}` (or `acquired`)                    |
+| MySQL charset          | see "Confirming the character set"                                      | `character_set_server=utf8mb4`, `collation_server=utf8mb4_0900_ai_ci` |
+| Redis AOF              | `docker compose exec redis redis-cli CONFIG GET appendonly`             | `appendonly` / `yes`                                                  |
+| Redis persistence      | see "Confirming data persistence"                                       | key survives a restart                                                |
+| Migration drift        | `npm run db:migrate:check`                                              | exit 0 (no drift)                                                     |
+| Durable data dir       | **human check** — confirm `data/mysql` is on durable, backed-up storage | you confirm it                                                        |
+| Zero external requests | see "Single origin, CSP, and fonts"                                     | no non-GameShelf hosts                                                |
+
+The **durable data dir** row is the ADR-001 check the application cannot perform
+for you — it is always a human decision.
+
 ## Repository layout
 
 ```
@@ -468,6 +685,7 @@ All variables live in a single root `.env` file (see `.env.example`):
 ├── docker/             # One-time MySQL init scripts (shadow DB + test DB)
 ├── docker-compose.yml    # Local dev MySQL + Redis (convenience only)
 ├── data/                 # Persistent dev data (gitignored)
+├── backups/              # Logical MySQL dumps (gitignored)
 ├── .nvmrc              # Pinned Node version
 └── package.json        # Workspaces + root scripts
 ```
