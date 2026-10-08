@@ -2,19 +2,22 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   isApiError,
+  type GamePlatform,
   type ImportBatchProgress,
   type ImportJob,
   type ImportJobStatus,
 } from '@/lib/api';
 import { api } from '@/lib/api/browser';
+import { ImportAttentionReview } from '@/components/import-attention-review';
 import {
   batchCounts,
-  jobCounts,
   pauseCopy,
+  photoCountsLine,
   plural,
+  recognitionLine,
   sortPhotos,
   statusView,
   type ProgressTone,
@@ -50,44 +53,15 @@ function isTerminal(status: ImportJobStatus): boolean {
   return status !== 'queued' && status !== 'processing';
 }
 
-/** The per-photo counts sentence (games committed / flagged for review). */
-function photoCountsLine(photo: ImportJob): string {
-  if (photo.status === 'queued') return 'Waiting in the queue.';
-  if (photo.status === 'processing') return 'Reading the photo…';
-  const counts = jobCounts(photo);
-  const parts = [
-    `Added ${String(counts.added)} ${plural(counts.added, 'game')}.`,
-  ];
-  if (counts.flagged > 0) {
-    parts.push(
-      `${String(counts.flagged)} ${plural(counts.flagged, 'game')} need review.`,
-    );
-  }
-  return parts.join(' ');
-}
-
-/** Declared vs recognized sentence, plus whether to flag the mismatch. */
-function recognitionLine(photo: ImportJob): {
-  text: string;
-  mismatch: boolean;
-} {
-  const recognized = jobCounts(photo).recognized;
-  if (photo.declaredCount === null) {
-    return {
-      text: `Recognized ${String(recognized)} ${plural(recognized, 'game')}.`,
-      mismatch: false,
-    };
-  }
-  return {
-    text: `You declared ${String(photo.declaredCount)}; recognized ${String(recognized)}.`,
-    mismatch: photo.declaredCountMismatch,
-  };
+interface BatchSnapshot {
+  progress: ImportBatchProgress;
+  items: ImportJob[];
 }
 
 async function fetchBatchSnapshot(
   batchId: string,
   signal: AbortSignal,
-): Promise<{ progress: ImportBatchProgress; items: ImportJob[] }> {
+): Promise<BatchSnapshot> {
   const [progress, jobs] = await Promise.all([
     api.importJobs.getBatch(batchId, { signal }),
     api.importJobs.list({ batchId, limit: PHOTO_LIMIT }, { signal }),
@@ -114,10 +88,12 @@ export function ImportProgressView({
   batchId,
   initialProgress,
   initialItems,
+  platforms,
 }: {
   batchId: string;
   initialProgress: ImportBatchProgress;
   initialItems: readonly ImportJob[];
+  platforms: GamePlatform[];
 }): React.ReactElement {
   const router = useRouter();
   const [progress, setProgress] =
@@ -139,15 +115,33 @@ export function ImportProgressView({
     () => batchCounts(photos, progress),
     [photos, progress],
   );
-  const failed = useMemo(
-    () => photos.filter((photo) => photo.status === 'failed'),
-    [photos],
-  );
 
   const total = progress.total;
   const percent =
     total > 0 ? Math.round((progress.completedCount / total) * 100) : 0;
   const pause = pauseCopy(progress.pauseSource);
+
+  // Snapshot requests are sequenced. Each request takes the next number and a
+  // response is applied only while it is still the newest request, so a slow
+  // poll started before a retry/dismiss cannot overwrite the fresh state
+  // fetched by that action with stale data (which could reintroduce a
+  // dismissed card or stop polling on a stale `allCompleted`).
+  const snapshotSeqRef = useRef(0);
+
+  const beginSnapshot = useCallback((): number => {
+    snapshotSeqRef.current += 1;
+    return snapshotSeqRef.current;
+  }, []);
+
+  const applySnapshot = useCallback(
+    (seq: number, snapshot: BatchSnapshot): void => {
+      if (seq !== snapshotSeqRef.current) return;
+      setProgress(snapshot.progress);
+      setItems(snapshot.items);
+      setReconnecting(false);
+    },
+    [],
+  );
 
   // Recursive polling. Runs at 2s while the import is live, throttles to a 15s
   // heartbeat while the queue is paused, and stops once the batch completes.
@@ -158,12 +152,11 @@ export function ImportProgressView({
     const interval = progress.paused ? POLL_PAUSED_MS : POLL_RUNNING_MS;
 
     async function poll(): Promise<void> {
+      const seq = beginSnapshot();
       try {
         const snapshot = await fetchBatchSnapshot(batchId, controller.signal);
         if (controller.signal.aborted) return;
-        setProgress(snapshot.progress);
-        setItems(snapshot.items);
-        setReconnecting(false);
+        applySnapshot(seq, snapshot);
       } catch (caught) {
         if (controller.signal.aborted) return;
         if (isApiError(caught) && caught.status === 401) {
@@ -183,7 +176,14 @@ export function ImportProgressView({
       controller.abort();
       if (timer !== undefined) clearTimeout(timer);
     };
-  }, [batchId, progress.allCompleted, progress.paused, router]);
+  }, [
+    batchId,
+    progress.allCompleted,
+    progress.paused,
+    router,
+    beginSnapshot,
+    applySnapshot,
+  ]);
 
   // A paused batch still needs a fresh look when the tab regains focus, so a
   // user who fixes the configuration elsewhere sees the state without waiting.
@@ -193,12 +193,11 @@ export function ImportProgressView({
 
     function refetch(): void {
       void (async () => {
+        const seq = beginSnapshot();
         try {
           const snapshot = await fetchBatchSnapshot(batchId, controller.signal);
           if (controller.signal.aborted) return;
-          setProgress(snapshot.progress);
-          setItems(snapshot.items);
-          setReconnecting(false);
+          applySnapshot(seq, snapshot);
         } catch (caught) {
           if (controller.signal.aborted) return;
           if (isApiError(caught) && caught.status === 401) {
@@ -221,7 +220,14 @@ export function ImportProgressView({
       window.removeEventListener('focus', refetch);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [batchId, progress.allCompleted, progress.paused, router]);
+  }, [
+    batchId,
+    progress.allCompleted,
+    progress.paused,
+    router,
+    beginSnapshot,
+    applySnapshot,
+  ]);
 
   async function onResume(): Promise<void> {
     if (resuming) return;
@@ -229,13 +235,12 @@ export function ImportProgressView({
     setResumeError(null);
     try {
       await api.importJobs.resume();
+      const seq = beginSnapshot();
       const snapshot = await fetchBatchSnapshot(
         batchId,
         new AbortController().signal,
       );
-      setProgress(snapshot.progress);
-      setItems(snapshot.items);
-      setReconnecting(false);
+      applySnapshot(seq, snapshot);
     } catch (caught) {
       if (isApiError(caught) && caught.status === 401) {
         router.replace('/login');
@@ -246,6 +251,23 @@ export function ImportProgressView({
       );
     } finally {
       setResuming(false);
+    }
+  }
+
+  async function refreshSnapshot(): Promise<void> {
+    const seq = beginSnapshot();
+    try {
+      const snapshot = await fetchBatchSnapshot(
+        batchId,
+        new AbortController().signal,
+      );
+      applySnapshot(seq, snapshot);
+    } catch (caught) {
+      if (isApiError(caught) && caught.status === 401) {
+        router.replace('/login');
+        return;
+      }
+      setReconnecting(true);
     }
   }
 
@@ -329,6 +351,13 @@ export function ImportProgressView({
         </dl>
       </div>
 
+      <ImportAttentionReview
+        photos={photos}
+        platforms={platforms}
+        photoIndex={photoIndex}
+        onChanged={refreshSnapshot}
+      />
+
       {photos.length === 0 ? (
         <p className="text-sm text-muted">Waiting for the first photo…</p>
       ) : (
@@ -338,10 +367,15 @@ export function ImportProgressView({
             {photos.map((photo) => {
               const view = statusView(photo.status);
               const recognition = recognitionLine(photo);
+              const tone = photo.needsAttention
+                ? 'border-accent-strong/40 bg-accent-strong/10'
+                : photo.status === 'failed'
+                  ? 'border-danger/40 bg-danger/10'
+                  : 'border-edge bg-shelf/30';
               return (
                 <li
                   key={photo.id}
-                  className="flex items-start gap-3 rounded-lg border border-edge bg-shelf/30 p-3"
+                  className={`flex items-start gap-3 rounded-lg border p-3 ${tone}`}
                 >
                   <span
                     aria-hidden
@@ -382,27 +416,6 @@ export function ImportProgressView({
             })}
           </ul>
         </div>
-      )}
-
-      {failed.length > 0 && (
-        <section className="space-y-2">
-          <h2 className="text-lg font-medium text-fog">Photos that failed</h2>
-          <ul className="space-y-2">
-            {failed.map((photo) => (
-              <li
-                key={photo.id}
-                className="rounded-lg border border-danger/40 bg-danger/10 p-3"
-              >
-                <p className="text-sm font-medium text-fog">
-                  Photo {photoIndex.get(photo.id) ?? 0}
-                </p>
-                <p className="text-sm text-danger">
-                  {photo.errorMessage ?? 'The photo could not be processed.'}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </section>
       )}
 
       <div className="flex flex-wrap items-center gap-3 border-t border-edge pt-4">

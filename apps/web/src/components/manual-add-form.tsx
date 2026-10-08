@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
   isApiError,
   isGameConflict,
@@ -46,16 +46,34 @@ function savedMessage(game: GameDetail, intent: Intent): string {
   return `${action} “${game.title}”.${linked}`;
 }
 
+export interface ManualAddFormProps {
+  platforms: GamePlatform[];
+  /** Prefilled title, e.g. a flagged item's raw title. Default ''. */
+  initialTitle?: string;
+  /** Prefilled platform id (the select's string value). Default ''. */
+  initialPlatformId?: string;
+  /** Primary submit label. Default 'Save game'. */
+  submitLabel?: string;
+  /** Called with the created game after a successful save. */
+  onSaved?: (game: GameDetail) => void;
+}
+
 export function ManualAddForm({
   platforms: initialPlatforms,
-}: {
-  platforms: GamePlatform[];
-}): React.ReactElement {
+  initialTitle = '',
+  initialPlatformId = '',
+  submitLabel = 'Save game',
+  onSaved,
+}: ManualAddFormProps): React.ReactElement {
   const router = useRouter();
+  // DOM ids come from `useId` so several forms can share one document (e.g. a
+  // manual-add form per flagged item) without label/description collisions.
+  const uid = useId();
   const [platforms, setPlatforms] = useState<GamePlatform[]>(initialPlatforms);
-  const [draft, setDraft] = useState<ManualAddDraft>(() =>
-    emptyManualAddDraft(),
-  );
+  const [draft, setDraft] = useState<ManualAddDraft>(() => ({
+    ...emptyManualAddDraft(initialPlatformId),
+    title: initialTitle,
+  }));
   const [fieldErrors, setFieldErrors] = useState<ManualAddFieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
@@ -138,6 +156,7 @@ export function ManualAddForm({
       const created = await api.games.create(request);
       setStatus(savedMessage(created, intent));
       setLastCreated(created);
+      onSaved?.(created);
       setPlatformError(null);
       setDraft(emptyManualAddDraft(keptPlatformId));
       titleRef.current?.focus();
@@ -179,6 +198,7 @@ export function ManualAddForm({
         `Added a copy of “${updated.title}” — now ${String(updated.copyCount)} copies.`,
       );
       setLastCreated(updated);
+      onSaved?.(updated);
       setConflict(null);
       setDraft(emptyManualAddDraft(draft.platformId));
       titleRef.current?.focus();
@@ -331,14 +351,17 @@ export function ManualAddForm({
       {conflict !== null && (
         <div
           role="alertdialog"
-          aria-labelledby="add-conflict-title"
-          aria-describedby="add-conflict-body"
+          aria-labelledby={`${uid}-conflict-title`}
+          aria-describedby={`${uid}-conflict-body`}
           className="rounded-xl border border-accent/40 bg-accent/5 p-4"
         >
-          <p id="add-conflict-title" className="text-sm font-medium text-fog">
+          <p
+            id={`${uid}-conflict-title`}
+            className="text-sm font-medium text-fog"
+          >
             “{conflict.title}” is already in the catalog.
           </p>
-          <p id="add-conflict-body" className="mt-1 text-sm text-muted">
+          <p id={`${uid}-conflict-body`} className="mt-1 text-sm text-muted">
             {conflictMeta}. Add another copy?
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -370,11 +393,11 @@ export function ManualAddForm({
 
       <div className="grid gap-3 rounded-xl border border-edge bg-shelf/40 p-4 sm:grid-cols-2 sm:p-6">
         <div className="space-y-1.5 sm:col-span-2">
-          <label htmlFor="add-title" className={LABEL}>
+          <label htmlFor={`${uid}-title`} className={LABEL}>
             Title
           </label>
           <input
-            id="add-title"
+            id={`${uid}-title`}
             name="title"
             type="text"
             ref={titleRef}
@@ -387,23 +410,23 @@ export function ManualAddForm({
             className={FIELD}
             aria-invalid={fieldErrors.title !== undefined}
             aria-describedby={
-              fieldErrors.title !== undefined ? 'add-title-error' : undefined
+              fieldErrors.title !== undefined ? `${uid}-title-error` : undefined
             }
           />
           {fieldErrors.title !== undefined && (
-            <p id="add-title-error" className="text-xs text-danger">
+            <p id={`${uid}-title-error`} className="text-xs text-danger">
               {fieldErrors.title}
             </p>
           )}
         </div>
 
         <div className="space-y-1.5 sm:col-span-2">
-          <label htmlFor="add-platform" className={LABEL}>
+          <label htmlFor={`${uid}-platform`} className={LABEL}>
             Platform
           </label>
           <div className="flex flex-wrap items-center gap-2">
             <select
-              id="add-platform"
+              id={`${uid}-platform`}
               name="platformId"
               ref={platformSelectRef}
               value={draft.platformId}
@@ -414,7 +437,7 @@ export function ManualAddForm({
               aria-invalid={fieldErrors.platformId !== undefined}
               aria-describedby={
                 fieldErrors.platformId !== undefined
-                  ? 'add-platform-error'
+                  ? `${uid}-platform-error`
                   : undefined
               }
             >
@@ -443,11 +466,11 @@ export function ManualAddForm({
           )}
           {platformOpen && (
             <div className="mt-2 rounded-lg border border-edge bg-ink/40 p-3">
-              <label htmlFor="add-new-platform" className={LABEL}>
+              <label htmlFor={`${uid}-new-platform`} className={LABEL}>
                 New platform name
               </label>
               <input
-                id="add-new-platform"
+                id={`${uid}-new-platform`}
                 ref={newPlatformRef}
                 type="text"
                 maxLength={255}
@@ -499,7 +522,7 @@ export function ManualAddForm({
             </div>
           )}
           {fieldErrors.platformId !== undefined && (
-            <p id="add-platform-error" className="text-xs text-danger">
+            <p id={`${uid}-platform-error`} className="text-xs text-danger">
               {fieldErrors.platformId}
             </p>
           )}
@@ -511,11 +534,11 @@ export function ManualAddForm({
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="add-edition" className={LABEL}>
+          <label htmlFor={`${uid}-edition`} className={LABEL}>
             Edition
           </label>
           <input
-            id="add-edition"
+            id={`${uid}-edition`}
             name="edition"
             type="text"
             maxLength={255}
@@ -527,23 +550,23 @@ export function ManualAddForm({
             aria-invalid={fieldErrors.edition !== undefined}
             aria-describedby={
               fieldErrors.edition !== undefined
-                ? 'add-edition-error'
+                ? `${uid}-edition-error`
                 : undefined
             }
           />
           {fieldErrors.edition !== undefined && (
-            <p id="add-edition-error" className="text-xs text-danger">
+            <p id={`${uid}-edition-error`} className="text-xs text-danger">
               {fieldErrors.edition}
             </p>
           )}
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="add-year" className={LABEL}>
+          <label htmlFor={`${uid}-year`} className={LABEL}>
             Release year (1000–2100)
           </label>
           <input
-            id="add-year"
+            id={`${uid}-year`}
             name="releaseYear"
             type="text"
             inputMode="numeric"
@@ -557,23 +580,23 @@ export function ManualAddForm({
             aria-invalid={fieldErrors.releaseYear !== undefined}
             aria-describedby={
               fieldErrors.releaseYear !== undefined
-                ? 'add-year-error'
+                ? `${uid}-year-error`
                 : undefined
             }
           />
           {fieldErrors.releaseYear !== undefined && (
-            <p id="add-year-error" className="text-xs text-danger">
+            <p id={`${uid}-year-error`} className="text-xs text-danger">
               {fieldErrors.releaseYear}
             </p>
           )}
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="add-players" className={LABEL}>
+          <label htmlFor={`${uid}-players`} className={LABEL}>
             Players (1–100)
           </label>
           <input
-            id="add-players"
+            id={`${uid}-players`}
             name="playerCount"
             type="text"
             inputMode="numeric"
@@ -587,23 +610,23 @@ export function ManualAddForm({
             aria-invalid={fieldErrors.playerCount !== undefined}
             aria-describedby={
               fieldErrors.playerCount !== undefined
-                ? 'add-players-error'
+                ? `${uid}-players-error`
                 : undefined
             }
           />
           {fieldErrors.playerCount !== undefined && (
-            <p id="add-players-error" className="text-xs text-danger">
+            <p id={`${uid}-players-error`} className="text-xs text-danger">
               {fieldErrors.playerCount}
             </p>
           )}
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="add-publisher" className={LABEL}>
+          <label htmlFor={`${uid}-publisher`} className={LABEL}>
             Publisher
           </label>
           <input
-            id="add-publisher"
+            id={`${uid}-publisher`}
             name="publisher"
             type="text"
             maxLength={255}
@@ -615,23 +638,23 @@ export function ManualAddForm({
             aria-invalid={fieldErrors.publisher !== undefined}
             aria-describedby={
               fieldErrors.publisher !== undefined
-                ? 'add-publisher-error'
+                ? `${uid}-publisher-error`
                 : undefined
             }
           />
           {fieldErrors.publisher !== undefined && (
-            <p id="add-publisher-error" className="text-xs text-danger">
+            <p id={`${uid}-publisher-error`} className="text-xs text-danger">
               {fieldErrors.publisher}
             </p>
           )}
         </div>
 
         <div className="space-y-1.5">
-          <label htmlFor="add-genre" className={LABEL}>
+          <label htmlFor={`${uid}-genre`} className={LABEL}>
             Genre
           </label>
           <input
-            id="add-genre"
+            id={`${uid}-genre`}
             name="genre"
             type="text"
             maxLength={255}
@@ -642,11 +665,11 @@ export function ManualAddForm({
             className={FIELD}
             aria-invalid={fieldErrors.genre !== undefined}
             aria-describedby={
-              fieldErrors.genre !== undefined ? 'add-genre-error' : undefined
+              fieldErrors.genre !== undefined ? `${uid}-genre-error` : undefined
             }
           />
           {fieldErrors.genre !== undefined && (
-            <p id="add-genre-error" className="text-xs text-danger">
+            <p id={`${uid}-genre-error`} className="text-xs text-danger">
               {fieldErrors.genre}
             </p>
           )}
@@ -661,7 +684,7 @@ export function ManualAddForm({
           disabled={busy}
           className={PRIMARY_BUTTON}
         >
-          {saving ? 'Saving…' : 'Save game'}
+          {saving ? 'Saving…' : submitLabel}
         </button>
         <button
           type="submit"

@@ -1,10 +1,10 @@
 ---
 type: Feature
 title: Import Progress UI
-description: The authenticated /import/progress/[batchId] view — aggregate X-of-Y progress, per-photo status and counts, a failure list, live polling with a throttled heartbeat while the queue is paused, and a queue-paused banner with resume.
+description: The authenticated /import/progress/[batchId] view — aggregate X-of-Y progress, per-photo status and counts, a needs-attention review section (flagged-item review, inline manual add, retry, dismiss), live polling with a throttled heartbeat while the queue is paused, and a queue-paused banner with resume.
 tags: [web, import, ui]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T04:23:37Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T05:11:26Z }
 ---
 
 # Overview
@@ -20,21 +20,26 @@ The view answers four questions at a glance:
 1. **How far along is the batch?** — an X-of-Y progress bar and a counts grid.
 2. **What is each photo doing?** — one row per photo with a status, counts, and a
    declared-vs-recognized line.
-3. **What failed, and why?** — the failure reason inline and in a dedicated
-   "Photos that failed" list.
+3. **What needs a decision?** — a **Needs attention** section listing every
+   review-flagged or failed photo, with its flagged items, an inline manual add,
+   and retry/dismiss actions.
 4. **Why did everything stop?** — a "Queue paused" banner naming the integration
    to fix, with a resume action.
 
 # Routes
 
-| Route                        | Renders                                                                                                                                                                                                                                              |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/import/progress/[batchId]` | `(app)/import/progress/[batchId]/page.tsx` (server, `force-dynamic`, `requireUser`) → `ImportProgressView` (client). Calls `getImportBatch` (404/400 → `notFound()`) and `getImportJobsForBatch` in sequence, then hands the snapshot to the client. |
-| `/import`                    | `PhotoImportForm` persists the last successful `batchId` under `localStorage` key `gameshelf.lastImportBatchId` and shows a **Check your most recent import** link back to the progress view.                                                        |
+| Route                        | Renders                                                                                                                                                                                                                                                               |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/import/progress/[batchId]` | `(app)/import/progress/[batchId]/page.tsx` (server, `force-dynamic`, `requireUser`) → `ImportProgressView` (client). Calls `getImportBatch` (404/400 → `notFound()`), `getImportJobsForBatch`, and `getPlatforms` in sequence, then hands the snapshot to the client. |
+| `/import`                    | `PhotoImportForm` persists the last successful `batchId` under `localStorage` key `gameshelf.lastImportBatchId` and shows a **Check your most recent import** link back to the progress view.                                                                         |
 
-The pure view helpers live in `apps/web/src/lib/import/progress.ts` (no side
-effects, so a future test runner can cover them). The client component is
-`apps/web/src/components/import-progress-view.tsx`.
+The pure view helpers live in `apps/web/src/lib/import/progress.ts` (`statusView`,
+`jobCounts`, `batchCounts`, `sortPhotos`, `plural`, `pauseCopy`,
+`photoCountsLine`, `recognitionLine`, `needsReview`, `matchPlatformId` — no side
+effects, so a future test runner can cover them). The client components are
+`apps/web/src/components/import-progress-view.tsx` (page shell and polling) and
+`apps/web/src/components/import-attention-review.tsx` (the needs-attention
+section).
 
 # Polling
 
@@ -99,11 +104,65 @@ Each terminal row also shows a **recognized** line: with no declared count it
 reads "Recognized N games."; with a declared count it reads "You declared D;
 recognized N." and turns danger-coloured when `declaredCountMismatch` is set.
 
-# Failure list
+Rows carry a tone so a flagged photo is visually distinct in the timeline as
+well as in the review section: a `needsAttention` row uses the warning tone
+(`border-accent-strong/40 bg-accent-strong/10`), a `failed` row the danger tone
+(`border-danger/40 bg-danger/10`), and every other row the neutral shelf tone.
 
-A failed photo shows its `errorMessage` inline in the row **and** again in a
-dedicated "Photos that failed" section, so failures are scannable without
-reading every row. A row with a null message falls back to a generic sentence.
+# Needs attention review
+
+After the counts grid and before the `Photos` timeline, `ImportAttentionReview`
+renders a **Needs attention** section. A photo is in the section when
+`needsReview(photo)` is true — that is, the backend `needsAttention` boolean is
+`true` **or** `status === 'failed'` (a failure is action-required even though the
+API does not set `needsAttention` for it). When no photo qualifies the section
+is not rendered at all.
+
+**`needsAttention` is the single source of truth.** It is the backend computed
+field (`status === 'needs_attention'`), derived from the flag rule
+`recognizedCount === 0 || (declaredCount !== null && recognizedCount !==
+declaredCount) || unrecognizedCount > 0`. The client adds **no** rule keyed on
+`declaredCount`; `declaredCountMismatch` is `false` whenever `declaredCount` is
+`null`, so a photo with no declared count and some recognized games is
+`done`/`needsAttention: false` and never appears here. A no-declared photo that
+recognizes **nothing** is flagged by the backend (anti-silent-failure) and is
+shown as-is — that is a backend contract, not a client rule. The
+declared-vs-recognized line with a **Count mismatch** chip is shown for
+non-failed cards.
+
+Each card shows:
+
+- the photo number and its `statusView` label/tone;
+- the counts line (`photoCountsLine`) and, for non-failed cards, the
+  declared-vs-recognized line (`recognitionLine`) — danger-coloured with a
+  **Count mismatch** chip on `declaredCountMismatch`; for failed cards the
+  `errorMessage`;
+- **Flagged items** (only when `unrecognizedCount > 0`): the card fetches
+  `GET /import-jobs/:id/unrecognized` on mount (aborting on unmount/change; a
+  `401` redirects to `/login`). Each item shows its raw title plus
+  `rawPlatform`/`reason` when present. An item can be **Dismissed**
+  (`PATCH /import-jobs/:id/unrecognized/:itemId { dismissed: true }`, removed
+  from the list locally) or opened for **Add manually**;
+- **Add manually**: a disclosure that mounts the shared `ManualAddForm` inline,
+  prefilled with the item's `rawTitle` and the platform resolved by
+  `matchPlatformId` (case-insensitive match on platform name or slug; unknown →
+  empty, the user picks). On success the created game is reported and the
+  item is auto-dismissed (the manual add is treated as the review decision);
+- **Retry photo** (failed cards only): `POST /import-jobs/:id/retry` (the API
+  returns `409` for any non-`failed` status, so the control is not shown
+  elsewhere), followed by a snapshot refetch. A note states that retry re-runs
+  only the games not yet saved and never duplicates games already in the
+  catalog (backend guarantee: pending-only re-run + vision marker + guarded
+  `updateMany`);
+- **Dismiss photo** (`needs_attention`/`failed` cards): a two-step inline
+  `role="alertdialog"` confirm (Cancel focused on open, Escape cancels) calling
+  `PATCH /import-jobs/:id { status: 'dismissed' }`, then a snapshot refetch.
+  Dismissal is sticky — the backend refuses to move a terminal row and
+  `needsAttention` becomes `false`, so the card leaves the section and stays
+  out after a reload.
+
+The old standalone "Photos that failed" list has been absorbed: failed photos
+now appear only in the timeline and in this section.
 
 # Queue-paused banner
 
@@ -125,11 +184,17 @@ stays false and the page keeps polling at the throttled heartbeat.
 
 - The aggregate progress bar is `role="progressbar"` with
   `aria-valuenow/min/max` and an accessible label naming X and Y.
-- The aggregate "X of Y photos processed" line is the **only** `aria-live`
-  region (`role="status"`, `aria-live="polite"`); the footer "Reconnecting…"
-  line and per-photo rows are not live, so a noisy list never announces on every
-  poll.
+- The aggregate "X of Y photos processed" line is the **only** polled
+  `aria-live` region (`role="status"`, `aria-live="polite"`); the footer
+  "Reconnecting…" line and per-photo rows are not live, so a noisy list never
+  announces on every poll. The needs-attention section adds its own action
+  feedback: `role="alert"` for load/action errors and `role="status"
+aria-live="polite"` for the post-save and loading messages.
 - The paused banner is `role="alert"`; the resume error is `role="alert"`.
+- The dismiss-photo confirmation is a `role="alertdialog"` with labelled and
+  described ids, focuses its Cancel button (least-destructive) on open, and
+  closes on Escape; the flagged-item **Add manually** disclosure is a real
+  button with `aria-expanded`.
 - Status is conveyed by text as well as the colour dot; the dot is
   `aria-hidden`. The busy dot uses `animate-pulse motion-reduce:animate-none`.
 - All controls are real links/buttons with focus-visible rings; the counts grid
@@ -139,6 +204,11 @@ stays false and the page keeps polling at the throttled heartbeat.
 
 - Batch progress and the job list: [Import Jobs API](/import-jobs-api.md)
   (`GET /import-jobs/batches/:batchId`, `GET /import-jobs?batchId=…`).
+- Needs-attention review reuses existing endpoints: `GET
+/import-jobs/:id/unrecognized`, `PATCH /import-jobs/:id` (`{ status:
+'dismissed' }`), `PATCH /import-jobs/:id/unrecognized/:itemId` (`{ dismissed:
+true }`), and `POST /import-jobs/:id/retry` — see [Import Jobs
+  API](/import-jobs-api.md).
 - `paused` / `pauseReason` / `pauseSource` and `POST /import-jobs/resume`:
   [Queue Pause on Configuration Error](/queue-pause-on-config-error.md).
 
@@ -166,7 +236,8 @@ npm run dev               # API :3001, web :3000
    recognized/declared line. Now do the same upload with an over-declared count
    and confirm the mismatch line turns red.
 5. **Failure.** Upload a corrupt/unreadable photo. Expect a `Failed` row with its
-   reason, and the same photo in "Photos that failed".
+   reason, and the same photo in the **Needs attention** section (the old
+   standalone "Photos that failed" list is gone).
 6. **Reload safety.** Reload the page mid-import; expect the same state, and a
    second tab opened on the URL to converge.
 7. **Leave and return.** Navigate to `/`, wait, then use **Check your most recent
@@ -181,9 +252,62 @@ npm run dev               # API :3001, web :3000
     expect one refetch (not a 2 s storm).
 11. **No CSP violations.** The console shows no CSP errors from the view.
 
+## Deterministic seed (no LLM/IGDB needed)
+
+A seeded batch exercises the review section without a provider. After `npm run
+dev` and `npm run user:create`:
+
+```bash
+docker compose exec -T mysql mysql -ugameshelf -pgameshelf gameshelf <<'SQL'
+INSERT INTO platforms (name, slug) VALUES ('Nintendo Switch', 'nintendo-switch')
+  ON DUPLICATE KEY UPDATE name = name;
+
+INSERT INTO import_jobs (status, declared_count, recognized_count, imported_count, unrecognized_count, batch_id, created_at, completed_at)
+VALUES ('needs_attention', 5, 3, 2, 2, 'qa-attention', NOW(), NOW());
+SET @job = LAST_INSERT_ID();
+INSERT INTO unrecognized_items (import_job_id, raw_title, raw_platform, reason) VALUES
+  (@job, 'PlayStaton 5', 'PS4', 'No game matched the title in any source — IGDB: no match'),
+  (@job, 'Zorblax Chronicles 9000', NULL, 'No game matched the title in any source');
+
+INSERT INTO import_jobs (status, declared_count, recognized_count, imported_count, unrecognized_count, batch_id, created_at, completed_at)
+VALUES ('done', NULL, 2, 2, 0, 'qa-attention', NOW(), NOW());
+
+INSERT INTO import_jobs (status, error_message, declared_count, recognized_count, imported_count, unrecognized_count, photo_ref, batch_id, created_at, completed_at)
+VALUES ('failed', 'LLM request timed out', 4, 2, 2, 0, 'qa-missing.png', 'qa-attention', NOW(), NOW());
+SQL
+```
+
+Open `http://localhost:3000/import/progress/qa-attention` and verify:
+
+1. **Distinct + comparison.** The mismatch photo is a warning-bordered **Needs
+   attention** card; its line reads `You declared 5; recognized 3.` in red with
+   a **Count mismatch** chip; it also has a warning-toned row in the `Photos`
+   timeline.
+2. **Unrecognized list.** The card lists `PlayStaton 5` (with `PS4` and the
+   reason) and `Zorblax Chronicles 9000` — raw titles, not imported.
+3. **Manual add.** Click **Add manually** on `PlayStaton 5`; the title is
+   prefilled, the platform is empty (PS4 not in the seeded list). Pick
+   `Nintendo Switch`, **Add to catalog**. Expect a status
+   `Added “…”. This flagged item is now marked as reviewed.` and the item
+   disappears. `GET /games` shows one new manual game.
+4. **Retry.** The failed card shows **Retry photo** plus the no-duplicate note.
+   Click it; Network shows `POST /api/import-jobs/<id>/retry` → **202**; the
+   card/row leaves the attention list into the queue (it fails again shortly —
+   expected with no provider/real photo).
+5. **Dismiss photo.** On the mismatch card click **Dismiss photo** → confirm.
+   Network `PATCH /api/import-jobs/<id>` → 200; the card leaves the section and
+   the timeline row shows `Dismissed`. Reload: still `Dismissed` (sticky).
+6. **No declared count.** The `done` photo appears only as `Completed` in the
+   timeline, never in **Needs attention**.
+7. **No console/CSP errors.**
+
 # Out of scope
 
-- Reviewing/acting on flagged `UnrecognizedItem`s (dismiss, retry, manual match)
-  — a separate flagged-item review ticket.
 - Blocking uploads while the queue is paused.
 - A frontend unit/integration test runner (the pure helpers are ready for one).
+- External database search inside the review form (the inline `ManualAddForm` is
+  typed-only, like `/games/new`).
+- Un-dismissing a photo or item — dismissal is one-way in the backend.
+- A compact variant of the inline manual-add widget (the full form is mounted
+  inline, one item at a time).
+- Internationalization.
