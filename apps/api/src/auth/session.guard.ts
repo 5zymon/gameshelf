@@ -8,6 +8,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import type { Response } from 'express';
 import { clearLocaleCookie } from '../i18n/locale-cookie';
+import { clearThemeCookie } from '../settings/theme-cookie';
 import { AUTH_CONFIG, type AuthConfig } from './auth.config';
 import type { AuthenticatedRequest } from './auth.types';
 import { IS_PUBLIC_KEY } from './public.decorator';
@@ -53,9 +54,11 @@ export class SessionGuard implements CanActivate {
     if (session === null) {
       clearSessionCookie(res, this.config);
       // A passively expired/revoked session on a shared device must not keep
-      // rendering in the previous user's language: the locale is a per-user
-      // preference, so it goes away with the session (see locale-cookie.ts).
+      // rendering in the previous user's language or theme: both are per-user
+      // preferences, so they go away with the session (see locale-cookie.ts
+      // and theme-cookie.ts).
       clearLocaleCookie(res, this.config.cookieSecure);
+      clearThemeCookie(res, this.config.cookieSecure);
       throw new UnauthorizedException('Authentication required');
     }
 

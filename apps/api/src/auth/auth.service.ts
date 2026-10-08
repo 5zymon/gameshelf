@@ -1,5 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { toLanguage, type Language } from '../i18n/language';
+import { toTheme, type Theme } from '../settings/theme';
 import type { CreatedUser } from './users.service';
 import { PasswordService } from './password.service';
 import { SessionsService } from './sessions.service';
@@ -16,7 +17,13 @@ export const DUMMY_PASSWORD_HASH =
 export const INVALID_CREDENTIALS_MESSAGE = 'Invalid email or password';
 
 export interface LoginResult {
-  user: { id: number; email: string; language: Language; createdAt: Date };
+  user: {
+    id: number;
+    email: string;
+    language: Language;
+    theme: Theme;
+    createdAt: Date;
+  };
   token: string;
   expiresAt: Date;
 }
@@ -50,6 +57,8 @@ export class AuthService {
         // Coerce a corrupt/legacy row to the default so an invalid value can
         // never reach the NEXT_LOCALE cookie or the response.
         language: toLanguage(user.language),
+        // Same coercion for the theme (NEXT_THEME cookie / response).
+        theme: toTheme(user.theme),
         createdAt: user.createdAt,
       },
       token,
@@ -62,8 +71,12 @@ export class AuthService {
     if (user === null) {
       throw new UnauthorizedException('Authentication required');
     }
-    // Same coercion as login: the response body carries the language.
-    return { ...user, language: toLanguage(user.language) };
+    // Same coercion as login: the response body carries the language and theme.
+    return {
+      ...user,
+      language: toLanguage(user.language),
+      theme: toTheme(user.theme),
+    };
   }
 
   async logout(token: string): Promise<void> {

@@ -27,6 +27,7 @@ const USER = {
   email: 'ash@example.com',
   passwordHash: 'ARGON2HASH',
   language: 'pl',
+  theme: 'system',
   createdAt: new Date('2026-10-05T12:00:00.000Z'),
 };
 
@@ -83,6 +84,7 @@ describe('AuthService (unit)', () => {
         id: 7,
         email: 'ash@example.com',
         language: 'pl',
+        theme: 'system',
         createdAt: USER.createdAt,
       },
       token: 'token',
@@ -138,8 +140,8 @@ describe('AuthService (unit)', () => {
     await expect(service.me(7)).rejects.toBeInstanceOf(UnauthorizedException);
   });
 
-  it('coerces a corrupt stored language to the default in login and me', async () => {
-    const corrupt = { ...USER, language: 'xx' };
+  it('coerces a corrupt stored language and theme to the defaults in login and me', async () => {
+    const corrupt = { ...USER, language: 'xx', theme: 'yy' };
     users.findByEmail.mockResolvedValue(corrupt);
     passwords.verify.mockResolvedValue(true);
     sessions.create.mockResolvedValue({
@@ -149,11 +151,13 @@ describe('AuthService (unit)', () => {
 
     const result = await service.login('ash@example.com', 'pikachu123');
     expect(result.user.language).toBe('pl');
+    expect(result.user.theme).toBe('system');
 
     users.findById.mockResolvedValue(corrupt);
     await expect(service.me(7)).resolves.toEqual({
       ...corrupt,
       language: 'pl',
+      theme: 'system',
     });
   });
 

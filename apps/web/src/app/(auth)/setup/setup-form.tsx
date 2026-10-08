@@ -96,7 +96,7 @@ export function SetupForm(): React.ReactElement {
       <button
         type="submit"
         disabled={submitting}
-        className="w-full rounded-md bg-accent px-3 py-2 font-medium text-ink hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong disabled:opacity-60"
+        className="w-full rounded-md bg-accent px-3 py-2 font-medium text-on-accent hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong disabled:opacity-60"
       >
         {submitting ? t('setup.creating') : t('setup.createAccount')}
       </button>

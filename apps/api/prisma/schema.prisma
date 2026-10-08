@@ -35,6 +35,9 @@ model User {
   // Preferred UI language (ticket 7.2). Defaults to Polish; the value is a
   // bounded code, not free text, so it fits the cookie and the wire contract.
   language     String   @default("pl") @db.VarChar(8)
+  // Preferred UI theme (ticket 7.3): 'light' | 'dark' | 'system'. Defaults to
+  // the OS preference; the closed set is enforced by the PUT validation.
+  theme        String   @default("system") @db.VarChar(8)
   createdAt    DateTime @default(now()) @map("created_at")
 
   sessions Session[]
