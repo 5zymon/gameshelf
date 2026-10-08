@@ -19,11 +19,13 @@ import {
 import { convertHeicToJpeg } from '@/lib/import/heic';
 
 const FIELD =
-  'w-full rounded-md border border-edge bg-ink px-3 py-2 text-fog outline-none focus-visible:ring-2 focus-visible:ring-accent';
+  'w-full h-10 rounded-control border border-edge bg-field px-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent/55 focus:ring-[3px] focus:ring-accent/15 disabled:opacity-60';
 const PRIMARY_BUTTON =
-  'rounded-md bg-accent px-4 py-2 font-medium text-on-accent hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control bg-accent px-4 py-2.5 text-sm leading-none font-semibold text-accent-ink transition-colors duration-[140ms] ease-[ease] hover:bg-accent-strong motion-reduce:transition-none disabled:opacity-60';
 const SECONDARY_BUTTON =
-  'rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control border border-edge bg-surface px-4 py-2.5 text-sm leading-none font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60';
+const SMALL_BUTTON =
+  'inline-flex items-center justify-center rounded-control border border-edge bg-surface px-3 py-1.5 text-xs leading-none font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60';
 
 /** How many HEIC files are decoded at once, across every drop on the page. */
 const HEIC_CONCURRENCY = 3;
@@ -355,9 +357,9 @@ export function PhotoImportForm({
       {readiness.state !== 'enabled' && (
         <div
           role="status"
-          className="space-y-3 rounded-lg border border-edge bg-shelf/40 p-4"
+          className="space-y-3 rounded-card border border-edge bg-surface p-4 shadow-[var(--shadow-card)]"
         >
-          <p className="text-sm text-fog">{gateMessage}</p>
+          <p className="text-sm text-ink">{gateMessage}</p>
           <div className="flex flex-wrap gap-2">
             <Link href="/games/new" className={PRIMARY_BUTTON}>
               {t('addByHand')}
@@ -381,10 +383,10 @@ export function PhotoImportForm({
         onDragLeave={onDragLeave}
         onDrop={onDrop}
         aria-disabled={!enabled}
-        className={`flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed px-6 py-12 text-center transition-colors focus-within:ring-2 focus-within:ring-accent motion-reduce:transition-none ${
+        className={`flex flex-col items-center justify-center gap-2 rounded-card border border-dashed px-6 py-12 text-center transition-colors duration-[140ms] ease-[ease] motion-reduce:transition-none focus-within:border-accent/55 focus-within:ring-[3px] focus-within:ring-accent/15 ${
           dragging
-            ? 'border-accent bg-accent/5'
-            : 'border-edge bg-shelf/20 hover:border-accent/70'
+            ? 'border-accent bg-accent-soft'
+            : 'border-edge bg-surface hover:border-edge-strong'
         } ${enabled ? 'cursor-pointer' : 'cursor-not-allowed opacity-70'}`}
       >
         <input
@@ -396,14 +398,14 @@ export function PhotoImportForm({
           onChange={onInputChange}
           className="sr-only"
         />
-        <span className="text-base font-medium text-fog">{t('dropzone')}</span>
+        <span className="text-base font-medium text-ink">{t('dropzone')}</span>
         <span className="text-sm text-muted">{t('dropzoneHint')}</span>
       </label>
 
       {rejections.length > 0 && (
         <div
           role="alert"
-          className="space-y-1 rounded-lg border border-danger/40 bg-danger/10 p-3"
+          className="space-y-1 rounded-control border border-danger/40 bg-danger/10 p-3"
         >
           <div className="flex items-start justify-between gap-3">
             <p className="text-sm font-medium text-danger">
@@ -414,7 +416,7 @@ export function PhotoImportForm({
               onClick={() => {
                 setRejections([]);
               }}
-              className="rounded text-xs text-danger underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+              className="rounded-control text-xs text-danger underline underline-offset-4"
             >
               {t('dismiss')}
             </button>
@@ -441,9 +443,9 @@ export function PhotoImportForm({
               return (
                 <li
                   key={photo.id}
-                  className="flex flex-col gap-2 rounded-lg border border-edge bg-shelf/30 p-2"
+                  className="flex flex-col gap-2 rounded-control border border-edge bg-surface-2 p-2"
                 >
-                  <div className="relative aspect-square overflow-hidden rounded-md bg-ink">
+                  <div className="relative aspect-square overflow-hidden rounded-control bg-canvas">
                     {photo.previewUrl !== null ? (
                       /* eslint-disable-next-line @next/next/no-img-element -- a just-picked local blob thumbnail; next/image cannot optimise an object URL */
                       <img
@@ -463,7 +465,7 @@ export function PhotoImportForm({
                     )}
                   </div>
 
-                  <p className="truncate text-xs text-fog" title={photo.name}>
+                  <p className="truncate text-xs text-ink" title={photo.name}>
                     {photo.name}
                   </p>
                   <p className="text-xs text-muted">
@@ -516,7 +518,7 @@ export function PhotoImportForm({
                       removePhoto(photo.id);
                     }}
                     aria-label={`${t('remove')} ${photo.name}`}
-                    className={`${SECONDARY_BUTTON} px-2 py-1 text-xs`}
+                    className={SMALL_BUTTON}
                   >
                     {t('remove')}
                   </button>
@@ -531,7 +533,7 @@ export function PhotoImportForm({
         {formError !== null && (
           <p
             role="alert"
-            className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger"
+            className="rounded-control border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger"
           >
             {formError}
           </p>

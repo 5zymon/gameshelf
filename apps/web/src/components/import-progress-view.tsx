@@ -31,23 +31,23 @@ const PHOTO_LIMIT = 100;
 const TONE_DOT: Readonly<Record<ProgressTone, string>> = {
   muted: 'bg-edge',
   active: 'bg-accent',
-  success: 'bg-fog',
-  warning: 'bg-accent-strong',
+  success: 'bg-ink',
+  warning: 'bg-accent',
   danger: 'bg-danger',
 };
 
 const TONE_TEXT: Readonly<Record<ProgressTone, string>> = {
   muted: 'text-muted',
-  active: 'text-accent',
-  success: 'text-fog',
-  warning: 'text-accent-strong',
+  active: 'text-accent-text',
+  success: 'text-ink',
+  warning: 'text-accent-text',
   danger: 'text-danger',
 };
 
 const PRIMARY_BUTTON =
-  'rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control bg-accent px-4 py-2.5 text-sm leading-none font-semibold text-accent-ink transition-colors duration-[140ms] ease-[ease] hover:bg-accent-strong motion-reduce:transition-none disabled:opacity-60';
 const SECONDARY_BUTTON =
-  'rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control border border-edge bg-surface px-4 py-2.5 text-sm leading-none font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60';
 
 function isTerminal(status: ImportJobStatus): boolean {
   return status !== 'queued' && status !== 'processing';
@@ -77,9 +77,9 @@ function CountCell({
   value: number;
 }): React.ReactElement {
   return (
-    <div className="rounded-lg border border-edge bg-shelf/30 p-3">
+    <div className="rounded-control border border-edge bg-surface-2 p-3">
       <dt className="text-xs text-muted">{label}</dt>
-      <dd className="mt-0.5 text-lg font-semibold text-fog">{value}</dd>
+      <dd className="mt-0.5 text-lg font-semibold text-ink">{value}</dd>
     </div>
   );
 }
@@ -275,12 +275,12 @@ export function ImportProgressView({
   const finished = progress.allCompleted;
 
   return (
-    <section className="space-y-6">
+    <section className="mx-auto w-full max-w-5xl space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+        <h1 className="text-[clamp(27px,4.5vw,34px)] leading-[1.15] font-bold tracking-[-0.02em]">
           {finished ? t('titleDone') : t('title')}
         </h1>
-        <p className="text-sm text-muted">
+        <p className="text-[15px] text-muted">
           {finished ? t('subtitleDone', { count: total }) : t('subtitle')}
         </p>
       </header>
@@ -288,13 +288,13 @@ export function ImportProgressView({
       {progress.paused && (
         <div
           role="alert"
-          className="space-y-3 rounded-lg border border-accent-strong/40 bg-accent-strong/10 p-4"
+          className="space-y-3 rounded-control border border-accent/40 bg-accent-soft p-4"
         >
           <div className="space-y-1">
-            <p className="text-sm font-medium text-accent-strong">
+            <p className="text-sm font-medium text-accent-text">
               {t('paused')}
             </p>
-            <p className="text-sm text-fog">
+            <p className="text-sm text-ink">
               {progress.pauseReason ?? pause.reasonFallback}
             </p>
             <p className="text-sm text-muted">{pause.hint}</p>
@@ -366,20 +366,20 @@ export function ImportProgressView({
         <p className="text-sm text-muted">{t('waiting')}</p>
       ) : (
         <div className="space-y-2">
-          <h2 className="text-lg font-medium text-fog">{t('photos')}</h2>
+          <h2 className="text-lg font-medium text-ink">{t('photos')}</h2>
           <ul className="space-y-2">
             {photos.map((photo) => {
               const view = statusView(photo.status, t);
               const recognition = recognitionLine(photo, t);
               const tone = photo.needsAttention
-                ? 'border-accent-strong/40 bg-accent-strong/10'
+                ? 'border-accent/40 bg-accent-soft'
                 : photo.status === 'failed'
                   ? 'border-danger/40 bg-danger/10'
-                  : 'border-edge bg-shelf/30';
+                  : 'border-edge bg-surface-2';
               return (
                 <li
                   key={photo.id}
-                  className={`flex items-start gap-3 rounded-lg border p-3 ${tone}`}
+                  className={`flex items-start gap-3 rounded-control border p-3 ${tone}`}
                 >
                   <span
                     aria-hidden
@@ -387,7 +387,7 @@ export function ImportProgressView({
                   />
                   <div className="min-w-0 flex-1 space-y-1">
                     <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                      <p className="text-sm font-medium text-fog">
+                      <p className="text-sm font-medium text-ink">
                         {t('photo', { n: photoIndex.get(photo.id) ?? 0 })}
                       </p>
                       <p className={`text-xs ${TONE_TEXT[view.tone]}`}>
