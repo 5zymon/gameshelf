@@ -94,8 +94,7 @@ export function isGameConflict(
   );
 }
 
-async function readBody(response: Response): Promise<unknown> {
-  const text = await response.text();
+function parseBodyText(text: string): unknown {
   if (text === '') return null;
   try {
     return JSON.parse(text) as unknown;
@@ -125,22 +124,31 @@ function pickCode(body: unknown): string | null {
 
 /**
  * Reproduces the Nest default error body (`{ statusCode, message, error }`)
- * and the `ConflictException({ ...code, game })` object form. Non-JSON bodies
- * (proxy/HTML on 502/504) degrade to the raw text.
+ * and the `ConflictException({ ...code, game })` object form from raw response
+ * text. Non-JSON bodies (proxy/HTML on 502/504) degrade to the raw text.
+ */
+export function apiErrorFromText(
+  status: number,
+  url: string,
+  text: string,
+): ApiError {
+  const body = parseBodyText(text);
+  return new ApiError({
+    status,
+    url,
+    body,
+    message: pickMessage(body, `Request failed (HTTP ${String(status)})`),
+    code: pickCode(body),
+  });
+}
+
+/**
+ * Same mapping as `apiErrorFromText`, for a fetch `Response`. Kept async so
+ * existing callers do not change.
  */
 export async function apiErrorFromResponse(
   response: Response,
   url: string,
 ): Promise<ApiError> {
-  const body = await readBody(response);
-  return new ApiError({
-    status: response.status,
-    url,
-    body,
-    message: pickMessage(
-      body,
-      `Request failed (HTTP ${String(response.status)})`,
-    ),
-    code: pickCode(body),
-  });
+  return apiErrorFromText(response.status, url, await response.text());
 }

@@ -9,8 +9,8 @@ export const DEFAULT_IMPORT_PHOTOS_DIR = join(
 );
 
 export const UPLOAD_FIELD_NAME = 'files';
-export const MAX_UPLOAD_FILES = 10;
-export const MAX_UPLOAD_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15 MB
+export const MAX_UPLOAD_FILES = 50;
+export const MAX_UPLOAD_FILE_SIZE_BYTES = 20 * 1024 * 1024; // 20 MB
 export const MAX_DECLARED_COUNT = 1000;
 
 export const ALLOWED_IMAGE_MIME_TYPES = new Set([

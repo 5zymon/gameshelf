@@ -33,7 +33,7 @@ cookie is required; an unauthenticated request is `401`).
 
 | Field            | Required | Rules                                                                                                                                                   |
 | ---------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `files`          | yes      | 1–10 photos, each JPEG/PNG/WebP, max 15 MB. Repeat the part once per photo.                                                                             |
+| `files`          | yes      | 1–50 photos, each JPEG/PNG/WebP, max 20 MB. Repeat the part once per photo.                                                                             |
 | `declaredCounts` | no       | Optional per-photo item count, index-aligned with `files`. Repeat the field once per photo; an empty value leaves that photo undeclared. Omit for none. |
 
 `declaredCounts` handling:
@@ -128,4 +128,7 @@ photos already enqueued earlier in the same request stay queued.
   resolution is not.
 - **Thumbnails / a photo gallery** — deliberately not built; storage is
   ephemeral only.
-- **HEIC and other formats** — only JPEG/PNG/WebP are accepted.
+- **HEIC and other formats** — only JPEG/PNG/WebP are accepted by this
+  endpoint; the web client converts HEIC to JPEG in the browser before upload,
+  so HEIC never reaches the API (see
+  [Photo Import Upload UI](/photo-import-upload-ui.md)).

@@ -124,7 +124,9 @@ fails an abandoned job.
 - Pruning `import_jobs` / `unrecognized_items` rows — import history has
   indefinite retention (see [Import Jobs API](/import-jobs-api.md)).
 - Thumbnails or a photo gallery — deliberately not built.
-- HEIC and other formats — only JPEG/PNG/WebP are accepted.
+- HEIC and other formats — only JPEG/PNG/WebP reach the API; the web client
+  converts HEIC to JPEG before upload (see
+  [Photo Import Upload UI](/photo-import-upload-ui.md)).
 - A manual admin sweep endpoint.
 - Clearing a dangling `photoRef` on a terminal row whose file is already gone
   (retry is unaffected; only `failed` can retry and the sweep is the only

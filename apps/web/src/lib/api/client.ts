@@ -15,6 +15,7 @@ import type {
   ListGamesResponse,
   ListImportJobsQuery,
   ListImportJobsResponse,
+  LlmSettingsModel,
   LoginRequest,
   LoginResponse,
   MergePlatformRequest,
@@ -202,6 +203,11 @@ export interface ApiClient {
       options?: ApiRequestOptions,
     ): Promise<StartImportUploadResponse>;
   };
+  settings: {
+    llm: {
+      get(options?: ApiRequestOptions): Promise<LlmSettingsModel>;
+    };
+  };
   auth: {
     login(
       body: LoginRequest,
@@ -382,6 +388,16 @@ export function createApiClient(transport: Transport): ApiClient {
           body: form,
           signal: options?.signal,
         });
+      },
+    },
+    settings: {
+      llm: {
+        get: (options) =>
+          request<LlmSettingsModel>(
+            transport,
+            '/settings/llm',
+            getInit(options),
+          ),
       },
     },
     auth: {
