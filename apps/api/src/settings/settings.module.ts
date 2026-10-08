@@ -1,4 +1,6 @@
 import { Global, Module } from '@nestjs/common';
+import { GameDatabaseController } from './game-database.controller';
+import { GameDatabaseStatusService } from './game-database-status.service';
 import { LlmSettingsController } from './llm-settings.controller';
 import { LlmKeyCryptoService } from './llm-key-crypto.service';
 import { LlmSettingsService } from './llm-settings.service';
@@ -17,10 +19,11 @@ import { VisionService } from './vision/vision.service';
  */
 @Global()
 @Module({
-  controllers: [LlmSettingsController],
+  controllers: [LlmSettingsController, GameDatabaseController],
   providers: [
     LlmSettingsService,
     LlmKeyCryptoService,
+    GameDatabaseStatusService,
     VisionService,
     VisionProviderRegistry,
     GeminiVisionProvider,

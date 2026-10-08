@@ -270,6 +270,29 @@ describe('PlatformsService (unit)', () => {
         },
       });
     });
+
+    it('restores a hidden reference platform even when every field matches', async () => {
+      mock.platform.findUnique.mockResolvedValue({
+        abbreviation: 'PS5',
+        alternativeName: null,
+        platformFamily: 1,
+        igdbId: 130,
+        hidden: true,
+      });
+      mock.platform.update.mockResolvedValue({});
+
+      await expect(service.updateCanonical(1, input)).resolves.toBe(true);
+      expect(mock.platform.update).toHaveBeenCalledWith({
+        where: { id: 1 },
+        data: {
+          abbreviation: 'PS5',
+          alternativeName: null,
+          platformFamily: 1,
+          igdbId: 130,
+          hidden: false,
+        },
+      });
+    });
   });
 
   describe('create', () => {

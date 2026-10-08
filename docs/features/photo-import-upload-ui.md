@@ -174,8 +174,8 @@ npm run dev               # API :3001, web :3000
 
 - The full import progress view (per-photo status/counts/failures, polling,
   queue-paused banner) — ticket 6.3.
-- The LLM settings screen (provider/key/test connection) — ticket 6.2; the
-  disabled gate links to the existing `/settings` placeholder.
+- The LLM settings screen itself — see [LLM Settings UI](/llm-settings-ui.md);
+  the disabled gate links to the real `/settings` screen.
 - A game-database (IGDB) readiness gate — the gate is LLM-only, mirroring the
   upload endpoint.
 - A privacy statement distinguishing a local vs remote LLM endpoint.

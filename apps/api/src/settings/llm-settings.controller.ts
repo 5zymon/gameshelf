@@ -49,8 +49,10 @@ export class LlmSettingsController {
   @ApiOperation({
     summary: 'Update provider/model/API key (key is write-only)',
     description:
-      'Omit `apiKey` to keep the stored key; send "" to clear it. The key is ' +
-      'encrypted at rest and never returned. Saving a key also resumes a ' +
+      'Omit `apiKey`/`model` to keep them when `provider` is unchanged; ' +
+      'changing `provider` without a replacement resets `model` to the ' +
+      'provider default and clears the stored key. Send "" to clear. The key ' +
+      'is encrypted at rest and never returned. Saving a key also resumes a ' +
       'photo-import queue paused by an LLM configuration error.',
   })
   @ApiOkResponse({ type: LlmSettingsModel })

@@ -7,6 +7,7 @@ import {
   Param,
   Patch,
   Post,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -18,18 +19,25 @@ import {
   ApiParam,
   ApiResponse,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { IgdbConfigError, IgdbError } from '../game-catalog/igdb.errors';
 import { CreatePlatformDto } from './dto/create-platform.dto';
 import { MergePlatformDto } from './dto/merge-platform.dto';
 import { PlatformIdParamDto } from './dto/platform-id-param.dto';
 import { PlatformModel } from './dto/platform-response.model';
+import { PlatformSyncResultModel } from './dto/platform-sync-result.model';
 import { UpdatePlatformDto } from './dto/update-platform.dto';
 import { PlatformsService } from './platforms.service';
+import { PlatformsSyncService } from './platforms-sync.service';
 
 @ApiTags('platforms')
 @Controller('platforms')
 export class PlatformsController {
-  constructor(private readonly platformsService: PlatformsService) {}
+  constructor(
+    private readonly platformsService: PlatformsService,
+    private readonly sync: PlatformsSyncService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -132,5 +140,35 @@ export class PlatformsController {
   @ApiNotFoundResponse({ description: 'Platform not found' })
   remove(@Param() params: PlatformIdParamDto): Promise<void> {
     return this.platformsService.remove(params.id);
+  }
+
+  @Post('refresh')
+  @HttpCode(200)
+  @ApiOperation({
+    summary:
+      'Refresh the reference platform list from IGDB; restores hidden reference platforms',
+  })
+  @ApiOkResponse({ type: PlatformSyncResultModel })
+  @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  @ApiResponse({
+    status: 503,
+    description: 'IGDB not configured or unreachable',
+  })
+  async refresh(): Promise<PlatformSyncResultModel> {
+    try {
+      return await this.sync.sync();
+    } catch (error) {
+      if (error instanceof IgdbConfigError) {
+        throw new ServiceUnavailableException(
+          'The game database is not configured or rejected the credentials',
+        );
+      }
+      if (error instanceof IgdbError) {
+        throw new ServiceUnavailableException(
+          'The game database could not be reached; try again later',
+        );
+      }
+      throw error;
+    }
   }
 }

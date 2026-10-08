@@ -182,6 +182,14 @@ export interface MergePlatformRequest {
   targetId: number;
 }
 
+/** Mirrors `PlatformsSyncService.PlatformSyncResult`. */
+export interface PlatformSyncResult {
+  fetched: number;
+  created: number;
+  updated: number;
+  unchanged: number;
+}
+
 // ── Import jobs ──────────────────────────────────────────────────────────
 export const IMPORT_JOB_STATUSES = [
   'queued',
@@ -308,6 +316,56 @@ export interface LlmSettingsModel {
   importEnabled: boolean;
   availableProviders: LlmProviderSummary[];
   updatedAt: string | null;
+}
+
+/** Mirrors `apps/api/src/settings/dto/put-llm-settings.dto.ts` (write-only key). */
+export interface PutLlmSettingsRequest {
+  provider: VisionProviderId;
+  // Omit = keep when `provider` is unchanged; reset to the provider default
+  // when it changes. "" = clear back to the default.
+  model?: string;
+  // Omit = keep when `provider` is unchanged; the stored key is cleared when it
+  // changes. "" = clear.
+  apiKey?: string;
+}
+
+/** Mirrors `VisionErrorCode` in `apps/api/src/settings/vision/vision.errors.ts`. */
+export type VisionErrorCode =
+  | 'unknown_provider'
+  | 'unauthorized'
+  | 'model_not_found'
+  | 'rate_limited'
+  | 'timeout'
+  | 'bad_response'
+  | 'network'
+  | 'server_error';
+export type VisionTestCode = 'ok' | 'not_configured' | VisionErrorCode;
+
+/** Mirrors `apps/api/src/settings/dto/llm-test-result.model.ts`. */
+export interface LlmTestResult {
+  ok: boolean;
+  code: VisionTestCode;
+  provider: VisionProviderId;
+  model: string;
+  message: string;
+}
+
+// ── Game database status ────────────────────────────────────────────────
+export const GAME_DATABASE_IDS = ['igdb', 'mobygames'] as const;
+export type GameDatabaseId = (typeof GAME_DATABASE_IDS)[number];
+export const GAME_DATABASE_STATES = [
+  'configured',
+  'missing',
+  'rejected',
+] as const;
+export type GameDatabaseState = (typeof GAME_DATABASE_STATES)[number];
+
+/** Mirrors `apps/api/src/settings/dto/game-database-status.model.ts`. */
+export interface GameDatabaseStatus {
+  id: GameDatabaseId;
+  label: string;
+  state: GameDatabaseState;
+  message: string | null;
 }
 
 // ── Auth / setup ─────────────────────────────────────────────────────────
