@@ -42,3 +42,6 @@ coverage/
 
 # Local Node version managers / downloads
 .node/
+
+.openchamber
+.qa
