@@ -1,13 +1,15 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+/** `key` maps each route to its `nav` message key (labels are translated). */
 const NAV_ITEMS = [
-  { href: '/', label: 'Catalog' },
-  { href: '/platforms', label: 'Platforms' },
-  { href: '/import', label: 'Import' },
-  { href: '/settings', label: 'Settings' },
+  { href: '/', key: 'catalog' },
+  { href: '/platforms', key: 'platforms' },
+  { href: '/import', key: 'import' },
+  { href: '/settings', key: 'settings' },
 ] as const;
 
 const GAME_DETAIL = /^\/games\/\d+(?:\/|$)/;
@@ -19,9 +21,10 @@ function isActive(pathname: string, href: string): boolean {
 
 export function MainNav(): React.ReactElement {
   const pathname = usePathname();
+  const t = useTranslations('nav');
   return (
     <nav
-      aria-label="Main"
+      aria-label={t('main')}
       className="flex flex-wrap items-center gap-1 text-sm"
     >
       {NAV_ITEMS.map((item) => {
@@ -37,7 +40,7 @@ export function MainNav(): React.ReactElement {
                 : 'text-muted hover:bg-shelf hover:text-fog'
             }`}
           >
-            {item.label}
+            {t(item.key)}
           </Link>
         );
       })}

@@ -10,6 +10,7 @@ import type {
   ListImportJobsResponse,
   LlmSettingsModel,
   Platform,
+  PreferencesModel,
 } from './contracts';
 import { createApiClient, type Transport } from './client';
 import { isApiError } from './errors';
@@ -84,6 +85,16 @@ export async function getLlmSettings(): Promise<LlmSettingsModel | null> {
 /** Game-database configuration status for the settings screen. */
 export async function getGameDatabaseStatus(): Promise<GameDatabaseStatus[]> {
   return api.settings.gameDatabases.status();
+}
+
+/** The signed-in user's preferences (currently only the UI language). 401 → null (not signed in). */
+export async function getPreferences(): Promise<PreferencesModel | null> {
+  try {
+    return await api.settings.preferences.get();
+  } catch (error) {
+    if (isApiError(error) && error.status === 401) return null;
+    throw error;
+  }
 }
 
 /** Aggregated batch progress. 400/404 → null (unknown/invalid batch). */

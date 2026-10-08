@@ -1,3 +1,5 @@
+import type { TranslatorFor } from '@/i18n/translate';
+
 export const MAX_PHOTOS = 50;
 export const MAX_PHOTO_BYTES = 20 * 1024 * 1024; // 20 MB
 export const MAX_DECLARED_COUNT = 1000;
@@ -29,6 +31,7 @@ export function fileExtension(name: string): string {
  */
 export function classifyFile(
   file: File,
+  t: TranslatorFor<'import'>,
 ): { ok: true; kind: PhotoKind } | { ok: false; reason: string } {
   const ext = fileExtension(file.name);
   const mime = file.type.toLowerCase();
@@ -37,10 +40,7 @@ export function classifyFile(
   if (RASTER_EXT.has(ext) || RASTER_MIME.has(mime)) {
     return { ok: true, kind: 'raster' };
   }
-  return {
-    ok: false,
-    reason: 'Unsupported file type. Use JPEG, PNG, WebP or HEIC.',
-  };
+  return { ok: false, reason: t('rejections.unsupported') };
 }
 
 /**
@@ -68,6 +68,8 @@ export interface IntakeResult {
 export function validateIntake(
   existingCount: number,
   incoming: readonly File[],
+  t: TranslatorFor<'import'>,
+  locale: string,
 ): IntakeResult {
   const accepted: IntakeResult['accepted'] = [];
   const rejections: IntakeResult['rejections'] = [];
@@ -76,18 +78,21 @@ export function validateIntake(
     if (remaining <= 0) {
       rejections.push({
         name: file.name,
-        reason: `Only ${String(MAX_PHOTOS)} photos can be imported at once.`,
+        reason: t('rejections.tooMany', { limit: MAX_PHOTOS }),
       });
       continue;
     }
     if (file.size > MAX_PHOTO_BYTES) {
       rejections.push({
         name: file.name,
-        reason: `Too large (${formatBytes(file.size)}). The limit is ${formatBytes(MAX_PHOTO_BYTES)}.`,
+        reason: t('tooLarge', {
+          size: formatBytes(file.size, locale),
+          limit: formatBytes(MAX_PHOTO_BYTES, locale),
+        }),
       });
       continue;
     }
-    const kind = classifyFile(file);
+    const kind = classifyFile(file, t);
     if (!kind.ok) {
       rejections.push({ name: file.name, reason: kind.reason });
       continue;
@@ -99,26 +104,34 @@ export function validateIntake(
 }
 
 /** Validates one optional count field. '' is valid (undeclared). */
-export function declaredCountError(raw: string): string | null {
+export function declaredCountError(
+  raw: string,
+  t: TranslatorFor<'import'>,
+): string | null {
   const value = raw.trim();
   if (value === '') return null;
-  if (!/^\d+$/.test(value)) return 'Enter a whole number, or leave it blank.';
+  if (!/^\d+$/.test(value)) return t('countError.notNumber');
   const n = Number(value);
   return n >= 1 && n <= MAX_DECLARED_COUNT
     ? null
-    : `Enter a number from 1 to ${String(MAX_DECLARED_COUNT)}, or leave it blank.`;
+    : t('countError.range', { max: MAX_DECLARED_COUNT });
 }
 
 /** One entry per uploaded photo, index-aligned; '' means undeclared. */
-export function buildDeclaredCounts(counts: readonly string[]): string[] {
+export function buildDeclaredCounts(
+  counts: readonly string[],
+  t: TranslatorFor<'import'>,
+): string[] {
   return counts.map((value) =>
-    declaredCountError(value) === null ? value.trim() : '',
+    declaredCountError(value, t) === null ? value.trim() : '',
   );
 }
 
-export function formatBytes(bytes: number): string {
+/** Locale-aware size: `12,5 MB` in PL, `12.5 MB` in EN. */
+export function formatBytes(bytes: number, locale: string): string {
   const mb = bytes / (1024 * 1024);
+  const nf = new Intl.NumberFormat(locale, { maximumFractionDigits: 1 });
   return mb >= 1
-    ? `${mb.toFixed(1)} MB`
-    : `${String(Math.max(1, Math.round(bytes / 1024)))} KB`;
+    ? `${nf.format(mb)} MB`
+    : `${nf.format(Math.max(1, Math.round(bytes / 1024)))} KB`;
 }

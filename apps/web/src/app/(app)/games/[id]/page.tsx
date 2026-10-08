@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { requireUser } from '@/lib/auth';
 import { getGame, getPlatforms } from '@/lib/api/server';
@@ -29,13 +30,14 @@ export default async function GameDetailPage({
     getPlatforms(),
   ]);
   if (game === null) notFound();
+  const t = await getTranslations('common');
   return (
     <section className="space-y-6">
       <Link
         href="/"
         className="text-sm text-accent underline-offset-4 hover:text-accent-strong hover:underline"
       >
-        ← Back to catalog
+        ← {t('backToCatalog')}
       </Link>
       <GameDetailView game={game} platforms={platforms} />
     </section>

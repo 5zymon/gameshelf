@@ -1,9 +1,12 @@
 import { Global, Module } from '@nestjs/common';
+import { AuthModule } from '../auth/auth.module';
 import { GameDatabaseController } from './game-database.controller';
 import { GameDatabaseStatusService } from './game-database-status.service';
 import { LlmSettingsController } from './llm-settings.controller';
 import { LlmKeyCryptoService } from './llm-key-crypto.service';
 import { LlmSettingsService } from './llm-settings.service';
+import { PreferencesController } from './preferences.controller';
+import { PreferencesService } from './preferences.service';
 import {
   FetchVisionHttpClient,
   VisionHttpClient,
@@ -19,11 +22,19 @@ import { VisionService } from './vision/vision.service';
  */
 @Global()
 @Module({
-  controllers: [LlmSettingsController, GameDatabaseController],
+  // `AuthModule` provides the `AUTH_CONFIG` token the preferences controller
+  // reads to mirror the session cookie's `Secure` flag onto `NEXT_LOCALE`.
+  imports: [AuthModule],
+  controllers: [
+    LlmSettingsController,
+    GameDatabaseController,
+    PreferencesController,
+  ],
   providers: [
     LlmSettingsService,
     LlmKeyCryptoService,
     GameDatabaseStatusService,
+    PreferencesService,
     VisionService,
     VisionProviderRegistry,
     GeminiVisionProvider,

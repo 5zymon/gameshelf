@@ -1,16 +1,14 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { isApiError } from '@/lib/api';
 import { api } from '@/lib/api/browser';
 
-const INVALID_INPUT = 'Enter an email and a password, then try again.';
-const GENERIC_ERROR =
-  "We couldn't create your account right now. Please try again.";
-
 export function SetupForm(): React.ReactElement {
   const router = useRouter();
+  const t = useTranslations('auth');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -34,10 +32,10 @@ export function SetupForm(): React.ReactElement {
         return;
       }
       if (isApiError(error) && error.status === 400) {
-        setError(INVALID_INPUT);
+        setError(t('setup.inputError'));
         return;
       }
-      setError(GENERIC_ERROR);
+      setError(t('setup.genericError'));
     } finally {
       setSubmitting(false);
     }
@@ -62,7 +60,7 @@ export function SetupForm(): React.ReactElement {
       )}
       <div className="space-y-1.5">
         <label htmlFor="setup-email" className="block text-sm text-muted">
-          Email
+          {t('setup.email')}
         </label>
         <input
           id="setup-email"
@@ -80,7 +78,7 @@ export function SetupForm(): React.ReactElement {
       </div>
       <div className="space-y-1.5">
         <label htmlFor="setup-password" className="block text-sm text-muted">
-          Password
+          {t('setup.password')}
         </label>
         <input
           id="setup-password"
@@ -100,7 +98,7 @@ export function SetupForm(): React.ReactElement {
         disabled={submitting}
         className="w-full rounded-md bg-accent px-3 py-2 font-medium text-ink hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong disabled:opacity-60"
       >
-        {submitting ? 'Creating…' : 'Create account'}
+        {submitting ? t('setup.creating') : t('setup.createAccount')}
       </button>
     </form>
   );

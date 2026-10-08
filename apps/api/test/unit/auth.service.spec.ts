@@ -26,6 +26,7 @@ const USER = {
   id: 7,
   email: 'ash@example.com',
   passwordHash: 'ARGON2HASH',
+  language: 'pl',
   createdAt: new Date('2026-10-05T12:00:00.000Z'),
 };
 
@@ -78,7 +79,12 @@ describe('AuthService (unit)', () => {
       userAgent: 'jest-agent',
     });
     expect(result).toEqual({
-      user: { id: 7, email: 'ash@example.com', createdAt: USER.createdAt },
+      user: {
+        id: 7,
+        email: 'ash@example.com',
+        language: 'pl',
+        createdAt: USER.createdAt,
+      },
       token: 'token',
       expiresAt,
     });
@@ -130,6 +136,25 @@ describe('AuthService (unit)', () => {
 
     users.findById.mockResolvedValue(null);
     await expect(service.me(7)).rejects.toBeInstanceOf(UnauthorizedException);
+  });
+
+  it('coerces a corrupt stored language to the default in login and me', async () => {
+    const corrupt = { ...USER, language: 'xx' };
+    users.findByEmail.mockResolvedValue(corrupt);
+    passwords.verify.mockResolvedValue(true);
+    sessions.create.mockResolvedValue({
+      token: 'token',
+      expiresAt: new Date('2026-10-06T12:00:00.000Z'),
+    });
+
+    const result = await service.login('ash@example.com', 'pikachu123');
+    expect(result.user.language).toBe('pl');
+
+    users.findById.mockResolvedValue(corrupt);
+    await expect(service.me(7)).resolves.toEqual({
+      ...corrupt,
+      language: 'pl',
+    });
   });
 
   it('logout() revokes the session token', async () => {

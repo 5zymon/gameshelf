@@ -1,3 +1,4 @@
+import type { TranslatorFor } from '@/i18n/translate';
 import { isApiError, type Platform } from '@/lib/api';
 
 /**
@@ -19,22 +20,20 @@ export function platformKind(
   return 'manual';
 }
 
-export const PLATFORM_KIND_LABEL: Record<PlatformKind, string> = {
-  import: 'Added by import',
-  canonical: 'Reference',
-  manual: 'Manual',
-};
+/** Kind chip label from the `platforms` namespace (`kind.*`). */
+export function platformKindLabel(
+  kind: PlatformKind,
+  t: TranslatorFor<'platforms'>,
+): string {
+  return t(`kind.${kind}`);
+}
 
-const PLATFORM_KIND_HINT: Record<PlatformKind, string> = {
-  import:
-    'Created by an import for a name it did not recognize. Keep it as is, or merge it into an existing platform.',
-  canonical:
-    'Part of the reference list synced from the game database. Matching targets, not user data.',
-  manual: 'A platform you added by hand.',
-};
-
-export function platformKindHint(kind: PlatformKind): string {
-  return PLATFORM_KIND_HINT[kind];
+/** Kind chip tooltip from the `platforms` namespace (`kindHint.*`). */
+export function platformKindHint(
+  kind: PlatformKind,
+  t: TranslatorFor<'platforms'>,
+): string {
+  return t(`kindHint.${kind}`);
 }
 
 /**
@@ -72,20 +71,28 @@ export function splitImported(platforms: readonly Platform[]): {
   return { imported, rest };
 }
 
-export function gameCountLabel(count: number): string {
-  return `${String(count)} ${count === 1 ? 'game' : 'games'}`;
+export function gameCountLabel(
+  count: number,
+  t: TranslatorFor<'platforms'>,
+): string {
+  return t('gameCount', { count });
 }
 
 export function mergeConfirmation(
   sourceName: string,
   targetName: string,
   gameCount: number,
+  t: TranslatorFor<'platforms'>,
 ): string {
-  return `Move ${gameCountLabel(gameCount)} from “${sourceName}” to “${targetName}”? “${sourceName}” is kept as an alias so future imports still match it; the platform is then removed.`;
+  return t('merge.confirm', {
+    source: sourceName,
+    target: targetName,
+    count: gameCount,
+  });
 }
 
-export function deleteBlockedHint(): string {
-  return 'Reassign its games first — merge it into another platform, or edit each game.';
+export function deleteBlockedHint(t: TranslatorFor<'platforms'>): string {
+  return t('confirmDelete.hint');
 }
 
 /**

@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
 import { isApiError } from '@/lib/api';
@@ -13,6 +14,7 @@ export function DeleteGameButton({
   title: string;
 }): React.ReactElement {
   const router = useRouter();
+  const t = useTranslations('deleteGame');
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -79,7 +81,7 @@ export function DeleteGameButton({
       setError(
         isApiError(caught) && caught.status !== 0
           ? caught.userMessage
-          : "We couldn't delete this game. Check your connection and try again.",
+          : t('error.generic'),
       );
     } finally {
       setDeleting(false);
@@ -111,10 +113,10 @@ export function DeleteGameButton({
         }}
       >
         <p id={labelId} className="text-sm font-medium text-fog">
-          Delete “{title}”?
+          {t('confirmTitle', { title })}
         </p>
         <p id={descriptionId} className="mt-1 text-sm text-muted">
-          This can’t be undone.
+          {t('confirmBody')}
         </p>
         {error !== null && (
           <p role="alert" className="mt-2 text-sm text-danger">
@@ -129,7 +131,7 @@ export function DeleteGameButton({
             disabled={deleting}
             className="rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60"
           >
-            Cancel
+            {t('cancel')}
           </button>
           <button
             ref={confirmRef}
@@ -140,7 +142,7 @@ export function DeleteGameButton({
             disabled={deleting}
             className="rounded-md bg-danger px-4 py-2 text-sm font-medium text-ink hover:bg-danger/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-60"
           >
-            {deleting ? 'Deleting…' : 'Delete'}
+            {deleting ? t('deleting') : t('delete')}
           </button>
         </div>
       </div>
@@ -158,7 +160,7 @@ export function DeleteGameButton({
         }}
         className="rounded-md border border-danger/40 px-4 py-2 text-sm font-medium text-danger hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
       >
-        Delete game
+        {t('open')}
       </button>
       {error !== null && (
         <p role="alert" className="text-xs text-danger">

@@ -1,3 +1,5 @@
+import { getTranslations } from 'next-intl/server';
+
 /**
  * Route-level loading skeletons. Server components: no interactivity, only the
  * same geometry as the real content so the fallback→content swap does not shift
@@ -31,10 +33,11 @@ export function GameCardSkeleton(): React.ReactElement {
   );
 }
 
-export function CatalogSkeleton(): React.ReactElement {
+export async function CatalogSkeleton(): Promise<React.ReactElement> {
+  const t = await getTranslations('loading');
   return (
     <section className={`space-y-6 ${PULSE}`} aria-busy="true">
-      <span className="sr-only">Loading games…</span>
+      <span className="sr-only">{t('catalog')}</span>
       <header className="space-y-1">
         <SkeletonBlock className="h-8 w-48" />
         <SkeletonBlock className="h-4 w-64" />
@@ -67,10 +70,11 @@ export function CatalogSkeleton(): React.ReactElement {
   );
 }
 
-export function GameDetailSkeleton(): React.ReactElement {
+export async function GameDetailSkeleton(): Promise<React.ReactElement> {
+  const t = await getTranslations('loading');
   return (
     <section className={`space-y-6 ${PULSE}`} aria-busy="true">
-      <span className="sr-only">Loading game…</span>
+      <span className="sr-only">{t('gameDetail')}</span>
       <SkeletonBlock className="h-5 w-32" />
       <article className="space-y-6">
         <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
@@ -116,10 +120,11 @@ export function GameDetailSkeleton(): React.ReactElement {
   );
 }
 
-export function ImportProgressSkeleton(): React.ReactElement {
+export async function ImportProgressSkeleton(): Promise<React.ReactElement> {
+  const t = await getTranslations('loading');
   return (
     <section className={`space-y-6 ${PULSE}`} aria-busy="true">
-      <span className="sr-only">Loading import progress…</span>
+      <span className="sr-only">{t('importProgress')}</span>
       <header className="space-y-1">
         <SkeletonBlock className="h-8 w-56" />
         <SkeletonBlock className="h-4 w-72" />

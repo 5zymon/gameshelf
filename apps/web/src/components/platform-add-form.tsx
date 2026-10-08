@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useId, useState } from 'react';
 import { isApiError } from '@/lib/api';
@@ -18,6 +19,7 @@ export function PlatformAddForm({
   onChanged: () => void;
 }): React.ReactElement {
   const router = useRouter();
+  const t = useTranslations('platforms');
   const uid = useId();
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -50,9 +52,7 @@ export function PlatformAddForm({
         setError(caught.userMessage);
         return;
       }
-      setError(
-        platformErrorMessage(caught, 'Couldn’t reach the shelf. Try again.'),
-      );
+      setError(platformErrorMessage(caught, t('error.add')));
     } finally {
       setBusy(false);
     }
@@ -65,12 +65,9 @@ export function PlatformAddForm({
     >
       <div className="space-y-1">
         <h2 id={`${uid}-heading`} className="text-lg font-medium text-fog">
-          Add a platform
+          {t('add.title')}
         </h2>
-        <p className="text-sm text-muted">
-          Create a platform the import will match against. Names are compared
-          case- and punctuation-insensitively.
-        </p>
+        <p className="text-sm text-muted">{t('add.body')}</p>
       </div>
       <form
         noValidate
@@ -81,7 +78,7 @@ export function PlatformAddForm({
       >
         <div className="min-w-0 flex-1 space-y-1.5">
           <label htmlFor={`${uid}-name`} className={LABEL}>
-            Name
+            {t('name')}
           </label>
           <input
             id={`${uid}-name`}
@@ -99,7 +96,7 @@ export function PlatformAddForm({
           />
         </div>
         <button type="submit" disabled={disabled} className={PRIMARY_BUTTON}>
-          {busy ? 'Adding…' : 'Add platform'}
+          {busy ? t('adding') : t('addPlatform')}
         </button>
       </form>
       {error !== null && (
@@ -107,7 +104,7 @@ export function PlatformAddForm({
           {error}
           {conflict && (
             <span className="mt-0.5 block text-xs text-muted">
-              It already exists — rename or merge it instead.
+              {t('add.conflict')}
             </span>
           )}
         </p>

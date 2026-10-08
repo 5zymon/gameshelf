@@ -1,5 +1,6 @@
 'use client';
 
+import { useLocale, useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
@@ -81,6 +82,8 @@ export function PhotoImportForm({
   readiness: LlmReadiness;
 }): React.ReactElement {
   const router = useRouter();
+  const t = useTranslations('import');
+  const locale = useLocale();
   const [photos, setPhotos] = useState<PhotoItem[]>([]);
   const [rejections, setRejections] = useState<
     { name: string; reason: string }[]
@@ -126,7 +129,7 @@ export function PhotoImportForm({
     (photo) => photo.status === 'converting',
   ).length;
   const hasInvalidCount = photos.some(
-    (photo) => declaredCountError(photo.declaredCount) !== null,
+    (photo) => declaredCountError(photo.declaredCount, t) !== null,
   );
   const canSubmit =
     enabled &&
@@ -147,6 +150,8 @@ export function PhotoImportForm({
     const { accepted, rejections: bad } = validateIntake(
       photos.length,
       incoming,
+      t,
+      locale,
     );
     if (bad.length > 0) setRejections((current) => [...current, ...bad]);
     if (accepted.length === 0) return;
@@ -202,7 +207,10 @@ export function PhotoImportForm({
                   ? {
                       ...photo,
                       status: 'error',
-                      error: `Too large (${formatBytes(jpeg.size)}). The limit is ${formatBytes(MAX_PHOTO_BYTES)}.`,
+                      error: t('tooLarge', {
+                        size: formatBytes(jpeg.size, locale),
+                        limit: formatBytes(MAX_PHOTO_BYTES, locale),
+                      }),
                     }
                   : photo,
               ),
@@ -226,7 +234,7 @@ export function PhotoImportForm({
                 ? {
                     ...photo,
                     status: 'error',
-                    error: "We couldn't read this HEIC photo.",
+                    error: t('heicError'),
                   }
                 : photo,
             ),
@@ -288,6 +296,7 @@ export function PhotoImportForm({
       .filter((file): file is File => file !== null);
     const counts = buildDeclaredCounts(
       ready.map((photo) => photo.declaredCount),
+      t,
     );
 
     setSubmitting(true);
@@ -312,9 +321,9 @@ export function PhotoImportForm({
       setFormError(
         isApiError(caught) && caught.status !== 0
           ? caught.status === 503
-            ? 'Photo import is unavailable right now — no LLM API key is set.'
+            ? t('error.unavailable')
             : caught.userMessage
-          : "We couldn't start the import. Check your connection and try again.",
+          : t('error.generic'),
       );
     } finally {
       setSubmitting(false);
@@ -322,9 +331,7 @@ export function PhotoImportForm({
   }
 
   const gateMessage =
-    readiness.state === 'disabled'
-      ? 'Photo import is off because no LLM API key is set. Add a key in Settings, then come back — or add games by hand.'
-      : 'We couldn’t read the LLM settings, so photo import is paused. Try again — or add games by hand.';
+    readiness.state === 'disabled' ? t('gate.disabled') : t('gate.unknown');
 
   return (
     <form
@@ -340,7 +347,7 @@ export function PhotoImportForm({
             href={`/import/progress/${lastBatchId}`}
             className="text-accent underline underline-offset-4"
           >
-            Check your most recent import
+            {t('recentImport')}
           </Link>
         </p>
       )}
@@ -353,10 +360,10 @@ export function PhotoImportForm({
           <p className="text-sm text-fog">{gateMessage}</p>
           <div className="flex flex-wrap gap-2">
             <Link href="/games/new" className={PRIMARY_BUTTON}>
-              Add a game by hand
+              {t('addByHand')}
             </Link>
             <Link href="/settings" className={SECONDARY_BUTTON}>
-              Open settings
+              {t('openSettings')}
             </Link>
           </div>
         </div>
@@ -365,7 +372,7 @@ export function PhotoImportForm({
       {readiness.state === 'enabled' &&
         readiness.providerLabel !== undefined && (
           <p className="text-sm text-muted">
-            Photos are sent to your configured LLM ({readiness.providerLabel}).
+            {t('providerNotice', { provider: readiness.providerLabel })}
           </p>
         )}
 
@@ -389,12 +396,8 @@ export function PhotoImportForm({
           onChange={onInputChange}
           className="sr-only"
         />
-        <span className="text-base font-medium text-fog">
-          Drop shelf photos here, or browse.
-        </span>
-        <span className="text-sm text-muted">
-          JPEG, PNG, WebP or HEIC. Up to 20 MB each, up to 50 photos.
-        </span>
+        <span className="text-base font-medium text-fog">{t('dropzone')}</span>
+        <span className="text-sm text-muted">{t('dropzoneHint')}</span>
       </label>
 
       {rejections.length > 0 && (
@@ -404,7 +407,7 @@ export function PhotoImportForm({
         >
           <div className="flex items-start justify-between gap-3">
             <p className="text-sm font-medium text-danger">
-              Some photos were not added.
+              {t('rejections.title')}
             </p>
             <button
               type="button"
@@ -413,7 +416,7 @@ export function PhotoImportForm({
               }}
               className="rounded text-xs text-danger underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
             >
-              Dismiss
+              {t('dismiss')}
             </button>
           </div>
           <ul className="space-y-0.5">
@@ -431,14 +434,10 @@ export function PhotoImportForm({
 
       {photos.length > 0 && (
         <div className="space-y-3">
-          <p className="text-sm text-muted">
-            If you know how many games are in a photo, add the number. We check
-            it against what the model recognises and flag any difference. Leave
-            it blank if you&rsquo;d rather not count.
-          </p>
+          <p className="text-sm text-muted">{t('countsHint')}</p>
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
             {photos.map((photo) => {
-              const countError = declaredCountError(photo.declaredCount);
+              const countError = declaredCountError(photo.declaredCount, t);
               return (
                 <li
                   key={photo.id}
@@ -459,7 +458,7 @@ export function PhotoImportForm({
                       />
                     ) : (
                       <span className="flex h-full w-full items-center justify-center px-2 text-center text-xs text-danger">
-                        {photo.error ?? 'Unreadable'}
+                        {photo.error ?? t('unreadable')}
                       </span>
                     )}
                   </div>
@@ -468,9 +467,9 @@ export function PhotoImportForm({
                     {photo.name}
                   </p>
                   <p className="text-xs text-muted">
-                    {formatBytes(photo.sizeBytes)}
+                    {formatBytes(photo.sizeBytes, locale)}
                     {photo.status === 'converting' && (
-                      <span className="ml-1">Converting…</span>
+                      <span className="ml-1">{t('converting')}</span>
                     )}
                   </p>
 
@@ -479,7 +478,7 @@ export function PhotoImportForm({
                       htmlFor={`count-${photo.id}`}
                       className="block text-xs text-muted"
                     >
-                      Games (optional)
+                      {t('countLabel')}
                     </label>
                     <input
                       id={`count-${photo.id}`}
@@ -516,10 +515,10 @@ export function PhotoImportForm({
                     onClick={() => {
                       removePhoto(photo.id);
                     }}
-                    aria-label={`Remove ${photo.name}`}
+                    aria-label={`${t('remove')} ${photo.name}`}
                     className={`${SECONDARY_BUTTON} px-2 py-1 text-xs`}
                   >
-                    Remove
+                    {t('remove')}
                   </button>
                 </li>
               );
@@ -542,7 +541,7 @@ export function PhotoImportForm({
           <div>
             <div
               role="progressbar"
-              aria-label="Upload progress"
+              aria-label={t('uploadProgress')}
               aria-valuenow={percent}
               aria-valuemin={0}
               aria-valuemax={100}
@@ -558,21 +557,19 @@ export function PhotoImportForm({
               aria-live="polite"
               className="mt-1 text-xs text-muted"
             >
-              Uploading… {percent}%
+              {t('uploading')} {percent}%
             </p>
           </div>
         )}
 
         <div className="flex flex-wrap items-center justify-between gap-3">
           <p role="status" aria-live="polite" className="text-sm text-muted">
-            {ready.length > 0 ? (
-              <>
-                {ready.length} {ready.length === 1 ? 'photo' : 'photos'} ready (
-                {formatBytes(readyBytes)})
-              </>
-            ) : (
-              'No photos selected yet.'
-            )}
+            {ready.length > 0
+              ? t('ready', {
+                  count: ready.length,
+                  size: formatBytes(readyBytes, locale),
+                })
+              : t('noPhotos')}
           </p>
           <button
             type="submit"
@@ -580,12 +577,12 @@ export function PhotoImportForm({
             className={PRIMARY_BUTTON}
           >
             {submitting
-              ? 'Uploading…'
+              ? t('uploading')
               : ready.length === 0
-                ? 'Upload photos'
+                ? t('uploadButton.none')
                 : ready.length === 1
-                  ? 'Upload 1 photo'
-                  : `Upload ${String(ready.length)} photos`}
+                  ? t('uploadButton.one')
+                  : t('uploadButton.other', { count: ready.length })}
           </button>
         </div>
       </div>

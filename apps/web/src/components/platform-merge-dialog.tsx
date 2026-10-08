@@ -1,14 +1,11 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useEffect, useId, useRef, useState } from 'react';
 import { isApiError, type Platform } from '@/lib/api';
 import { api } from '@/lib/api/browser';
-import {
-  gameCountLabel,
-  mergeConfirmation,
-  platformErrorMessage,
-} from '@/lib/platforms';
+import { mergeConfirmation, platformErrorMessage } from '@/lib/platforms';
 
 const FIELD =
   'w-full rounded-md border border-edge bg-ink px-3 py-2 text-fog outline-none focus-visible:ring-2 focus-visible:ring-accent';
@@ -37,6 +34,7 @@ export function PlatformMergeDialog({
   onMerged: () => void;
 }): React.ReactElement {
   const router = useRouter();
+  const t = useTranslations('platforms');
   const uid = useId();
   const headingId = `${uid}-heading`;
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -138,15 +136,10 @@ export function PlatformMergeDialog({
       }
       if (isApiError(caught) && caught.status === 404) {
         setUnavailable(true);
-        setError('This platform no longer exists.');
+        setError(t('error.notFound'));
         return;
       }
-      setError(
-        platformErrorMessage(
-          caught,
-          'We couldn’t merge the platform. Check your connection and try again.',
-        ),
-      );
+      setError(platformErrorMessage(caught, t('error.merge')));
     } finally {
       setMerging(false);
     }
@@ -188,21 +181,24 @@ export function PlatformMergeDialog({
         }}
       >
         <h2 id={headingId} className="text-lg font-medium text-fog">
-          Merge “{source.name}” into another platform
+          {t('merge.title', { name: source.name })}
         </h2>
 
         {previewFailed ? (
           <p className="text-sm text-muted">
-            {gameCountLabel(source.gameCount)} will move to the target.
+            {t('merge.willMove', { count: source.gameCount })}
           </p>
         ) : preview === null ? (
           <p role="status" className="text-sm text-muted">
-            Loading games…
+            {t('merge.loading')}
           </p>
         ) : (
           <div className="space-y-2 rounded-lg border border-edge bg-ink/40 p-3">
             <p className="text-sm text-muted">
-              Move {gameCountLabel(preview.total)} from “{source.name}”.
+              {t('merge.move', {
+                count: preview.total,
+                source: source.name,
+              })}
             </p>
             {shownTitles.length > 0 && (
               <ul className="list-inside list-disc text-xs text-muted">
@@ -212,19 +208,19 @@ export function PlatformMergeDialog({
               </ul>
             )}
             {remaining > 0 && (
-              <p className="text-xs text-muted">+{String(remaining)} more</p>
+              <p className="text-xs text-muted">
+                {t('merge.more', { count: remaining })}
+              </p>
             )}
           </div>
         )}
 
         {targets.length === 0 ? (
-          <p className="text-sm text-muted">
-            There is no other platform to merge into yet. Add one first.
-          </p>
+          <p className="text-sm text-muted">{t('merge.none')}</p>
         ) : (
           <div className="space-y-1.5">
             <label htmlFor={`${uid}-target`} className={LABEL}>
-              Merge into
+              {t('merge.into')}
             </label>
             <select
               id={`${uid}-target`}
@@ -246,7 +242,7 @@ export function PlatformMergeDialog({
 
         {target !== undefined && (
           <p className="text-sm text-fog">
-            {mergeConfirmation(source.name, target.name, total)}
+            {mergeConfirmation(source.name, target.name, total, t)}
           </p>
         )}
 
@@ -259,7 +255,7 @@ export function PlatformMergeDialog({
         <div className="flex flex-wrap justify-end gap-2">
           {unavailable ? (
             <button type="button" onClick={onMerged} className={PRIMARY_BUTTON}>
-              Close
+              {t('merge.close')}
             </button>
           ) : (
             <>
@@ -269,7 +265,7 @@ export function PlatformMergeDialog({
                 disabled={merging}
                 className={SECONDARY_BUTTON}
               >
-                Cancel
+                {t('cancel')}
               </button>
               <button
                 type="button"
@@ -279,7 +275,7 @@ export function PlatformMergeDialog({
                 disabled={target === undefined || merging || unavailable}
                 className={PRIMARY_BUTTON}
               >
-                {merging ? 'Merging…' : 'Merge'}
+                {merging ? t('merging') : t('merge.button')}
               </button>
             </>
           )}

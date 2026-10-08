@@ -1,0 +1,542 @@
+{
+  "metadata": {
+    "title": "GameShelf",
+    "description": "Śledź, organizuj i odkrywaj swoją bibliotekę gier wideo."
+  },
+  "auth": {
+    "signIn": "Zaloguj się",
+    "email": "Adres e-mail",
+    "password": "Hasło",
+    "signingIn": "Logowanie…",
+    "description": "Twoja półka czeka.",
+    "setupComplete": "Konfiguracja zakończona. Zaloguj się na nowym koncie.",
+    "loginError": {
+      "credentials": "Nieprawidłowy adres e-mail lub hasło.",
+      "input": "Podaj adres e-mail i hasło, a potem spróbuj ponownie.",
+      "generic": "Nie udało się zalogować. Sprawdź połączenie i spróbuj ponownie."
+    },
+    "setup": {
+      "eyebrow": "Pierwsze uruchomienie",
+      "title": "Ustaw swoją półkę",
+      "description": "To konto jest tworzone tylko raz i staje się właścicielem tej instancji GameShelf.",
+      "email": "Adres e-mail",
+      "password": "Hasło",
+      "creating": "Tworzenie…",
+      "createAccount": "Utwórz konto",
+      "inputError": "Podaj adres e-mail i hasło, a potem spróbuj ponownie.",
+      "genericError": "Nie udało się utworzyć konta. Spróbuj ponownie."
+    }
+  },
+  "nav": {
+    "main": "Nawigacja główna",
+    "catalog": "Katalog",
+    "platforms": "Platformy",
+    "import": "Import",
+    "settings": "Ustawienia",
+    "signOut": "Wyloguj się",
+    "signingOut": "Wylogowywanie…",
+    "signOutError": "Nie udało się wylogować. Spróbuj ponownie."
+  },
+  "common": {
+    "tryAgain": "Spróbuj ponownie",
+    "backToCatalog": "Wróć do katalogu",
+    "reloadPage": "Odśwież stronę",
+    "cancel": "Anuluj",
+    "dismiss": "Odrzuć",
+    "save": "Zapisz",
+    "saving": "Zapisywanie…",
+    "saved": "Zapisano",
+    "noChanges": "Brak zmian",
+    "notSet": "Nie ustawiono",
+    "handEdited": "Edytowane ręcznie",
+    "errorTitle": "Coś poszło nie tak",
+    "errorBody": "Półka nie odpowiedziała. Sprawdź połączenie, a potem spróbuj ponownie.",
+    "notFoundTitle": "Nie znaleziono strony",
+    "notFoundBody": "Ta półka nie istnieje."
+  },
+  "settings": {
+    "title": "Ustawienia",
+    "subtitle": "Skonfiguruj rozpoznawanie gier i dostęp do baz gier.",
+    "loadError": "Nie udało się wczytać ustawień LLM. Odśwież stronę, aby spróbować ponownie.",
+    "llm": {
+      "heading": "Rozpoznawanie gier",
+      "recommended": "Polecany domyślny wybór: Google Gemini (<code>{geminiModel}</code>) — hojny darmowy limit, szybki i niezawodny w odczytywaniu tekstu z okładek. OpenAI (<code>{openaiModel}</code>) to solidna płatna alternatywa. Każde zdjęcie to jedno wywołanie vision — mniej więcej ułamek centa do kilku centów w zależności od dostawcy i rozmiaru obrazu; rozliczane jest tylko za importowane zdjęcia.",
+      "provider": "Dostawca",
+      "providerHint": "Zmiana dostawcy resetuje zapisany klucz i model, chyba że podasz nowe.",
+      "model": "Model",
+      "modelHint": "Zostaw domyślny <code>{model}</code>, chyba że potrzebujesz konkretnego modelu.",
+      "apiKey": "Klucz API",
+      "keySaved": "Zapisano klucz dla {provider}.",
+      "replaceKey": "Zamień klucz",
+      "removeKey": "Usuń klucz",
+      "keyWillRemove": "Klucz zostanie usunięty po zapisaniu.",
+      "undo": "Cofnij",
+      "keyHint": "Wklej klucz z {provider}. Jest przechowywany zaszyfrowany i nigdy więcej nie zostanie wyświetlony.",
+      "save": "Zapisz zmiany",
+      "saving": "Zapisywanie…",
+      "noChanges": "Brak zmian",
+      "testConnection": "Testuj połączenie",
+      "testing": "Testowanie…",
+      "testHint": "Test używa zapisanych ustawień. Zapisz zmiany przed testowaniem.",
+      "unsaved": "Masz niezapisane zmiany.",
+      "saved": "Zapisano.",
+      "savedImportEnabled": "Zapisano. Import zdjęć jest włączony.",
+      "goToImport": "Przejdź do importu zdjęć",
+      "test": {
+        "ok": "Połączenie działa — dostawca zaakceptował żądanie.",
+        "not_configured": "Nie zapisano jeszcze klucza API dla tego dostawcy. Najpierw zapisz klucz.",
+        "unauthorized": "Dostawca odrzucił klucz API. Sprawdź klucz i spróbuj ponownie.",
+        "model_not_found": "Skonfigurowany model nie istnieje u tego dostawcy. Wybierz inny model.",
+        "rate_limited": "Dostawca ograniczył liczbę żądań. Poczekaj chwilę i spróbuj ponownie.",
+        "timeout": "Dostawca nie odpowiedział w czasie. Spróbuj ponownie.",
+        "bad_response": "Dostawca zwrócił nieoczekiwaną odpowiedź.",
+        "network": "Nie udało się połączyć z dostawcą. Sprawdź połączenie i spróbuj ponownie.",
+        "server_error": "Serwer dostawcy zwrócił błąd. Spróbuj później.",
+        "unknown_provider": "Ten dostawca nie jest dostępny.",
+        "fallback": "Test połączenia zwrócił nieoczekiwany wynik."
+      },
+      "error": {
+        "save": "Nie udało się zapisać ustawień LLM. Sprawdź połączenie i spróbuj ponownie.",
+        "test": "Nie udało się uruchomić testu połączenia. Sprawdź połączenie i spróbuj ponownie."
+      }
+    }
+  },
+  "preferences": {
+    "heading": "Preferencje",
+    "body": "Wybierz język interfejsu.",
+    "language": "Język",
+    "save": "Zapisz",
+    "saving": "Zapisywanie…",
+    "saved": "Zapisano.",
+    "error": "Nie udało się zapisać preferencji. Spróbuj ponownie.",
+    "languageName": {
+      "pl": "Polski",
+      "en": "English"
+    }
+  },
+  "gameDatabases": {
+    "heading": "Bazy gier",
+    "loadError": "Nie udało się wczytać statusu baz gier.",
+    "state": {
+      "configured": "Skonfigurowana",
+      "missing": "Nieskonfigurowana",
+      "rejected": "Klucz odrzucony"
+    }
+  },
+  "catalog": {
+    "title": "Twoja półka",
+    "showing": "Pokazuję {first}–{last} {total, plural, one {z # gry} few {z # gier} many {z # gier} other {z # gier}}",
+    "showingFiltered": "Pokazuję {first}–{last} {total, plural, one {z # pasującej gry} few {z # pasujących gier} many {z # pasujących gier} other {z # pasujących gier}}",
+    "empty": {
+      "title": "Na półce jeszcze nic nie ma",
+      "body": "Dodaj grę ręcznie lub zaimportuj zdjęcia swojej półki, aby ją uzupełnić.",
+      "addGame": "Dodaj grę",
+      "import": "Importuj ze zdjęć"
+    },
+    "noResults": {
+      "title": "Żadna gra nie pasuje do wybranych filtrów",
+      "body": "Rozszerz wyszukiwanie lub usuń któryś z filtrów.",
+      "clear": "Wyczyść wszystkie filtry"
+    },
+    "pageEmpty": "Ta strona nie zawiera gier.",
+    "backToFirst": "Wróć do pierwszej strony"
+  },
+  "loading": {
+    "catalog": "Ładowanie gier…",
+    "gameDetail": "Ładowanie gry…",
+    "importProgress": "Ładowanie postępu importu…"
+  },
+  "catalogFilters": {
+    "searchTitles": "Szukaj tytułów",
+    "platform": "Platforma",
+    "allPlatforms": "Wszystkie platformy",
+    "edition": "Edycja",
+    "allEditions": "Wszystkie edycje",
+    "year": "Rok (1000–2100)",
+    "players": "Liczba graczy (1–100)",
+    "publisher": "Wydawca",
+    "genre": "Gatunek",
+    "clearAll": "Wyczyść wszystko",
+    "removeFilter": "Usuń filtr {label}",
+    "platformFallback": "Platforma #{id}",
+    "chip": {
+      "search": "Szukaj: „{q}”",
+      "platform": "Platforma: {name}",
+      "edition": "Edycja: {edition}",
+      "year": "Rok: {year}",
+      "publisher": "Wydawca: {publisher}",
+      "genre": "Gatunek: {genre}",
+      "players": "Gracze: {count}"
+    }
+  },
+  "pagination": {
+    "ariaLabel": "Strony katalogu",
+    "previous": "Poprzednia",
+    "next": "Następna",
+    "pageOf": "Strona {page} z {totalPages}"
+  },
+  "gameDetail": {
+    "record": "Rekord",
+    "source": {
+      "manual": "Ręczne"
+    },
+    "neverEnriched": "Nigdy wzbogacona",
+    "lastEnriched": "Ostatnie wzbogacenie: {date}",
+    "platformUnverified": "Platforma niezweryfikowana",
+    "notLinked": "Niespowiązana",
+    "field": {
+      "platform": "Platforma",
+      "edition": "Edycja",
+      "releaseYear": "Rok wydania",
+      "publisher": "Wydawca",
+      "genre": "Gatunek",
+      "players": "Gracze",
+      "copies": "Egzemplarze",
+      "platformId": "ID platformy",
+      "externalId": "ID zewnętrzne",
+      "source": "Źródło",
+      "added": "Dodana",
+      "updated": "Zaktualizowana",
+      "recordId": "ID rekordu"
+    },
+    "notSet": "Nie ustawiono",
+    "handEdited": "edytowane ręcznie",
+    "rawMetadata": "Surowe metadane (archiwalne)",
+    "noRawMetadata": "Nie zapisano surowych metadanych.",
+    "never": "Nigdy",
+    "unknown": "Nieznana",
+    "coverAlt": "Okładka gry {title}"
+  },
+  "gameEdit": {
+    "toggleOpen": "Edytuj rekord",
+    "toggleClose": "Zamknij edytor",
+    "field": {
+      "title": "Tytuł",
+      "platform": "Platforma",
+      "edition": "Edycja",
+      "releaseYear": "Rok wydania (1000–2100)",
+      "players": "Liczba graczy (1–100)",
+      "publisher": "Wydawca",
+      "genre": "Gatunek"
+    },
+    "error": {
+      "titleRequired": "Tytuł jest wymagany.",
+      "yearRange": "Podaj rok między 1000 a 2100.",
+      "playersRange": "Podaj liczbę graczy między 1 a 100.",
+      "notFound": "Ta gra już nie istnieje.",
+      "generic": "Nie udało się zapisać zmian. Sprawdź połączenie i spróbuj ponownie."
+    },
+    "save": "Zapisz zmiany",
+    "saving": "Zapisywanie…",
+    "saved": "Zapisano.",
+    "noChanges": "Brak zmian"
+  },
+  "deleteGame": {
+    "open": "Usuń grę",
+    "confirmTitle": "Usunąć „{title}”?",
+    "confirmBody": "Nie można tego cofnąć.",
+    "cancel": "Anuluj",
+    "delete": "Usuń",
+    "deleting": "Usuwanie…",
+    "error": {
+      "generic": "Nie udało się usunąć tej gry. Sprawdź połączenie i spróbuj ponownie."
+    }
+  },
+  "reEnrich": {
+    "search": "Wzbogać ponownie z tytułu",
+    "searching": "Wyszukiwanie…",
+    "applying": "Stosowanie…",
+    "usesTitle": "Używa bieżącego tytułu „{title}”.",
+    "apply": "Zastosuj metadane",
+    "cancel": "Anuluj",
+    "players": "{count, plural, one {# gracz} few {# gracze} many {# graczy} other {# graczy}}",
+    "source": "Źródło: {source}",
+    "outcome": {
+      "found": "Znaleziono dopasowanie.",
+      "noMatch": "Nie znaleziono dopasowania dla „{title}”. Nic nie zmieniono.",
+      "noMatchReason": "Nie znaleziono dopasowania dla „{title}”. {reason} Nic nie zmieniono.",
+      "applied": "Zastosowano świeże metadane.",
+      "upToDate": "Rekord jest aktualny — nic nie zmieniono.",
+      "noMatchApply": "Nie znaleziono dopasowania. Nic nie zmieniono."
+    },
+    "error": {
+      "generic": "Nie udało się połączyć z bazą gier. Spróbuj ponownie.",
+      "unavailable": "Nie udało się zastosować dopasowania. Spróbuj ponownie.",
+      "stale": "To dopasowanie nie jest już dostępne. Uruchom wyszukiwanie ponownie."
+    }
+  },
+  "manualAdd": {
+    "eyebrow": "Dodaj",
+    "heading": "Dodaj grę",
+    "subheading": "Wpisz grę ręcznie. Rekordy dodane w tym miejscu nie są powiązane z bazą gier.",
+    "field": {
+      "title": "Tytuł",
+      "platform": "Platforma",
+      "edition": "Edycja",
+      "releaseYear": "Rok wydania (1000–2100)",
+      "players": "Liczba graczy (1–100)",
+      "publisher": "Wydawca",
+      "genre": "Gatunek"
+    },
+    "choosePlatform": "Wybierz platformę…",
+    "newPlatform": "Nowa platforma",
+    "closeNewPlatform": "Zamknij nową platformę",
+    "noPlatforms": "Brak platform — utwórz pierwszą, aby zacząć.",
+    "newPlatformName": "Nazwa nowej platformy",
+    "createPlatform": "Utwórz platformę",
+    "creating": "Tworzenie…",
+    "saveGame": "Zapisz grę",
+    "saveAndAddAnother": "Zapisz i dodaj kolejną",
+    "saving": "Zapisywanie…",
+    "saved": "Zapisano „{title}”.",
+    "savedAndAnother": "Dodano „{title}”.",
+    "notLinked": "Niespowiązana z bazą gier.",
+    "viewGame": "Zobacz grę",
+    "conflict": {
+      "title": "„{title}” jest już w katalogu.",
+      "body": "{meta}. Dodać kolejny egzemplarz?"
+    },
+    "notNow": "Teraz nie",
+    "addAnotherCopy": "Dodaj kolejny egzemplarz",
+    "adding": "Dodawanie…",
+    "addCopyStatus": "Dodano egzemplarz gry „{title}” — teraz {count, plural, one {1 egzemplarz} few {# egzemplarze} many {# egzemplarzy} other {# egzemplarzy}}.",
+    "copyCount": "{count, plural, one {# egzemplarz} few {# egzemplarze} many {# egzemplarzy} other {# egzemplarzy}}",
+    "error": {
+      "titleRequired": "Tytuł jest wymagany.",
+      "titleMax": "Tytuł musi mieć 255 znaków lub mniej.",
+      "choosePlatform": "Wybierz platformę.",
+      "editionMax": "Edycja musi mieć 255 znaków lub mniej.",
+      "yearRange": "Podaj rok między 1000 a 2100.",
+      "playersRange": "Podaj liczbę graczy między 1 a 100.",
+      "publisherMax": "Wydawca musi mieć 255 znaków lub mniej.",
+      "genreMax": "Gatunek musi mieć 255 znaków lub mniej.",
+      "platformNameRequired": "Podaj nazwę platformy.",
+      "generic": "Nie udało się zapisać tej gry. Sprawdź połączenie i spróbuj ponownie.",
+      "platformGeneric": "Nie udało się utworzyć platformy. Sprawdź połączenie i spróbuj ponownie.",
+      "copyGeneric": "Nie udało się dodać egzemplarza. Sprawdź połączenie i spróbuj ponownie."
+    }
+  },
+  "import": {
+    "title": "Import ze zdjęć",
+    "subtitle": "Zrób zdjęcia swojej półki, wybierz je tutaj, a my rozpoznamy gry.",
+    "recentImport": "Sprawdź swój ostatni import",
+    "gate": {
+      "disabled": "Import zdjęć jest wyłączony, bo nie ustawiono klucza API LLM. Dodaj klucz w Ustawieniach i wróć tutaj — albo dodawaj gry ręcznie.",
+      "unknown": "Nie udało się odczytać ustawień LLM, więc import zdjęć jest wstrzymany. Spróbuj ponownie — albo dodawaj gry ręcznie."
+    },
+    "addByHand": "Dodaj grę ręcznie",
+    "openSettings": "Otwórz ustawienia",
+    "providerNotice": "Zdjęcia są wysyłane do Twojego skonfigurowanego LLM ({provider}).",
+    "dropzone": "Upuść zdjęcia półki tutaj albo wybierz pliki.",
+    "dropzoneHint": "JPEG, PNG, WebP lub HEIC. Do 20 MB każde, do 50 zdjęć.",
+    "rejections": {
+      "title": "Część zdjęć nie została dodana.",
+      "unsupported": "Niewspierany typ pliku. Użyj JPEG, PNG, WebP lub HEIC.",
+      "tooMany": "Można zaimportować naraz tylko {limit, plural, one {# zdjęcie} few {# zdjęcia} many {# zdjęć} other {# zdjęć}}."
+    },
+    "dismiss": "Odrzuć",
+    "countsHint": "Jeśli wiesz, ile gier jest na zdjęciu, podaj liczbę. Porównamy ją z tym, co rozpozna model, i oznaczymy każdą różnicę. Zostaw puste, jeśli wolisz nie liczyć.",
+    "countLabel": "Gry (opcjonalnie)",
+    "countError": {
+      "notNumber": "Podaj liczbę całkowitą albo zostaw pole puste.",
+      "range": "Podaj liczbę od 1 do {max} albo zostaw pole puste."
+    },
+    "remove": "Usuń",
+    "unreadable": "Nie można odczytać",
+    "converting": "Konwersja…",
+    "tooLarge": "Za duże ({size}). Limit to {limit}.",
+    "heicError": "Nie udało się odczytać tego zdjęcia HEIC.",
+    "uploading": "Przesyłanie…",
+    "uploadProgress": "Postęp przesyłania",
+    "ready": "{count, plural, one {# zdjęcie gotowe ({size})} few {# zdjęcia gotowe ({size})} many {# zdjęć gotowych ({size})} other {# zdjęć gotowych ({size})}}",
+    "noPhotos": "Nie wybrano jeszcze żadnych zdjęć.",
+    "uploadButton": {
+      "none": "Prześlij zdjęcia",
+      "one": "Prześlij 1 zdjęcie",
+      "other": "Prześlij {count, plural, one {# zdjęcie} few {# zdjęcia} many {# zdjęć} other {# zdjęć}}"
+    },
+    "error": {
+      "unavailable": "Import zdjęć jest teraz niedostępny — nie ustawiono klucza API LLM.",
+      "generic": "Nie udało się rozpocząć importu. Sprawdź połączenie i spróbuj ponownie."
+    }
+  },
+  "importProgress": {
+    "title": "Importowanie zdjęć",
+    "titleDone": "Import zakończony",
+    "subtitle": "Możesz opuścić tę stronę — import będzie kontynuowany w tle.",
+    "subtitleDone": "Przetworzono {count, plural, one {# zdjęcie} few {wszystkie # zdjęcia} many {wszystkie # zdjęć} other {wszystkie # zdjęć}}.",
+    "paused": "Kolejka wstrzymana",
+    "resume": "Wznów kolejkę",
+    "resuming": "Wznawianie…",
+    "error": {
+      "resume": "Nie udało się wznowić kolejki. Sprawdź połączenie i spróbuj ponownie."
+    },
+    "progressAria": "Przetworzono {done} z {total, plural, one {# zdjęcia} few {# zdjęć} many {# zdjęć} other {# zdjęć}}",
+    "processed": "Przetworzono {done} z {total, plural, one {# zdjęcia} few {# zdjęć} many {# zdjęć} other {# zdjęć}}",
+    "counts": {
+      "added": "Dodane",
+      "needsReview": "Wymaga weryfikacji",
+      "failed": "Błędy",
+      "pending": "Do przetworzenia"
+    },
+    "photos": "Zdjęcia",
+    "waiting": "Oczekiwanie na pierwsze zdjęcie…",
+    "photo": "Zdjęcie {n}",
+    "reconnecting": "Ponowne łączenie…",
+    "backToCatalog": "Wróć do katalogu",
+    "importMore": "Importuj więcej zdjęć",
+    "status": {
+      "queued": "W kolejce",
+      "processing": "Odczytywanie",
+      "done": "Zakończono",
+      "needs_attention": "Zakończono · wymaga weryfikacji",
+      "failed": "Błąd",
+      "dismissed": "Odrzucone"
+    },
+    "photoCounts": {
+      "queued": "Oczekuje w kolejce.",
+      "processing": "Odczytywanie zdjęcia…",
+      "added": "Dodano {count, plural, one {# grę} few {# gry} many {# gier} other {# gier}}.",
+      "flagged": "{count, plural, one {# gra wymaga} few {# gry wymagają} many {# gier wymaga} other {# gier wymaga}} weryfikacji."
+    },
+    "recognition": {
+      "recognized": "Rozpoznano {count, plural, one {# grę} few {# gry} many {# gier} other {# gier}}.",
+      "declared": "Zadeklarowano {declared}; rozpoznano {recognized}."
+    },
+    "pause": {
+      "llm": {
+        "reason": "Model językowy odrzucił żądanie.",
+        "hint": "Sprawdź klucz API w Ustawieniach, a potem wznów import."
+      },
+      "igdb": {
+        "reason": "Baza gier odrzuciła jej poświadczenia.",
+        "hint": "Popraw poświadczenia IGDB w środowisku serwera, a potem wznów import."
+      },
+      "none": {
+        "reason": "Import zdjęć jest wstrzymany do czasu naprawienia konfiguracji.",
+        "hint": "Popraw konfigurację, a potem wznów import."
+      }
+    }
+  },
+  "importAttention": {
+    "heading": "Wymaga uwagi",
+    "summary": "{count, plural, one {# zdjęcie wymaga} few {# zdjęcia wymagają} many {# zdjęć wymaga} other {# zdjęć wymaga}} decyzji. Dodaj brakujące gry, ponów nieudane zdjęcie albo odrzuć to, co nie wymaga działania.",
+    "flaggedItems": "Oznaczone pozycje",
+    "loading": "Ładowanie oznaczonych pozycji…",
+    "loadError": "Nie udało się wczytać oznaczonych pozycji dla tego zdjęcia.",
+    "allReviewed": "Wszystkie oznaczone pozycje dla tego zdjęcia zostały sprawdzone.",
+    "dismiss": "Odrzuć",
+    "dismissing": "Odrzucanie…",
+    "addManually": "Dodaj ręcznie",
+    "close": "Zamknij",
+    "addToCatalog": "Dodaj do katalogu",
+    "countMismatch": "Niezgodna liczba",
+    "retry": "Ponów zdjęcie",
+    "retrying": "Ponawianie…",
+    "retryHint": "Ponowienie uruchamia tylko gry, które nie są jeszcze zapisane. Gry już w Twoim katalogu nie zostaną dodane ponownie.",
+    "dismissPhoto": "Odrzuć zdjęcie",
+    "confirmTitle": "Odrzucić to zdjęcie?",
+    "confirmBody": "Opuści listę do weryfikacji i nie da się go przywrócić. Jego rekord zostanie zachowany.",
+    "cancel": "Anuluj",
+    "added": "Dodano „{title}”. Ta pozycja została oznaczona jako sprawdzona.",
+    "error": {
+      "retry": "Nie udało się ponowić tego zdjęcia. Sprawdź połączenie i spróbuj ponownie.",
+      "dismissPhoto": "Nie udało się odrzucić tego zdjęcia. Sprawdź połączenie i spróbuj ponownie.",
+      "dismissItem": "Nie udało się odrzucić tej pozycji. Sprawdź połączenie i spróbuj ponownie.",
+      "processing": "Nie udało się przetworzyć zdjęcia."
+    }
+  },
+  "platforms": {
+    "title": "Platformy",
+    "subtitle": "Oficjalna lista, z którą porównuje każdy import. Zmiana nazwy zachowuje starą nazwę jako alias; scalanie przenosi gry, a scalona nazwa nadal jest dopasowywana.",
+    "importReview": {
+      "title": "Dodane przez import — do weryfikacji",
+      "body": "Te platformy zostały utworzone podczas importu dla nazw, których nie rozpoznano. Zostaw je jak są, scal je z istniejącą platformą albo zmień nazwę. W każdym przypadku nazwa nadal będzie dopasowywana."
+    },
+    "add": {
+      "title": "Dodaj platformę",
+      "body": "Utwórz platformę, z którą import będzie porównywał. Nazwy są porównywane bez uwzględniania wielkości liter i interpunkcji.",
+      "conflict": "Już istnieje — zmień jej nazwę albo scal ją."
+    },
+    "name": "Nazwa",
+    "addPlatform": "Dodaj platformę",
+    "adding": "Dodawanie…",
+    "all": {
+      "title": "Wszystkie platformy"
+    },
+    "showAll": "Pokaż puste i ukryte platformy referencyjne",
+    "empty": {
+      "none": "Brak platform. Dodaj jedną albo zaimportuj gry, aby je utworzyć.",
+      "filtered": "Brak platform z grami. Zaznacz „Pokaż puste i ukryte platformy referencyjne”, aby zobaczyć pełną listę."
+    },
+    "kind": {
+      "import": "Dodana przez import",
+      "canonical": "Referencyjna",
+      "manual": "Ręczna"
+    },
+    "kindHint": {
+      "import": "Utworzona przez import dla nazwy, której nie rozpoznano. Zostaw ją jak jest albo scal z istniejącą platformą.",
+      "canonical": "Część listy referencyjnej synchronizowanej z bazą gier — to cele dopasowania, a nie dane użytkownika.",
+      "manual": "Platforma dodana ręcznie."
+    },
+    "gameCount": "{count, plural, one {# gra} few {# gry} many {# gier} other {# gier}}",
+    "hidden": "Ukryta",
+    "keepAsIs": "Zostaw jak jest",
+    "rename": "Zmień nazwę",
+    "closeRename": "Zamknij zmianę nazwy",
+    "newName": "Nowa nazwa",
+    "renameHelp": "Poprzednia nazwa jest zachowywana jako alias, więc przyszłe importy nadal ją dopasują.",
+    "saveName": "Zapisz nazwę",
+    "deleting": "Usuwanie…",
+    "mergeInto": "Scal z…",
+    "hide": "Ukryj",
+    "show": "Pokaż",
+    "delete": "Usuń",
+    "working": "Przetwarzanie…",
+    "hideHint": "Platformy referencyjne nie mogą być usuwane — ukrycie usuwa je z tej listy; „Odśwież platformy” je przywraca.",
+    "confirmDelete": {
+      "title": "Usunąć „{name}”?",
+      "body": "Nie można tego cofnąć. Platformy z grami nie można usunąć — zamiast tego otrzymasz propozycję scalania.",
+      "blocked": "Wciąż ma gry, więc jeszcze nie może być usunięta.",
+      "hint": "Najpierw przypisz jej gry — scal ją z inną platformą albo edytuj każdą grę."
+    },
+    "merge": {
+      "title": "Scal „{name}” z inną platformą",
+      "loading": "Ładowanie gier…",
+      "willMove": "{count, plural, one {# gra zostanie przeniesiona} few {# gry zostaną przeniesione} many {# gier zostanie przeniesionych} other {# gier zostanie przeniesionych}} do platformy docelowej.",
+      "move": "Przenieś {count, plural, one {# grę} few {# gry} many {# gier} other {# gier}} z „{source}”.",
+      "more": "+{count} więcej",
+      "none": "Nie ma jeszcze innej platformy, z którą można by scalić. Najpierw dodaj jedną.",
+      "into": "Scal z",
+      "confirm": "Przenieś {count, plural, one {# grę} few {# gry} many {# gier} other {# gier}} z „{source}” do „{target}”? „{source}” pozostanie jako alias, więc przyszłe importy nadal będą ją dopasowywać; platforma zostanie następnie usunięta.",
+      "button": "Scal",
+      "close": "Zamknij"
+    },
+    "merging": "Scalanie…",
+    "cancel": "Anuluj",
+    "status": {
+      "unchanged": "Nazwa bez zmian.",
+      "renamed": "Zmieniono nazwę na „{name}”. Poprzednia nazwa jest zachowywana jako alias.",
+      "hidden": "„{name}” jest ukryta z tej listy.",
+      "visible": "„{name}” jest ponownie widoczna.",
+      "confirmed": "„{name}” została potwierdzona bez zmian."
+    },
+    "error": {
+      "add": "Nie udało się połączyć z półką. Spróbuj ponownie.",
+      "notFound": "Ta platforma już nie istnieje.",
+      "rename": "Nie udało się zmienić nazwy tej platformy. Sprawdź połączenie i spróbuj ponownie.",
+      "update": "Nie udało się zaktualizować tej platformy. Sprawdź połączenie i spróbuj ponownie.",
+      "confirm": "Nie udało się potwierdzić tej platformy. Sprawdź połączenie i spróbuj ponownie.",
+      "delete": "Nie udało się usunąć tej platformy. Sprawdź połączenie i spróbuj ponownie.",
+      "merge": "Nie udało się scal platformy. Sprawdź połączenie i spróbuj ponownie.",
+      "refresh": "Nie udało się odświeżyć listy platform. Spróbuj ponownie."
+    },
+    "refresh": {
+      "heading": "Platformy referencyjne",
+      "body": "Wczytaj listę platform ponownie z bazy gier. Ukryte platformy referencyjne wrócą; nic nie zostanie usunięte.",
+      "button": "Odśwież platformy",
+      "refreshing": "Odświeżanie…",
+      "summary": "Lista platform odświeżona — pobrano {fetched}, dodano {created}, zaktualizowano {updated}, bez zmian {unchanged}."
+    }
+  }
+}

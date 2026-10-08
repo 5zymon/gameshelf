@@ -68,7 +68,7 @@ describe('SessionGuard (unit)', () => {
     expect(sessions.validate).not.toHaveBeenCalled();
   });
 
-  it('rejects an unknown/expired session and clears the cookie', async () => {
+  it('rejects an unknown/expired session and clears the cookies', async () => {
     sessions.validate.mockResolvedValue(null);
     const { context, res } = contextMock('gameshelf_session=bad');
 
@@ -77,6 +77,12 @@ describe('SessionGuard (unit)', () => {
     );
     expect(res.clearCookie).toHaveBeenCalledWith(
       'gameshelf_session',
+      expect.objectContaining({ httpOnly: true, path: '/' }),
+    );
+    // The locale is a per-user preference: a passively expired session on a
+    // shared device must not keep the previous user's language.
+    expect(res.clearCookie).toHaveBeenCalledWith(
+      'NEXT_LOCALE',
       expect.objectContaining({ httpOnly: true, path: '/' }),
     );
   });

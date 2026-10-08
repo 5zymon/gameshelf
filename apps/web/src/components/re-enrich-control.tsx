@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { Fragment, useState } from 'react';
 import { isApiError, type EnrichCandidate } from '@/lib/api';
@@ -22,6 +23,9 @@ export function ReEnrichControl({
   title: string;
 }): React.ReactElement {
   const router = useRouter();
+  const t = useTranslations('reEnrich');
+  // The candidate cover alt reuses the detail view's translated description.
+  const tDetail = useTranslations('gameDetail');
   const [phase, setPhase] = useState<Phase>('idle');
   const [candidate, setCandidate] = useState<EnrichCandidate | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
@@ -38,7 +42,7 @@ export function ReEnrichControl({
           candidate.genre,
           candidate.playerCount === null
             ? null
-            : `${String(candidate.playerCount)} players`,
+            : t('players', { count: candidate.playerCount }),
         ].filter((part): part is string => part !== null && part !== '');
 
   async function handleSearch(): Promise<void> {
@@ -52,14 +56,14 @@ export function ReEnrichControl({
       if (result.status === 'matched' && first !== undefined) {
         setCandidate(first);
         setPhase('matched');
-        setOutcome('Found a match.');
+        setOutcome(t('outcome.found'));
         return;
       }
       setPhase('idle');
       setOutcome(
         result.reason !== null && result.reason !== ''
-          ? `No match found for “${title}”. ${result.reason} Nothing changed.`
-          : `No match found for “${title}”. Nothing changed.`,
+          ? t('outcome.noMatchReason', { title, reason: result.reason })
+          : t('outcome.noMatch', { title }),
       );
     } catch (caught) {
       setPhase('idle');
@@ -71,7 +75,7 @@ export function ReEnrichControl({
       setError(
         isApiError(caught) && caught.status !== 0
           ? caught.userMessage
-          : "We couldn't reach the game database. Try again.",
+          : t('error.generic'),
       );
     }
   }
@@ -89,11 +93,11 @@ export function ReEnrichControl({
       setCandidate(null);
       setPhase('done');
       if (result.status !== 'matched') {
-        setOutcome('No match found. Nothing changed.');
+        setOutcome(t('outcome.noMatchApply'));
       } else if (result.applied) {
-        setOutcome('Fresh metadata applied.');
+        setOutcome(t('outcome.applied'));
       } else {
-        setOutcome('Already up to date — nothing changed.');
+        setOutcome(t('outcome.upToDate'));
       }
       router.refresh();
     } catch (caught) {
@@ -101,7 +105,7 @@ export function ReEnrichControl({
       if (isApiError(caught) && caught.status === 409) {
         setCandidate(null);
         setOutcome(null);
-        setError('That match is no longer available. Run the search again.');
+        setError(t('error.stale'));
         return;
       }
       if (isApiError(caught) && caught.status === 401) {
@@ -112,7 +116,7 @@ export function ReEnrichControl({
       setError(
         isApiError(caught) && caught.status !== 0
           ? caught.userMessage
-          : "We couldn't apply the match. Try again.",
+          : t('error.unavailable'),
       );
     }
   }
@@ -128,12 +132,12 @@ export function ReEnrichControl({
         className="rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60"
       >
         {phase === 'searching'
-          ? 'Searching…'
+          ? t('searching')
           : phase === 'applying'
-            ? 'Applying…'
-            : 'Re-enrich from title'}
+            ? t('applying')
+            : t('search')}
       </button>
-      <p className="text-xs text-muted">Uses the current title “{title}”.</p>
+      <p className="text-xs text-muted">{t('usesTitle', { title })}</p>
 
       {outcome !== null && (
         <p role="status" aria-live="polite" className="text-sm text-muted">
@@ -153,7 +157,7 @@ export function ReEnrichControl({
               // eslint-disable-next-line @next/next/no-img-element -- API-served same-origin signed preview; next/image would add a /_next/image hop behind SessionGuard
               <img
                 src={cover}
-                alt={`${candidate.title} cover art`}
+                alt={tDetail('coverAlt', { title: candidate.title })}
                 className="aspect-[3/4] w-20 shrink-0 rounded-md border border-edge object-cover"
               />
             )}
@@ -176,7 +180,9 @@ export function ReEnrichControl({
                   .map((platform) => platform.name)
                   .join(', ')}
               </p>
-              <p className="text-xs text-muted">Source: {candidate.source}</p>
+              <p className="text-xs text-muted">
+                {t('source', { source: candidate.source })}
+              </p>
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
@@ -188,7 +194,7 @@ export function ReEnrichControl({
               disabled={busy}
               className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-ink hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong disabled:opacity-60"
             >
-              Apply metadata
+              {t('apply')}
             </button>
             <button
               type="button"
@@ -200,7 +206,7 @@ export function ReEnrichControl({
               disabled={busy}
               className="rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60"
             >
-              Cancel
+              {t('cancel')}
             </button>
           </div>
         </div>

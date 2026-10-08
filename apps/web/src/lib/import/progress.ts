@@ -1,3 +1,4 @@
+import type { TranslatorFor } from '@/i18n/translate';
 import type {
   GamePlatform,
   ImportBatchProgress,
@@ -20,22 +21,25 @@ export interface PhotoStatusView {
 /**
  * One status vocabulary for the whole view. `needs_attention` is a terminal
  * success-with-caveat, not a failure; `dismissed` is a terminal no-op.
+ * Labels come from the `importProgress` namespace (`status.*`).
  */
-const PHOTO_STATUS: Readonly<Record<ImportJobStatus, PhotoStatusView>> = {
-  queued: { label: 'Queued', tone: 'muted', busy: false },
-  processing: { label: 'Reading', tone: 'active', busy: true },
-  done: { label: 'Completed', tone: 'success', busy: false },
-  needs_attention: {
-    label: 'Completed · needs review',
-    tone: 'warning',
-    busy: false,
-  },
-  failed: { label: 'Failed', tone: 'danger', busy: false },
-  dismissed: { label: 'Dismissed', tone: 'muted', busy: false },
+const PHOTO_STATUS: Readonly<
+  Record<ImportJobStatus, { tone: ProgressTone; busy: boolean }>
+> = {
+  queued: { tone: 'muted', busy: false },
+  processing: { tone: 'active', busy: true },
+  done: { tone: 'success', busy: false },
+  needs_attention: { tone: 'warning', busy: false },
+  failed: { tone: 'danger', busy: false },
+  dismissed: { tone: 'muted', busy: false },
 };
 
-export function statusView(status: ImportJobStatus): PhotoStatusView {
-  return PHOTO_STATUS[status];
+export function statusView(
+  status: ImportJobStatus,
+  t: TranslatorFor<'importProgress'>,
+): PhotoStatusView {
+  const { tone, busy } = PHOTO_STATUS[status];
+  return { label: t(`status.${status}`), tone, busy };
 }
 
 export interface JobCounts {
@@ -98,11 +102,6 @@ export function sortPhotos(items: readonly ImportJob[]): ImportJob[] {
   return [...items].sort((a, b) => a.id - b.id);
 }
 
-/** `plural(1, 'game')` → `"game"`; `plural(2, 'game')` → `"games"`. */
-export function plural(count: number, one: string, many?: string): string {
-  return count === 1 ? one : (many ?? `${one}s`);
-}
-
 export interface PauseCopy {
   /** Shown when the API supplies no `pauseReason`. */
   reasonFallback: string;
@@ -112,58 +111,66 @@ export interface PauseCopy {
 }
 
 /** Banner copy for a paused queue, keyed by the integration that must be fixed. */
-export function pauseCopy(source: ImportPauseSource | null): PauseCopy {
+export function pauseCopy(
+  source: ImportPauseSource | null,
+  t: TranslatorFor<'importProgress'>,
+): PauseCopy {
   if (source === 'llm') {
     return {
-      reasonFallback: 'The language model rejected the request.',
-      hint: 'Check your API key in Settings, then resume the import.',
+      reasonFallback: t('pause.llm.reason'),
+      hint: t('pause.llm.hint'),
       settingsHref: '/settings',
     };
   }
   if (source === 'igdb') {
     return {
-      reasonFallback: 'The game database rejected its credentials.',
-      hint: 'Fix the IGDB credentials in the server environment, then resume the import.',
+      reasonFallback: t('pause.igdb.reason'),
+      hint: t('pause.igdb.hint'),
       settingsHref: null,
     };
   }
   return {
-    reasonFallback: 'Photo import is paused until the configuration is fixed.',
-    hint: 'Fix the configuration, then resume the import.',
+    reasonFallback: t('pause.none.reason'),
+    hint: t('pause.none.hint'),
     settingsHref: null,
   };
 }
 
 /** The per-photo counts sentence (games committed / flagged for review). */
-export function photoCountsLine(photo: ImportJob): string {
-  if (photo.status === 'queued') return 'Waiting in the queue.';
-  if (photo.status === 'processing') return 'Reading the photo…';
+export function photoCountsLine(
+  photo: ImportJob,
+  t: TranslatorFor<'importProgress'>,
+): string {
+  if (photo.status === 'queued') return t('photoCounts.queued');
+  if (photo.status === 'processing') return t('photoCounts.processing');
   const counts = jobCounts(photo);
-  const parts = [
-    `Added ${String(counts.added)} ${plural(counts.added, 'game')}.`,
-  ];
+  const parts = [t('photoCounts.added', { count: counts.added })];
   if (counts.flagged > 0) {
-    parts.push(
-      `${String(counts.flagged)} ${plural(counts.flagged, 'game')} need review.`,
-    );
+    parts.push(t('photoCounts.flagged', { count: counts.flagged }));
   }
   return parts.join(' ');
 }
 
 /** Declared vs recognized sentence, plus whether to flag the mismatch. */
-export function recognitionLine(photo: ImportJob): {
+export function recognitionLine(
+  photo: ImportJob,
+  t: TranslatorFor<'importProgress'>,
+): {
   text: string;
   mismatch: boolean;
 } {
   const recognized = jobCounts(photo).recognized;
   if (photo.declaredCount === null) {
     return {
-      text: `Recognized ${String(recognized)} ${plural(recognized, 'game')}.`,
+      text: t('recognition.recognized', { count: recognized }),
       mismatch: false,
     };
   }
   return {
-    text: `You declared ${String(photo.declaredCount)}; recognized ${String(recognized)}.`,
+    text: t('recognition.declared', {
+      declared: photo.declaredCount,
+      recognized,
+    }),
     mismatch: photo.declaredCountMismatch,
   };
 }

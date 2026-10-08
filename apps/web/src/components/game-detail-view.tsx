@@ -1,32 +1,22 @@
 import { Fragment } from 'react';
+import { getFormatter, getTranslations } from 'next-intl/server';
+import type { TranslatorFor } from '@/i18n/translate';
 import type { GameDetail, GamePlatform } from '@/lib/api';
 import { DeleteGameButton } from './delete-game-button';
 import { GameCover } from './game-cover';
 import { GameEditForm } from './game-edit-form';
 import { ReEnrichControl } from './re-enrich-control';
 
-const DATE_TIME_FORMAT = new Intl.DateTimeFormat('en-GB', {
-  dateStyle: 'medium',
-  timeStyle: 'short',
-  timeZone: 'UTC',
-});
-
-/** Deterministic UTC rendering so server and client text never disagree. */
-function formatDateTime(value: string | null): string {
-  if (value === null) return 'Never';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? 'Unknown'
-    : DATE_TIME_FORMAT.format(date);
-}
-
-function sourceLabel(source: GameDetail['source']): string {
-  return source === 'MANUAL' ? 'Manual' : source;
+function sourceLabel(
+  source: GameDetail['source'],
+  t: TranslatorFor<'gameDetail'>,
+): string {
+  return source === 'MANUAL' ? t('source.manual') : source;
 }
 
 /** Pretty-prints the archival `rawMetadata`; falls back to the raw text. */
-function prettyRaw(raw: string | null): string {
-  if (raw === null) return 'No raw metadata stored.';
+function prettyRaw(raw: string | null, t: TranslatorFor<'gameDetail'>): string {
+  if (raw === null) return t('noRawMetadata');
   try {
     const parsed: unknown = JSON.parse(raw);
     return JSON.stringify(parsed, null, 2);
@@ -68,34 +58,58 @@ function DataRow({
   label,
   value,
   edited = false,
+  notSet,
+  handEdited,
 }: {
   label: string;
   value: string | number | null;
   edited?: boolean;
+  notSet: string;
+  handEdited: string;
 }): React.ReactElement {
   return (
     <div className="flex flex-col gap-0.5 border-b border-edge/60 py-2 last:border-b-0">
       <dt className="text-xs font-medium text-muted">{label}</dt>
       <dd className="text-sm text-fog">
         {value === null || value === '' ? (
-          <span className="text-muted">Not set</span>
+          <span className="text-muted">{notSet}</span>
         ) : (
           String(value)
         )}
-        {edited && <span className="ml-2 text-xs text-muted">hand-edited</span>}
+        {edited && (
+          <span className="ml-2 text-xs text-muted">{handEdited}</span>
+        )}
       </dd>
     </div>
   );
 }
 
-export function GameDetailView({
+export async function GameDetailView({
   game,
   platforms,
 }: {
   game: GameDetail;
   platforms: GamePlatform[];
-}): React.ReactElement {
+}): Promise<React.ReactElement> {
+  const t = await getTranslations('gameDetail');
+  const format = await getFormatter();
   const edited = new Set(game.userEditedFields);
+  const notSet = t('notSet');
+  const handEdited = t('handEdited');
+
+  /** Deterministic UTC rendering so server and client text never disagree. */
+  const formatDateTime = (value: string | null): string => {
+    if (value === null) return t('never');
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+      ? t('unknown')
+      : format.dateTime(date, {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+          timeZone: 'UTC',
+        });
+  };
+
   const metaParts = [
     game.platform.name,
     game.edition,
@@ -125,16 +139,20 @@ export function GameDetailView({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Chip>Source: {sourceLabel(game.source)}</Chip>
+          <Chip>
+            {t('field.source')}: {sourceLabel(game.source, t)}
+          </Chip>
           <Chip tone="muted">
             {game.enrichedAt === null
-              ? 'Never enriched'
-              : `Last enriched: ${formatDateTime(game.enrichedAt)}`}
+              ? t('neverEnriched')
+              : t('lastEnriched', { date: formatDateTime(game.enrichedAt) })}
           </Chip>
           {game.platformUnverified && (
-            <Chip tone="danger">Platform unverified</Chip>
+            <Chip tone="danger">{t('platformUnverified')}</Chip>
           )}
-          {game.externalId === null && <Chip tone="muted">Not linked</Chip>}
+          {game.externalId === null && (
+            <Chip tone="muted">{t('notLinked')}</Chip>
+          )}
         </div>
       </header>
 
@@ -144,45 +162,98 @@ export function GameDetailView({
             title={game.title}
             thumbUrl={game.coverUrl ?? game.coverThumbUrl}
             priority
-            alt={`${game.title} cover art`}
+            alt={t('coverAlt', { title: game.title })}
           />
         </div>
 
         <div className="min-w-0 space-y-6">
           <section aria-labelledby="record-heading">
             <h2 id="record-heading" className="sr-only">
-              Record
+              {t('record')}
             </h2>
             <dl className="grid gap-x-8 sm:grid-cols-2">
-              <DataRow label="Platform" value={game.platform.name} />
-              <DataRow label="Edition" value={game.edition} />
               <DataRow
-                label="Release year"
+                label={t('field.platform')}
+                value={game.platform.name}
+                notSet={notSet}
+                handEdited={handEdited}
+              />
+              <DataRow
+                label={t('field.edition')}
+                value={game.edition}
+                notSet={notSet}
+                handEdited={handEdited}
+              />
+              <DataRow
+                label={t('field.releaseYear')}
                 value={game.releaseYear}
                 edited={edited.has('releaseYear')}
+                notSet={notSet}
+                handEdited={handEdited}
               />
               <DataRow
-                label="Publisher"
+                label={t('field.publisher')}
                 value={game.publisher}
                 edited={edited.has('publisher')}
+                notSet={notSet}
+                handEdited={handEdited}
               />
               <DataRow
-                label="Genre"
+                label={t('field.genre')}
                 value={game.genre}
                 edited={edited.has('genre')}
+                notSet={notSet}
+                handEdited={handEdited}
               />
               <DataRow
-                label="Players"
+                label={t('field.players')}
                 value={game.playerCount}
                 edited={edited.has('playerCount')}
+                notSet={notSet}
+                handEdited={handEdited}
               />
-              <DataRow label="Copies" value={game.copyCount} />
-              <DataRow label="Platform ID" value={game.platformId} />
-              <DataRow label="External ID" value={game.externalId} />
-              <DataRow label="Source" value={sourceLabel(game.source)} />
-              <DataRow label="Added" value={formatDateTime(game.createdAt)} />
-              <DataRow label="Updated" value={formatDateTime(game.updatedAt)} />
-              <DataRow label="Record ID" value={game.id} />
+              <DataRow
+                label={t('field.copies')}
+                value={game.copyCount}
+                notSet={notSet}
+                handEdited={handEdited}
+              />
+              <DataRow
+                label={t('field.platformId')}
+                value={game.platformId}
+                notSet={notSet}
+                handEdited={handEdited}
+              />
+              <DataRow
+                label={t('field.externalId')}
+                value={game.externalId}
+                notSet={notSet}
+                handEdited={handEdited}
+              />
+              <DataRow
+                label={t('field.source')}
+                value={sourceLabel(game.source, t)}
+                notSet={notSet}
+                handEdited={handEdited}
+              />
+              <DataRow
+                label={t('field.added')}
+                value={formatDateTime(game.createdAt)}
+                notSet={notSet}
+                handEdited={handEdited}
+              />
+              <DataRow
+                label={t('field.updated')}
+                value={formatDateTime(game.updatedAt)}
+                notSet={notSet}
+                handEdited={handEdited}
+              />
+              <DataRow
+                label={t('field.recordId')}
+                value={game.id}
+                notSet={notSet}
+                handEdited={handEdited}
+              />
             </dl>
           </section>
 
@@ -196,10 +267,10 @@ export function GameDetailView({
 
           <details className="rounded-xl border border-edge bg-shelf/40">
             <summary className="cursor-pointer px-4 py-3 text-sm text-muted select-none">
-              Raw metadata (archival)
+              {t('rawMetadata')}
             </summary>
             <pre className="max-h-96 overflow-auto border-t border-edge px-4 py-3 font-mono text-xs break-words whitespace-pre-wrap text-muted">
-              {prettyRaw(game.rawMetadata)}
+              {prettyRaw(game.rawMetadata, t)}
             </pre>
           </details>
         </div>

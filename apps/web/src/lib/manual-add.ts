@@ -1,3 +1,4 @@
+import type { TranslatorFor } from '@/i18n/translate';
 import type { CreateGameRequest } from '@/lib/api';
 
 export interface ManualAddDraft {
@@ -59,13 +60,13 @@ export interface ManualAddBuildResult {
 /** Client-side mirror of CreateGameDto. `request` is null when `errors` is non-empty. */
 export function buildCreateRequest(
   draft: ManualAddDraft,
+  t: TranslatorFor<'manualAdd'>,
 ): ManualAddBuildResult {
   const errors: ManualAddFieldErrors = {};
 
   const title = draft.title.trim();
-  if (title === '') errors.title = 'Title is required.';
-  else if (title.length > MAX_TEXT)
-    errors.title = 'Title must be 255 characters or fewer.';
+  if (title === '') errors.title = t('error.titleRequired');
+  else if (title.length > MAX_TEXT) errors.title = t('error.titleMax');
 
   const platformId = Number(draft.platformId);
   if (
@@ -73,28 +74,23 @@ export function buildCreateRequest(
     !Number.isInteger(platformId) ||
     platformId < 1
   ) {
-    errors.platformId = 'Choose a platform.';
+    errors.platformId = t('error.choosePlatform');
   }
 
   const edition = draft.edition.trim();
-  if (edition.length > MAX_TEXT)
-    errors.edition = 'Edition must be 255 characters or fewer.';
+  if (edition.length > MAX_TEXT) errors.edition = t('error.editionMax');
 
   const releaseYear = boundedInt(draft.releaseYear, 1000, 2100);
-  if (releaseYear === 'invalid')
-    errors.releaseYear = 'Enter a year between 1000 and 2100.';
+  if (releaseYear === 'invalid') errors.releaseYear = t('error.yearRange');
 
   const playerCount = boundedInt(draft.playerCount, 1, 100);
-  if (playerCount === 'invalid')
-    errors.playerCount = 'Enter a player count between 1 and 100.';
+  if (playerCount === 'invalid') errors.playerCount = t('error.playersRange');
 
   const publisher = draft.publisher.trim();
-  if (publisher.length > MAX_TEXT)
-    errors.publisher = 'Publisher must be 255 characters or fewer.';
+  if (publisher.length > MAX_TEXT) errors.publisher = t('error.publisherMax');
 
   const genre = draft.genre.trim();
-  if (genre.length > MAX_TEXT)
-    errors.genre = 'Genre must be 255 characters or fewer.';
+  if (genre.length > MAX_TEXT) errors.genre = t('error.genreMax');
 
   if (Object.keys(errors).length > 0) return { request: null, errors };
 

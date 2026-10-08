@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server';
 import {
   PhotoImportForm,
   type LlmReadiness,
@@ -9,6 +10,7 @@ export const dynamic = 'force-dynamic';
 
 export default async function ImportPage(): Promise<React.ReactElement> {
   await requireUser();
+  const t = await getTranslations('import');
 
   let readiness: LlmReadiness;
   try {
@@ -29,12 +31,9 @@ export default async function ImportPage(): Promise<React.ReactElement> {
     <section className="space-y-6">
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          Import from photos
+          {t('title')}
         </h1>
-        <p className="text-sm text-muted">
-          Photograph your shelf, pick the photos here, and we&rsquo;ll recognise
-          the games.
-        </p>
+        <p className="text-sm text-muted">{t('subtitle')}</p>
       </header>
       <PhotoImportForm readiness={readiness} />
     </section>
