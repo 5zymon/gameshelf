@@ -33,6 +33,7 @@
     --accent-strong: #92400E;
     --accent-soft: rgba(180, 83, 9, 0.10);
     --accent-ink: #FFFFFF;
+    --accent-text: #92400E;
     --danger: #B42318;
     --display: "Sora", "Manrope", -apple-system, "Segoe UI", sans-serif;
     --body: "Manrope", -apple-system, "Segoe UI", sans-serif;
@@ -123,7 +124,7 @@
     transition: color 140ms ease, background-color 140ms ease;
   }
   .navlinks button:hover { color: var(--ink); background: rgba(28, 26, 22, 0.05); }
-  .navlinks button.active { color: var(--accent); background: var(--accent-soft); }
+  .navlinks button.active { color: var(--accent-text); background: var(--accent-soft); }
   .nav-actions { margin-left: auto; display: flex; align-items: center; gap: 12px; }
   .btn-primary {
     font: 600 14px/1 var(--body);
@@ -215,7 +216,7 @@
     transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
   }
   .chip:hover { color: var(--ink); border-color: #D5D0C3; }
-  .chip.active { color: var(--accent); background: var(--accent-soft); border-color: rgba(180, 83, 9, 0.35); }
+  .chip.active { color: var(--accent-text); background: var(--accent-soft); border-color: rgba(180, 83, 9, 0.35); }
   .sort { position: relative; margin-left: auto; }
   .sort select {
     appearance: none;
@@ -312,7 +313,7 @@
     transition: background-color 140ms ease, color 140ms ease;
   }
   .pagination button:hover { background: var(--surface-2); color: var(--ink); }
-  .pagination .current { color: var(--accent); background: var(--accent-soft); border-color: rgba(180, 83, 9, 0.3); }
+  .pagination .current { color: var(--accent-text); background: var(--accent-soft); border-color: rgba(180, 83, 9, 0.3); }
 
   .foot {
     position: relative;
