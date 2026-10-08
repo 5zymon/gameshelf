@@ -6,46 +6,222 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-  /* Light palette (default). The .dark block below overrides the same
-     tokens, so every utility (bg-ink, text-fog, …) flips with the theme —
-     components need no per-theme variants. All pairs meet WCAG AA. */
-  --color-ink: #f4f5f7;
-  --color-shelf: #ffffff;
-  --color-edge: #d9dde3;
-  --color-fog: #1a1d23;
-  --color-muted: #5b6472;
+  /* Nocturne light palette (default). The .dark block below overrides the
+     same tokens, so every utility (bg-canvas, text-ink, …) flips with the
+     theme — components need no per-theme variants. All text pairs meet
+     WCAG AA (see docs/features/theme.md). */
+  --color-canvas: #f5f3ee;
+  --color-surface: #ffffff;
+  --color-surface-2: #faf8f3;
+  --color-field: #faf8f3;
+  --color-edge: #e5e1d7;
+  --color-edge-soft: #edeae1;
+  --color-edge-strong: #d5d0c3;
+  --color-ink: #1c1a16;
+  --color-muted: #6b675d;
+  --color-faint: #9a958a;
   --color-accent: #b45309;
   --color-accent-strong: #92400e;
-  --color-danger: #b91c1c;
-  --color-on-accent: #ffffff;
-  --color-on-danger: #ffffff;
+  --color-accent-soft: rgba(180, 83, 9, 0.1);
+  --color-accent-ink: #ffffff;
+  --color-accent-text: #92400e;
+  --color-danger: #b42318;
+  --color-danger-ink: #ffffff;
+
+  --radius-card: 14px;
+  --radius-control: 10px;
+
+  --font-sans:
+    var(--font-manrope), ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+    sans-serif;
+  --font-display:
+    var(--font-sora), var(--font-manrope), ui-sans-serif, system-ui,
+    -apple-system, 'Segoe UI', sans-serif;
 }
 
 :root {
   color-scheme: light;
+  /* Nocturne light literals (plain props: shadow utilities are inlined by
+     Tailwind, so theme-switchable shadows use shadow-[var(--…)]). */
+  --shadow-card:
+    0 1px 2px rgba(28, 26, 22, 0.04), 0 2px 6px rgba(28, 26, 22, 0.05);
+  --shadow-card-hover: 0 18px 34px -18px rgba(28, 26, 22, 0.22);
+  --cover-bottom: #14100b;
+  --cover-scrim: rgba(20, 15, 8, 0.5);
 }
 
-/* Dark palette — the original GameShelf design, unchanged. */
+/* Nocturne dark palette. */
 .dark {
   color-scheme: dark;
-  --color-ink: #0b0d10;
-  --color-shelf: #15181d;
-  --color-edge: #262b33;
-  --color-fog: #e7e9ee;
-  --color-muted: #9aa3b2;
-  --color-accent: #f5a524;
-  --color-accent-strong: #ffc14d;
-  --color-danger: #f87171;
-  --color-on-accent: #0b0d10;
-  --color-on-danger: #0b0d10;
+  --color-canvas: #0f1116;
+  --color-surface: #171b22;
+  --color-surface-2: #20252f;
+  --color-field: #12151b;
+  --color-edge: #2a313c;
+  --color-edge-soft: #232933;
+  --color-edge-strong: #39414e;
+  --color-ink: #ece8de;
+  --color-muted: #8b93a2;
+  --color-faint: #5c6472;
+  --color-accent: #f2b23e;
+  --color-accent-strong: #f7c155;
+  --color-accent-soft: rgba(242, 178, 62, 0.14);
+  --color-accent-ink: #201607;
+  --color-accent-text: #f2b23e;
+  --color-danger: #f0705a;
+  --color-danger-ink: #201607;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-card-hover: 0 18px 34px -18px rgba(0, 0, 0, 0.7);
+  --cover-bottom: #0b0d11;
+  --cover-scrim: rgba(9, 10, 13, 0.55);
+}
+
+html,
+body {
+  overflow-x: clip;
 }
 
 body {
-  font-family:
-    var(--font-geist-sans),
-    ui-sans-serif,
-    system-ui,
-    -apple-system,
-    'Segoe UI',
-    sans-serif;
+  font-family: var(--font-sans);
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+}
+
+::selection {
+  background: rgba(180, 83, 9, 0.18);
+}
+.dark ::selection {
+  background: rgba(242, 178, 62, 0.28);
+}
+
+/* Unified keyboard focus for interactive controls (Nocturne). Text fields
+   override this with their own border + soft-ring focus (see FIELD). */
+:where(a, button, select, summary):focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* One reserved warm glow, top-centre only (light value; dark overrides). */
+.nocturne-glow {
+  position: absolute;
+  top: -280px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1000px;
+  max-width: 100vw;
+  height: 620px;
+  background: radial-gradient(
+    closest-side,
+    rgba(180, 83, 9, 0.07),
+    rgba(180, 83, 9, 0.025) 55%,
+    transparent 78%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+.dark .nocturne-glow {
+  background: radial-gradient(
+    closest-side,
+    rgba(242, 178, 62, 0.13),
+    rgba(242, 178, 62, 0.04) 55%,
+    transparent 78%
+  );
+}
+
+/* Custom select chevron (theme-aware data-URI). */
+.select-field {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%236B675D' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+}
+.dark .select-field {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%238B93A2' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+/* No-cover placeholder: per-game gradient + giant translucent initial.
+   Gradient tones are the design mockup's 12 palettes; the bottom stop and
+   scrim are theme-dependent. */
+.cover-placeholder {
+  position: relative;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(
+    178deg,
+    var(--c1, #2f1215) 0%,
+    var(--c2, #150a0c) 74%,
+    var(--cover-bottom) 100%
+  );
+}
+.cover-placeholder::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 42%;
+  background: linear-gradient(180deg, transparent, var(--cover-scrim));
+}
+.cover-initial {
+  position: relative;
+  z-index: 1;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 84px;
+  line-height: 1;
+  color: rgba(238, 229, 210, 0.15);
+  user-select: none;
+}
+.cover-tone-1 {
+  --c1: #2f1215;
+  --c2: #150a0c;
+}
+.cover-tone-2 {
+  --c1: #2d2110;
+  --c2: #140f08;
+}
+.cover-tone-3 {
+  --c1: #212510;
+  --c2: #0f1108;
+}
+.cover-tone-4 {
+  --c1: #122120;
+  --c2: #0a1111;
+}
+.cover-tone-5 {
+  --c1: #2e1421;
+  --c2: #140a10;
+}
+.cover-tone-6 {
+  --c1: #1b2713;
+  --c2: #0c1109;
+}
+.cover-tone-7 {
+  --c1: #2d1019;
+  --c2: #14080d;
+}
+.cover-tone-8 {
+  --c1: #2f1b0b;
+  --c2: #150d05;
+}
+.cover-tone-9 {
+  --c1: #271a0f;
+  --c2: #120c07;
+}
+.cover-tone-10 {
+  --c1: #311310;
+  --c2: #160908;
+}
+.cover-tone-11 {
+  --c1: #2b1512;
+  --c2: #130a08;
+}
+.cover-tone-12 {
+  --c1: #11231c;
+  --c2: #09110e;
 }

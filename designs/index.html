@@ -1,233 +1,315 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light">
-<title>GameShelf · Redesign proposals</title>
-<link rel="icon" href="data:,">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --paper: #F4F4F1;
-    --ink: #1B1D22;
-    --muted: #5A5D63;
-    --faint: #8B8E94;
-    --line: #DCDCD6;
-    --accent: #8A5D1F;
-    --white: #FFFFFF;
-  }
-  * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
-  body {
-    margin: 0;
-    background: var(--paper);
-    color: var(--ink);
-    font-family: "Instrument Sans", -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-    font-size: 16px;
-    line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
-  }
-  ::selection { background: rgba(138, 93, 31, 0.18); }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>GameShelf · Redesign proposals</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --paper: #f4f4f1;
+        --ink: #1b1d22;
+        --muted: #5a5d63;
+        --faint: #8b8e94;
+        --line: #dcdcd6;
+        --accent: #8a5d1f;
+        --white: #ffffff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--paper);
+        color: var(--ink);
+        font-family:
+          'Instrument Sans',
+          -apple-system,
+          'Segoe UI',
+          'Helvetica Neue',
+          Arial,
+          sans-serif;
+        font-size: 16px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+      ::selection {
+        background: rgba(138, 93, 31, 0.18);
+      }
 
-  .page {
-    max-width: 720px;
-    margin: 0 auto;
-    padding: 72px 24px 56px;
-  }
+      .page {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 72px 24px 56px;
+      }
 
-  .masthead h1 {
-    margin: 0;
-    font-size: clamp(26px, 4.5vw, 33px);
-    font-weight: 600;
-    letter-spacing: -0.02em;
-    line-height: 1.15;
-  }
-  .lede {
-    margin: 14px 0 0;
-    max-width: 52ch;
-    font-size: 16px;
-    line-height: 1.55;
-    color: var(--muted);
-  }
+      .masthead h1 {
+        margin: 0;
+        font-size: clamp(26px, 4.5vw, 33px);
+        font-weight: 600;
+        letter-spacing: -0.02em;
+        line-height: 1.15;
+      }
+      .lede {
+        margin: 14px 0 0;
+        max-width: 52ch;
+        font-size: 16px;
+        line-height: 1.55;
+        color: var(--muted);
+      }
 
-  .proposals {
-    list-style: none;
-    margin: 48px 0 0;
-    padding: 0;
-  }
-  .proposal {
-    display: grid;
-    grid-template-columns: 48px 1fr auto;
-    gap: 6px 28px;
-    align-items: start;
-    border-top: 1px solid var(--line);
-    padding: 28px 0 32px;
-  }
-  .letter {
-    font-size: 40px;
-    font-weight: 400;
-    line-height: 1;
-    color: var(--faint);
-    padding-top: 2px;
-  }
-  .proposal-name {
-    margin: 0;
-    font-size: 20px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    line-height: 1.2;
-  }
-  .concept {
-    margin: 8px 0 0;
-    max-width: 52ch;
-    font-size: 15px;
-    line-height: 1.55;
-    color: var(--muted);
-  }
-  .swatches {
-    list-style: none;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 14px 22px;
-    margin: 18px 0 0;
-    padding: 0;
-  }
-  .swatch {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-  }
-  .dot {
-    width: 22px;
-    height: 22px;
-    border-radius: 50%;
-    border: 1px solid rgba(27, 29, 34, 0.18);
-  }
-  .hex {
-    font-size: 11px;
-    color: var(--muted);
-  }
-  .typeface {
-    margin: 14px 0 0;
-    font-size: 13px;
-    color: var(--muted);
-  }
-  .view {
-    display: inline-block;
-    margin-top: 2px;
-    padding: 10px 16px;
-    border: 1px solid var(--line);
-    border-radius: 8px;
-    background: var(--white);
-    color: var(--ink);
-    font-size: 14px;
-    font-weight: 500;
-    text-decoration: none;
-    white-space: nowrap;
-    transition: border-color 120ms ease;
-  }
-  .view:hover { border-color: var(--ink); }
-  .view:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-  .views {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    align-items: flex-start;
-  }
-  .views .view { margin-top: 0; }
+      .proposals {
+        list-style: none;
+        margin: 48px 0 0;
+        padding: 0;
+      }
+      .proposal {
+        display: grid;
+        grid-template-columns: 48px 1fr auto;
+        gap: 6px 28px;
+        align-items: start;
+        border-top: 1px solid var(--line);
+        padding: 28px 0 32px;
+      }
+      .letter {
+        font-size: 40px;
+        font-weight: 400;
+        line-height: 1;
+        color: var(--faint);
+        padding-top: 2px;
+      }
+      .proposal-name {
+        margin: 0;
+        font-size: 20px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        line-height: 1.2;
+      }
+      .concept {
+        margin: 8px 0 0;
+        max-width: 52ch;
+        font-size: 15px;
+        line-height: 1.55;
+        color: var(--muted);
+      }
+      .swatches {
+        list-style: none;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px 22px;
+        margin: 18px 0 0;
+        padding: 0;
+      }
+      .swatch {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+      }
+      .dot {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        border: 1px solid rgba(27, 29, 34, 0.18);
+      }
+      .hex {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .typeface {
+        margin: 14px 0 0;
+        font-size: 13px;
+        color: var(--muted);
+      }
+      .view {
+        display: inline-block;
+        margin-top: 2px;
+        padding: 10px 16px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--white);
+        color: var(--ink);
+        font-size: 14px;
+        font-weight: 500;
+        text-decoration: none;
+        white-space: nowrap;
+        transition: border-color 120ms ease;
+      }
+      .view:hover {
+        border-color: var(--ink);
+      }
+      .view:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      .views {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: flex-start;
+      }
+      .views .view {
+        margin-top: 0;
+      }
 
-  .note {
-    margin: 0;
-    border-top: 1px solid var(--line);
-    padding: 22px 0 0;
-    font-size: 14px;
-    color: var(--muted);
-  }
+      .note {
+        margin: 0;
+        border-top: 1px solid var(--line);
+        padding: 22px 0 0;
+        font-size: 14px;
+        color: var(--muted);
+      }
 
-  @media (max-width: 600px) {
-    .page { padding: 48px 20px 40px; }
-    .proposal {
-      grid-template-columns: 1fr;
-      gap: 10px;
-      padding: 24px 0 28px;
-    }
-    .letter { font-size: 30px; }
-    .view { justify-self: start; min-height: 44px; }
-    .views { justify-self: start; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .view { transition: none; }
-  }
-</style>
-</head>
-<body>
-  <main class="page">
-    <header class="masthead">
-      <h1>GameShelf · Redesign proposals</h1>
-      <p class="lede">Three directions for a warmer, more beautiful GameShelf. Open a proposal to see the full Catalog screen.</p>
-    </header>
+      @media (max-width: 600px) {
+        .page {
+          padding: 48px 20px 40px;
+        }
+        .proposal {
+          grid-template-columns: 1fr;
+          gap: 10px;
+          padding: 24px 0 28px;
+        }
+        .letter {
+          font-size: 30px;
+        }
+        .view {
+          justify-self: start;
+          min-height: 44px;
+        }
+        .views {
+          justify-self: start;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .view {
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="page">
+      <header class="masthead">
+        <h1>GameShelf · Redesign proposals</h1>
+        <p class="lede">
+          Three directions for a warmer, more beautiful GameShelf. Open a
+          proposal to see the full Catalog screen.
+        </p>
+      </header>
 
-    <ul class="proposals">
-      <li class="proposal">
-        <span class="letter" aria-hidden="true">A</span>
-        <div>
-          <h2 class="proposal-name" aria-label="A · Nocturne">Nocturne</h2>
-          <p class="concept">Premium dark. A richer, layered take on GameShelf's amber-on-dark, with warm depth and a golden accent. (dark + light)</p>
-          <ul class="swatches" aria-label="Nocturne palette">
-            <li class="swatch"><span class="dot" style="background:#0F1116"></span><span class="hex">#0F1116</span></li>
-            <li class="swatch"><span class="dot" style="background:#171B22"></span><span class="hex">#171B22</span></li>
-            <li class="swatch"><span class="dot" style="background:#ECE8DE"></span><span class="hex">#ECE8DE</span></li>
-            <li class="swatch"><span class="dot" style="background:#F2B23E"></span><span class="hex">#F2B23E</span></li>
-          </ul>
-          <p class="typeface">Type: Sora + Manrope</p>
-        </div>
-        <div class="views">
-          <a class="view" href="proposal-a-nocturne.html">Ciemny (dark)</a>
-          <a class="view" href="proposal-a-nocturne-light.html">Jasny (light)</a>
-        </div>
-      </li>
+      <ul class="proposals">
+        <li class="proposal">
+          <span class="letter" aria-hidden="true">A</span>
+          <div>
+            <h2 class="proposal-name" aria-label="A · Nocturne">Nocturne</h2>
+            <p class="concept">
+              Premium dark. A richer, layered take on GameShelf's amber-on-dark,
+              with warm depth and a golden accent. (dark + light)
+            </p>
+            <ul class="swatches" aria-label="Nocturne palette">
+              <li class="swatch">
+                <span class="dot" style="background: #0f1116"></span
+                ><span class="hex">#0F1116</span>
+              </li>
+              <li class="swatch">
+                <span class="dot" style="background: #171b22"></span
+                ><span class="hex">#171B22</span>
+              </li>
+              <li class="swatch">
+                <span class="dot" style="background: #ece8de"></span
+                ><span class="hex">#ECE8DE</span>
+              </li>
+              <li class="swatch">
+                <span class="dot" style="background: #f2b23e"></span
+                ><span class="hex">#F2B23E</span>
+              </li>
+            </ul>
+            <p class="typeface">Type: Sora + Manrope</p>
+          </div>
+          <div class="views">
+            <a class="view" href="proposal-a-nocturne.html">Ciemny (dark)</a>
+            <a class="view" href="proposal-a-nocturne-light.html"
+              >Jasny (light)</a
+            >
+          </div>
+        </li>
 
-      <li class="proposal">
-        <span class="letter" aria-hidden="true">B</span>
-        <div>
-          <h2 class="proposal-name" aria-label="B · Gallery">Gallery</h2>
-          <p class="concept">Refined light editorial. A calm, spacious, gallery-like look with an elegant serif and a deep pine accent.</p>
-          <ul class="swatches" aria-label="Gallery palette">
-            <li class="swatch"><span class="dot" style="background:#F6F5F1"></span><span class="hex">#F6F5F1</span></li>
-            <li class="swatch"><span class="dot" style="background:#FFFFFF"></span><span class="hex">#FFFFFF</span></li>
-            <li class="swatch"><span class="dot" style="background:#1B1E24"></span><span class="hex">#1B1E24</span></li>
-            <li class="swatch"><span class="dot" style="background:#0E6B5A"></span><span class="hex">#0E6B5A</span></li>
-          </ul>
-          <p class="typeface">Type: Fraunces + Manrope</p>
-        </div>
-        <a class="view" href="proposal-b-gallery.html">View proposal</a>
-      </li>
+        <li class="proposal">
+          <span class="letter" aria-hidden="true">B</span>
+          <div>
+            <h2 class="proposal-name" aria-label="B · Gallery">Gallery</h2>
+            <p class="concept">
+              Refined light editorial. A calm, spacious, gallery-like look with
+              an elegant serif and a deep pine accent.
+            </p>
+            <ul class="swatches" aria-label="Gallery palette">
+              <li class="swatch">
+                <span class="dot" style="background: #f6f5f1"></span
+                ><span class="hex">#F6F5F1</span>
+              </li>
+              <li class="swatch">
+                <span class="dot" style="background: #ffffff"></span
+                ><span class="hex">#FFFFFF</span>
+              </li>
+              <li class="swatch">
+                <span class="dot" style="background: #1b1e24"></span
+                ><span class="hex">#1B1E24</span>
+              </li>
+              <li class="swatch">
+                <span class="dot" style="background: #0e6b5a"></span
+                ><span class="hex">#0E6B5A</span>
+              </li>
+            </ul>
+            <p class="typeface">Type: Fraunces + Manrope</p>
+          </div>
+          <a class="view" href="proposal-b-gallery.html">View proposal</a>
+        </li>
 
-      <li class="proposal">
-        <span class="letter" aria-hidden="true">C</span>
-        <div>
-          <h2 class="proposal-name" aria-label="C · Playroom">Playroom</h2>
-          <p class="concept">Friendly modern. A bright, rounded, approachable look with a coral accent and colorful platform tags.</p>
-          <ul class="swatches" aria-label="Playroom palette">
-            <li class="swatch"><span class="dot" style="background:#FAF9F6"></span><span class="hex">#FAF9F6</span></li>
-            <li class="swatch"><span class="dot" style="background:#FFFFFF"></span><span class="hex">#FFFFFF</span></li>
-            <li class="swatch"><span class="dot" style="background:#1A1C22"></span><span class="hex">#1A1C22</span></li>
-            <li class="swatch"><span class="dot" style="background:#FF5238"></span><span class="hex">#FF5238</span></li>
-          </ul>
-          <p class="typeface">Type: Plus Jakarta Sans</p>
-        </div>
-        <a class="view" href="proposal-c-playroom.html">View proposal</a>
-      </li>
-    </ul>
+        <li class="proposal">
+          <span class="letter" aria-hidden="true">C</span>
+          <div>
+            <h2 class="proposal-name" aria-label="C · Playroom">Playroom</h2>
+            <p class="concept">
+              Friendly modern. A bright, rounded, approachable look with a coral
+              accent and colorful platform tags.
+            </p>
+            <ul class="swatches" aria-label="Playroom palette">
+              <li class="swatch">
+                <span class="dot" style="background: #faf9f6"></span
+                ><span class="hex">#FAF9F6</span>
+              </li>
+              <li class="swatch">
+                <span class="dot" style="background: #ffffff"></span
+                ><span class="hex">#FFFFFF</span>
+              </li>
+              <li class="swatch">
+                <span class="dot" style="background: #1a1c22"></span
+                ><span class="hex">#1A1C22</span>
+              </li>
+              <li class="swatch">
+                <span class="dot" style="background: #ff5238"></span
+                ><span class="hex">#FF5238</span>
+              </li>
+            </ul>
+            <p class="typeface">Type: Plus Jakarta Sans</p>
+          </div>
+          <a class="view" href="proposal-c-playroom.html">View proposal</a>
+        </li>
+      </ul>
 
-    <p class="note">These are standalone mockups for review, not yet in the app.</p>
-  </main>
-</body>
+      <p class="note">
+        These are standalone mockups for review, not yet in the app.
+      </p>
+    </main>
+  </body>
 </html>

@@ -11,620 +11,941 @@
   Non-functional mockup controls: nav items, "Add game", pagination.
 -->
 <html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light">
-<title>GameShelf · Gallery · Catalog</title>
-<link rel="icon" href="data:,">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #F6F5F1;
-    --surface: #FFFFFF;
-    --surface-2: #FBFAF7;
-    --edge: #E6E3DB;
-    --edge-soft: #EEECE5;
-    --ink: #1B1E24;
-    --muted: #6C7280;
-    --faint: #9AA0AB;
-    --accent: #0E6B5A;
-    --accent-soft: rgba(14, 107, 90, 0.10);
-    --accent-ink: #FFFFFF;
-    --danger: #C0392B;
-    --display: "Fraunces", Georgia, "Times New Roman", serif;
-    --body: "Manrope", -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
-    --shadow-rest: 0 1px 2px rgba(27, 30, 36, 0.04), 0 10px 24px -18px rgba(27, 30, 36, 0.16);
-    --shadow-lift: 0 2px 4px rgba(27, 30, 36, 0.05), 0 20px 34px -16px rgba(27, 30, 36, 0.22);
-  }
-  * { box-sizing: border-box; }
-  html { -webkit-text-size-adjust: 100%; }
-  body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--ink);
-    font-family: var(--body);
-    font-size: 16px;
-    line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
-  }
-  ::selection { background: rgba(14, 107, 90, 0.16); }
-  a:focus-visible,
-  button:focus-visible,
-  select:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
-
-  /* Top nav */
-  .nav {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    background: var(--bg);
-    border-bottom: 1px solid var(--edge);
-  }
-  .nav-inner {
-    max-width: 1240px;
-    margin: 0 auto;
-    padding: 13px 24px;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px 26px;
-  }
-  .nav-back {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--muted);
-    text-decoration: none;
-  }
-  .nav-back:hover { color: var(--ink); }
-  .brand {
-    font-family: var(--display);
-    font-weight: 600;
-    font-size: 19px;
-    letter-spacing: -0.01em;
-    color: var(--ink);
-    text-decoration: none;
-  }
-  .brand:hover { color: var(--accent); }
-  .nav-links { display: flex; gap: 22px; }
-  .nav-links a {
-    position: relative;
-    padding: 4px 0;
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--muted);
-    text-decoration: none;
-  }
-  .nav-links a:hover { color: var(--ink); }
-  .nav-links a.active { color: var(--ink); }
-  .nav-links a.active::after {
-    content: "";
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: -3px;
-    height: 2px;
-    border-radius: 1px;
-    background: var(--accent);
-  }
-  .nav-actions {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .btn-add {
-    font-family: var(--body);
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--accent-ink);
-    background: var(--accent);
-    border: 1px solid var(--accent);
-    border-radius: 8px;
-    padding: 8px 15px;
-    cursor: pointer;
-    transition: background-color 0.15s ease;
-  }
-  .btn-add:hover { background: #0B5A4C; }
-  .avatar {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    background: var(--accent-soft);
-    border: 1px solid rgba(14, 107, 90, 0.18);
-    color: var(--accent);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-  }
-
-  main {
-    max-width: 1240px;
-    margin: 0 auto;
-    padding: 0 24px;
-  }
-
-  /* Page header */
-  .page-head { padding-top: 56px; }
-  .page-head h1 {
-    margin: 0;
-    font-family: var(--display);
-    font-weight: 600;
-    font-size: clamp(32px, 3.4vw, 40px);
-    line-height: 1.12;
-    letter-spacing: -0.015em;
-  }
-  .page-head p {
-    margin: 10px 0 0;
-    font-size: 16px;
-    color: var(--muted);
-  }
-  .head-rule {
-    width: 56px;
-    height: 2px;
-    margin-top: 22px;
-    border-radius: 1px;
-    background: var(--accent);
-  }
-
-  /* Filter bar */
-  .filterbar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 12px 14px;
-    margin-top: 30px;
-  }
-  .search {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    min-width: min(320px, 100%);
-    padding: 9px 16px;
-    background: var(--surface);
-    border: 1px solid var(--edge);
-    border-radius: 999px;
-    transition: border-color 0.15s ease, box-shadow 0.15s ease;
-  }
-  .search:focus-within {
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--accent-soft);
-  }
-  .search svg { flex: none; color: var(--faint); }
-  .search input {
-    width: 100%;
-    border: 0;
-    outline: 0;
-    background: transparent;
-    font-family: var(--body);
-    font-size: 14px;
-    color: var(--ink);
-  }
-  .search input::placeholder { color: var(--faint); }
-  .search input:focus-visible { outline: none; }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-  .chip {
-    font-family: var(--body);
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--muted);
-    background: var(--surface);
-    border: 1px solid var(--edge);
-    border-radius: 999px;
-    padding: 8px 14px;
-    cursor: pointer;
-    transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
-  }
-  .chip:hover { color: var(--ink); border-color: var(--faint); }
-  .chip.active {
-    color: var(--accent);
-    background: var(--accent-soft);
-    border-color: rgba(14, 107, 90, 0.30);
-    font-weight: 600;
-  }
-  .sort {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .sort-label { font-size: 13px; font-weight: 500; color: var(--muted); }
-  .sort select {
-    font-family: var(--body);
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--ink);
-    background: var(--surface);
-    border: 1px solid var(--edge);
-    border-radius: 8px;
-    padding: 8px 10px;
-    cursor: pointer;
-  }
-  .sort select:hover { border-color: var(--faint); }
-
-  /* Game grid */
-  .catalog { margin-top: 28px; }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 16px;
-  }
-  .card {
-    display: flex;
-    flex-direction: column;
-    background: var(--surface);
-    border: 1px solid var(--edge);
-    border-radius: 10px;
-    overflow: hidden;
-    box-shadow: var(--shadow-rest);
-    transition: transform 0.18s ease, box-shadow 0.18s ease;
-  }
-  .card[hidden] { display: none; }
-  .card:hover {
-    transform: translateY(-3px);
-    box-shadow: var(--shadow-lift);
-  }
-  .cover {
-    aspect-ratio: 3 / 4;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background:
-      linear-gradient(to top, rgba(16, 13, 10, 0.30), rgba(16, 13, 10, 0) 45%),
-      linear-gradient(158deg, var(--c1), var(--c2));
-  }
-  .monogram {
-    font-family: var(--display);
-    font-weight: 600;
-    font-size: clamp(44px, 14vw, 68px);
-    line-height: 1;
-    color: rgba(255, 255, 255, 0.26);
-    user-select: none;
-  }
-  .card-body { padding: 14px 16px 16px; }
-  .card-title {
-    margin: 0;
-    font-family: var(--display);
-    font-weight: 500;
-    font-size: 17px;
-    line-height: 1.3;
-    letter-spacing: -0.005em;
-  }
-  .card-platforms {
-    margin: 5px 0 0;
-    font-size: 12px;
-    font-weight: 400;
-    line-height: 1.45;
-    color: var(--muted);
-  }
-
-  /* Empty state */
-  .empty {
-    margin-top: 28px;
-    padding: 44px 24px;
-    text-align: center;
-    font-size: 14px;
-    color: var(--muted);
-    background: var(--surface-2);
-    border: 1px dashed var(--edge);
-    border-radius: 10px;
-  }
-  .empty[hidden] { display: none; }
-
-  /* Pagination */
-  .pagination {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 6px;
-    margin-top: 44px;
-  }
-  .page-num {
-    min-width: 32px;
-    height: 32px;
-    padding: 0 9px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--body);
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--muted);
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: color 0.15s ease, border-color 0.15s ease;
-  }
-  .page-num:hover:not(:disabled) { color: var(--ink); border-color: var(--edge-soft); }
-  .page-num.current { color: var(--accent); font-weight: 600; }
-  .page-num:disabled { opacity: 0.45; cursor: default; }
-
-  /* Footer */
-  .foot {
-    margin: 52px 0 40px;
-    text-align: center;
-    font-size: 12.5px;
-    color: var(--muted);
-  }
-
-  /* Breakpoints */
-  @media (min-width: 768px) {
-    .grid { gap: 22px; }
-  }
-  @media (min-width: 1024px) {
-    .grid { grid-template-columns: repeat(3, 1fr); }
-  }
-  @media (min-width: 1280px) {
-    .grid { grid-template-columns: repeat(4, 1fr); }
-  }
-  @media (max-width: 859px) {
-    .nav-inner { padding: 12px 16px; gap: 10px 14px; }
-    .nav-links {
-      order: 5;
-      flex-basis: 100%;
-      gap: 18px;
-    }
-    main { padding: 0 16px; }
-    .page-head { padding-top: 40px; }
-    .sort { margin-left: 0; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .card, .chip, .btn-add, .page-num, .search { transition: none; }
-    .card:hover { transform: none; }
-  }
-</style>
-</head>
-<body>
-<header class="nav">
-  <div class="nav-inner">
-    <a class="nav-back" href="index.html">All proposals</a>
-    <a class="brand" href="index.html">GameShelf</a>
-    <nav class="nav-links" aria-label="Primary">
-      <a href="#" class="active" aria-current="page">Catalog</a>
-      <a href="#">Platforms</a>
-      <a href="#">Import</a>
-      <a href="#">Settings</a>
-    </nav>
-    <div class="nav-actions">
-      <button type="button" class="btn-add">Add game</button>
-      <span class="avatar" aria-hidden="true">SN</span>
-    </div>
-  </div>
-</header>
-
-<main>
-  <header class="page-head">
-    <h1>Your collection</h1>
-    <p>Every game you own, in one place.</p>
-    <div class="head-rule" aria-hidden="true"></div>
-  </header>
-
-  <div class="filterbar">
-    <label class="search">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.2" y2="16.2"></line></svg>
-      <input id="search" type="search" placeholder="Search your collection" autocomplete="off" aria-label="Search your collection">
-    </label>
-    <div class="chips" role="group" aria-label="Filter by platform">
-      <button type="button" class="chip active" data-platform="All" aria-pressed="true">All</button>
-      <button type="button" class="chip" data-platform="PC" aria-pressed="false">PC</button>
-      <button type="button" class="chip" data-platform="PlayStation 5" aria-pressed="false">PlayStation 5</button>
-      <button type="button" class="chip" data-platform="PlayStation 4" aria-pressed="false">PlayStation 4</button>
-      <button type="button" class="chip" data-platform="Xbox" aria-pressed="false">Xbox</button>
-      <button type="button" class="chip" data-platform="Nintendo Switch" aria-pressed="false">Nintendo Switch</button>
-    </div>
-    <label class="sort">
-      <span class="sort-label">Sort</span>
-      <select id="sort">
-        <option value="title">Title (A–Z)</option>
-        <option value="year">Year (newest)</option>
-      </select>
-    </label>
-  </div>
-
-  <section class="catalog" aria-label="Game collection">
-    <div class="grid" id="grid">
-      <article class="card" data-title="Hades" data-year="2020" data-platforms="PC, PlayStation 4, Xbox One, Nintendo Switch">
-        <div class="cover" style="--c1:#8A4238; --c2:#3E2320" role="img" aria-label="Placeholder cover for Hades">
-          <span class="monogram" aria-hidden="true">H</span>
-        </div>
-        <div class="card-body">
-          <h3 class="card-title">Hades</h3>
-          <p class="card-platforms">PC, PlayStation 4, Xbox One, Nintendo Switch</p>
-        </div>
-      </article>
-      <article class="card" data-title="Hades II" data-year="2024" data-platforms="PC, PlayStation 5, Xbox Series X">
-        <div class="cover" style="--c1:#A05A33; --c2:#4E2A18" role="img" aria-label="Placeholder cover for Hades II">
-          <span class="monogram" aria-hidden="true">H</span>
-        </div>
-        <div class="card-body">
-          <h3 class="card-title">Hades II</h3>
-          <p class="card-platforms">PC, PlayStation 5, Xbox Series X</p>
-        </div>
-      </article>
-      <article class="card" data-title="Elden Ring" data-year="2022" data-platforms="PC, PlayStation 5, Xbox Series X">
-        <div class="cover" style="--c1:#8E8163; --c2:#453E2D" role="img" aria-label="Placeholder cover for Elden Ring">
-          <span class="monogram" aria-hidden="true">E</span>
-        </div>
-        <div class="card-body">
-          <h3 class="card-title">Elden Ring</h3>
-          <p class="card-platforms">PC, PlayStation 5, Xbox Series X</p>
-        </div>
-      </article>
-      <article class="card" data-title="Hollow Knight" data-year="2017" data-platforms="PC, Nintendo Switch, PlayStation 4, Xbox One">
-        <div class="cover" style="--c1:#5A6B5E; --c2:#2A332C" role="img" aria-label="Placeholder cover for Hollow Knight">
-          <span class="monogram" aria-hidden="true">H</span>
-        </div>
-        <div class="card-body">
-          <h3 class="card-title">Hollow Knight</h3>
-          <p class="card-platforms">PC, Nintendo Switch, PlayStation 4, Xbox One</p>
-        </div>
-      </article>
-      <article class="card" data-title="Celeste" data-year="2018" data-platforms="PC, Nintendo Switch, PlayStation 4, Xbox One">
-        <div class="cover" style="--c1:#A9737B; --c2:#573A41" role="img" aria-label="Placeholder cover for Celeste">
-          <span class="monogram" aria-hidden="true">C</span>
-        </div>
-        <div class="card-body">
-          <h3 class="card-title">Celeste</h3>
-          <p class="card-platforms">PC, Nintendo Switch, PlayStation 4, Xbox One</p>
-        </div>
-      </article>
-      <article class="card" data-title="Stardew Valley" data-year="2016" data-platforms="PC, Nintendo Switch, PlayStation 4, Xbox One, iOS">
-        <div class="cover" style="--c1:#7C8F67; --c2:#414F37" role="img" aria-label="Placeholder cover for Stardew Valley">
-          <span class="monogram" aria-hidden="true">S</span>
-        </div>
-        <div class="card-body">
-          <h3 class="card-title">Stardew Valley</h3>
-          <p class="card-platforms">PC, Nintendo Switch, PlayStation 4, Xbox One, iOS</p>
-        </div>
-      </article>
-      <article class="card" data-title="Baldur's Gate 3" data-year="2023" data-platforms="PC, PlayStation 5, Xbox Series X">
-        <div class="cover" style="--c1:#99713F; --c2:#4B351B" role="img" aria-label="Placeholder cover for Baldur's Gate 3">
-          <span class="monogram" aria-hidden="true">B</span>
-        </div>
-        <div class="card-body">
-          <h3 class="card-title">Baldur's Gate 3</h3>
-          <p class="card-platforms">PC, PlayStation 5, Xbox Series X</p>
-        </div>
-      </article>
-      <article class="card" data-title="Disco Elysium" data-year="2019" data-platforms="PC, PlayStation 4, Xbox One, Nintendo Switch">
-        <div class="cover" style="--c1:#8C4A4E; --c2:#422429" role="img" aria-label="Placeholder cover for Disco Elysium">
-          <span class="monogram" aria-hidden="true">D</span>
-        </div>
-        <div class="card-body">
-          <h3 class="card-title">Disco Elysium</h3>
-          <p class="card-platforms">PC, PlayStation 4, Xbox One, Nintendo Switch</p>
-        </div>
-      </article>
-      <article class="card" data-title="Outer Wilds" data-year="2019" data-platforms="PC, Nintendo Switch, PlayStation 4, Xbox One">
-        <div class="cover" style="--c1:#B09868; --c2:#5A4A2D" role="img" aria-label="Placeholder cover for Outer Wilds">
-          <span class="monogram" aria-hidden="true">O</span>
-        </div>
-        <div class="card-body">
-          <h3 class="card-title">Outer Wilds</h3>
-          <p class="card-platforms">PC, Nintendo Switch, PlayStation 4, Xbox One</p>
-        </div>
-      </article>
-      <article class="card" data-title="Cuphead" data-year="2017" data-platforms="PC, Nintendo Switch, Xbox One">
-        <div class="cover" style="--c1:#A34E42; --c2:#522A24" role="img" aria-label="Placeholder cover for Cuphead">
-          <span class="monogram" aria-hidden="true">C</span>
-        </div>
-        <div class="card-body">
-          <h3 class="card-title">Cuphead</h3>
-          <p class="card-platforms">PC, Nintendo Switch, Xbox One</p>
-        </div>
-      </article>
-      <article class="card" data-title="It Takes Two" data-year="2021" data-platforms="PC, PlayStation 4, Xbox One">
-        <div class="cover" style="--c1:#5B7F8F; --c2:#2C4653" role="img" aria-label="Placeholder cover for It Takes Two">
-          <span class="monogram" aria-hidden="true">I</span>
-        </div>
-        <div class="card-body">
-          <h3 class="card-title">It Takes Two</h3>
-          <p class="card-platforms">PC, PlayStation 4, Xbox One</p>
-        </div>
-      </article>
-      <article class="card" data-title="Ori and the Will of the Wisps" data-year="2020" data-platforms="PC, Xbox One, Nintendo Switch">
-        <div class="cover" style="--c1:#4F7A62; --c2:#263E32" role="img" aria-label="Placeholder cover for Ori and the Will of the Wisps">
-          <span class="monogram" aria-hidden="true">O</span>
-        </div>
-        <div class="card-body">
-          <h3 class="card-title">Ori and the Will of the Wisps</h3>
-          <p class="card-platforms">PC, Xbox One, Nintendo Switch</p>
-        </div>
-      </article>
-    </div>
-    <div class="empty" id="empty" hidden>No games match. Try clearing the search.</div>
-  </section>
-
-  <nav class="pagination" aria-label="Catalog pages">
-    <button type="button" class="page-num" disabled aria-label="Previous page">‹</button>
-    <span class="page-num current" aria-current="page">1</span>
-    <button type="button" class="page-num">2</button>
-    <button type="button" class="page-num">3</button>
-    <button type="button" class="page-num" aria-label="Next page">›</button>
-  </nav>
-
-  <footer class="foot">
-    <p>Design mockup · Not connected to the app</p>
-  </footer>
-</main>
-
-<script>
-(function () {
-  "use strict";
-  var grid = document.getElementById("grid");
-  var cards = Array.prototype.slice.call(grid.querySelectorAll(".card"));
-  var search = document.getElementById("search");
-  var sortSelect = document.getElementById("sort");
-  var empty = document.getElementById("empty");
-  var chips = Array.prototype.slice.call(document.querySelectorAll(".chip"));
-  var activePlatform = "All";
-
-  function platformMatches(card, platform) {
-    if (platform === "All") return true;
-    var list = card.getAttribute("data-platforms").split(",");
-    if (platform === "Xbox") {
-      return list.some(function (p) { return p.trim().indexOf("Xbox") === 0; });
-    }
-    return list.some(function (p) { return p.trim() === platform; });
-  }
-
-  function applyFilters() {
-    var q = search.value.trim().toLowerCase();
-    var visible = 0;
-    cards.forEach(function (card) {
-      var title = card.getAttribute("data-title").toLowerCase();
-      var ok = (!q || title.indexOf(q) !== -1) && platformMatches(card, activePlatform);
-      card.hidden = !ok;
-      if (ok) visible += 1;
-    });
-    empty.hidden = visible !== 0;
-  }
-
-  function applySort() {
-    var mode = sortSelect.value;
-    var sorted = cards.slice().sort(function (a, b) {
-      if (mode === "year") {
-        var diff = parseInt(b.getAttribute("data-year"), 10) - parseInt(a.getAttribute("data-year"), 10);
-        if (diff !== 0) return diff;
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>GameShelf · Gallery · Catalog</title>
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600&family=Manrope:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f6f5f1;
+        --surface: #ffffff;
+        --surface-2: #fbfaf7;
+        --edge: #e6e3db;
+        --edge-soft: #eeece5;
+        --ink: #1b1e24;
+        --muted: #6c7280;
+        --faint: #9aa0ab;
+        --accent: #0e6b5a;
+        --accent-soft: rgba(14, 107, 90, 0.1);
+        --accent-ink: #ffffff;
+        --danger: #c0392b;
+        --display: 'Fraunces', Georgia, 'Times New Roman', serif;
+        --body:
+          'Manrope', -apple-system, 'Segoe UI', 'Helvetica Neue', Arial,
+          sans-serif;
+        --shadow-rest:
+          0 1px 2px rgba(27, 30, 36, 0.04),
+          0 10px 24px -18px rgba(27, 30, 36, 0.16);
+        --shadow-lift:
+          0 2px 4px rgba(27, 30, 36, 0.05),
+          0 20px 34px -16px rgba(27, 30, 36, 0.22);
       }
-      return a.getAttribute("data-title").localeCompare(b.getAttribute("data-title"));
-    });
-    sorted.forEach(function (card) { grid.appendChild(card); });
-  }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        -webkit-text-size-adjust: 100%;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family: var(--body);
+        font-size: 16px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
+      ::selection {
+        background: rgba(14, 107, 90, 0.16);
+      }
+      a:focus-visible,
+      button:focus-visible,
+      select:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
 
-  search.addEventListener("input", applyFilters);
-  sortSelect.addEventListener("change", function () {
-    applySort();
-    applyFilters();
-  });
-  chips.forEach(function (chip) {
-    chip.addEventListener("click", function () {
-      chips.forEach(function (c) {
-        c.classList.remove("active");
-        c.setAttribute("aria-pressed", "false");
-      });
-      chip.classList.add("active");
-      chip.setAttribute("aria-pressed", "true");
-      activePlatform = chip.getAttribute("data-platform");
-      applyFilters();
-    });
-  });
-  document.querySelectorAll('a[href="#"]').forEach(function (a) {
-    a.addEventListener("click", function (e) { e.preventDefault(); });
-  });
+      /* Top nav */
+      .nav {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: var(--bg);
+        border-bottom: 1px solid var(--edge);
+      }
+      .nav-inner {
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 13px 24px;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px 26px;
+      }
+      .nav-back {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--muted);
+        text-decoration: none;
+      }
+      .nav-back:hover {
+        color: var(--ink);
+      }
+      .brand {
+        font-family: var(--display);
+        font-weight: 600;
+        font-size: 19px;
+        letter-spacing: -0.01em;
+        color: var(--ink);
+        text-decoration: none;
+      }
+      .brand:hover {
+        color: var(--accent);
+      }
+      .nav-links {
+        display: flex;
+        gap: 22px;
+      }
+      .nav-links a {
+        position: relative;
+        padding: 4px 0;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--muted);
+        text-decoration: none;
+      }
+      .nav-links a:hover {
+        color: var(--ink);
+      }
+      .nav-links a.active {
+        color: var(--ink);
+      }
+      .nav-links a.active::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: -3px;
+        height: 2px;
+        border-radius: 1px;
+        background: var(--accent);
+      }
+      .nav-actions {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .btn-add {
+        font-family: var(--body);
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--accent-ink);
+        background: var(--accent);
+        border: 1px solid var(--accent);
+        border-radius: 8px;
+        padding: 8px 15px;
+        cursor: pointer;
+        transition: background-color 0.15s ease;
+      }
+      .btn-add:hover {
+        background: #0b5a4c;
+      }
+      .avatar {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: var(--accent-soft);
+        border: 1px solid rgba(14, 107, 90, 0.18);
+        color: var(--accent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+      }
 
-  applySort();
-  applyFilters();
-})();
-</script>
-</body>
+      main {
+        max-width: 1240px;
+        margin: 0 auto;
+        padding: 0 24px;
+      }
+
+      /* Page header */
+      .page-head {
+        padding-top: 56px;
+      }
+      .page-head h1 {
+        margin: 0;
+        font-family: var(--display);
+        font-weight: 600;
+        font-size: clamp(32px, 3.4vw, 40px);
+        line-height: 1.12;
+        letter-spacing: -0.015em;
+      }
+      .page-head p {
+        margin: 10px 0 0;
+        font-size: 16px;
+        color: var(--muted);
+      }
+      .head-rule {
+        width: 56px;
+        height: 2px;
+        margin-top: 22px;
+        border-radius: 1px;
+        background: var(--accent);
+      }
+
+      /* Filter bar */
+      .filterbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px 14px;
+        margin-top: 30px;
+      }
+      .search {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        min-width: min(320px, 100%);
+        padding: 9px 16px;
+        background: var(--surface);
+        border: 1px solid var(--edge);
+        border-radius: 999px;
+        transition:
+          border-color 0.15s ease,
+          box-shadow 0.15s ease;
+      }
+      .search:focus-within {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+      .search svg {
+        flex: none;
+        color: var(--faint);
+      }
+      .search input {
+        width: 100%;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        font-family: var(--body);
+        font-size: 14px;
+        color: var(--ink);
+      }
+      .search input::placeholder {
+        color: var(--faint);
+      }
+      .search input:focus-visible {
+        outline: none;
+      }
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      .chip {
+        font-family: var(--body);
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--muted);
+        background: var(--surface);
+        border: 1px solid var(--edge);
+        border-radius: 999px;
+        padding: 8px 14px;
+        cursor: pointer;
+        transition:
+          color 0.15s ease,
+          background-color 0.15s ease,
+          border-color 0.15s ease;
+      }
+      .chip:hover {
+        color: var(--ink);
+        border-color: var(--faint);
+      }
+      .chip.active {
+        color: var(--accent);
+        background: var(--accent-soft);
+        border-color: rgba(14, 107, 90, 0.3);
+        font-weight: 600;
+      }
+      .sort {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .sort-label {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--muted);
+      }
+      .sort select {
+        font-family: var(--body);
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--ink);
+        background: var(--surface);
+        border: 1px solid var(--edge);
+        border-radius: 8px;
+        padding: 8px 10px;
+        cursor: pointer;
+      }
+      .sort select:hover {
+        border-color: var(--faint);
+      }
+
+      /* Game grid */
+      .catalog {
+        margin-top: 28px;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+      }
+      .card {
+        display: flex;
+        flex-direction: column;
+        background: var(--surface);
+        border: 1px solid var(--edge);
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: var(--shadow-rest);
+        transition:
+          transform 0.18s ease,
+          box-shadow 0.18s ease;
+      }
+      .card[hidden] {
+        display: none;
+      }
+      .card:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--shadow-lift);
+      }
+      .cover {
+        aspect-ratio: 3 / 4;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background:
+          linear-gradient(
+            to top,
+            rgba(16, 13, 10, 0.3),
+            rgba(16, 13, 10, 0) 45%
+          ),
+          linear-gradient(158deg, var(--c1), var(--c2));
+      }
+      .monogram {
+        font-family: var(--display);
+        font-weight: 600;
+        font-size: clamp(44px, 14vw, 68px);
+        line-height: 1;
+        color: rgba(255, 255, 255, 0.26);
+        user-select: none;
+      }
+      .card-body {
+        padding: 14px 16px 16px;
+      }
+      .card-title {
+        margin: 0;
+        font-family: var(--display);
+        font-weight: 500;
+        font-size: 17px;
+        line-height: 1.3;
+        letter-spacing: -0.005em;
+      }
+      .card-platforms {
+        margin: 5px 0 0;
+        font-size: 12px;
+        font-weight: 400;
+        line-height: 1.45;
+        color: var(--muted);
+      }
+
+      /* Empty state */
+      .empty {
+        margin-top: 28px;
+        padding: 44px 24px;
+        text-align: center;
+        font-size: 14px;
+        color: var(--muted);
+        background: var(--surface-2);
+        border: 1px dashed var(--edge);
+        border-radius: 10px;
+      }
+      .empty[hidden] {
+        display: none;
+      }
+
+      /* Pagination */
+      .pagination {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 6px;
+        margin-top: 44px;
+      }
+      .page-num {
+        min-width: 32px;
+        height: 32px;
+        padding: 0 9px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--body);
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--muted);
+        background: transparent;
+        border: 1px solid transparent;
+        border-radius: 8px;
+        cursor: pointer;
+        transition:
+          color 0.15s ease,
+          border-color 0.15s ease;
+      }
+      .page-num:hover:not(:disabled) {
+        color: var(--ink);
+        border-color: var(--edge-soft);
+      }
+      .page-num.current {
+        color: var(--accent);
+        font-weight: 600;
+      }
+      .page-num:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+
+      /* Footer */
+      .foot {
+        margin: 52px 0 40px;
+        text-align: center;
+        font-size: 12.5px;
+        color: var(--muted);
+      }
+
+      /* Breakpoints */
+      @media (min-width: 768px) {
+        .grid {
+          gap: 22px;
+        }
+      }
+      @media (min-width: 1024px) {
+        .grid {
+          grid-template-columns: repeat(3, 1fr);
+        }
+      }
+      @media (min-width: 1280px) {
+        .grid {
+          grid-template-columns: repeat(4, 1fr);
+        }
+      }
+      @media (max-width: 859px) {
+        .nav-inner {
+          padding: 12px 16px;
+          gap: 10px 14px;
+        }
+        .nav-links {
+          order: 5;
+          flex-basis: 100%;
+          gap: 18px;
+        }
+        main {
+          padding: 0 16px;
+        }
+        .page-head {
+          padding-top: 40px;
+        }
+        .sort {
+          margin-left: 0;
+        }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .card,
+        .chip,
+        .btn-add,
+        .page-num,
+        .search {
+          transition: none;
+        }
+        .card:hover {
+          transform: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header class="nav">
+      <div class="nav-inner">
+        <a class="nav-back" href="index.html">All proposals</a>
+        <a class="brand" href="index.html">GameShelf</a>
+        <nav class="nav-links" aria-label="Primary">
+          <a href="#" class="active" aria-current="page">Catalog</a>
+          <a href="#">Platforms</a>
+          <a href="#">Import</a>
+          <a href="#">Settings</a>
+        </nav>
+        <div class="nav-actions">
+          <button type="button" class="btn-add">Add game</button>
+          <span class="avatar" aria-hidden="true">SN</span>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <header class="page-head">
+        <h1>Your collection</h1>
+        <p>Every game you own, in one place.</p>
+        <div class="head-rule" aria-hidden="true"></div>
+      </header>
+
+      <div class="filterbar">
+        <label class="search">
+          <svg
+            width="15"
+            height="15"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="11" cy="11" r="7"></circle>
+            <line x1="21" y1="21" x2="16.2" y2="16.2"></line>
+          </svg>
+          <input
+            id="search"
+            type="search"
+            placeholder="Search your collection"
+            autocomplete="off"
+            aria-label="Search your collection"
+          />
+        </label>
+        <div class="chips" role="group" aria-label="Filter by platform">
+          <button
+            type="button"
+            class="chip active"
+            data-platform="All"
+            aria-pressed="true"
+          >
+            All
+          </button>
+          <button
+            type="button"
+            class="chip"
+            data-platform="PC"
+            aria-pressed="false"
+          >
+            PC
+          </button>
+          <button
+            type="button"
+            class="chip"
+            data-platform="PlayStation 5"
+            aria-pressed="false"
+          >
+            PlayStation 5
+          </button>
+          <button
+            type="button"
+            class="chip"
+            data-platform="PlayStation 4"
+            aria-pressed="false"
+          >
+            PlayStation 4
+          </button>
+          <button
+            type="button"
+            class="chip"
+            data-platform="Xbox"
+            aria-pressed="false"
+          >
+            Xbox
+          </button>
+          <button
+            type="button"
+            class="chip"
+            data-platform="Nintendo Switch"
+            aria-pressed="false"
+          >
+            Nintendo Switch
+          </button>
+        </div>
+        <label class="sort">
+          <span class="sort-label">Sort</span>
+          <select id="sort">
+            <option value="title">Title (A–Z)</option>
+            <option value="year">Year (newest)</option>
+          </select>
+        </label>
+      </div>
+
+      <section class="catalog" aria-label="Game collection">
+        <div class="grid" id="grid">
+          <article
+            class="card"
+            data-title="Hades"
+            data-year="2020"
+            data-platforms="PC, PlayStation 4, Xbox One, Nintendo Switch"
+          >
+            <div
+              class="cover"
+              style="--c1: #8a4238; --c2: #3e2320"
+              role="img"
+              aria-label="Placeholder cover for Hades"
+            >
+              <span class="monogram" aria-hidden="true">H</span>
+            </div>
+            <div class="card-body">
+              <h3 class="card-title">Hades</h3>
+              <p class="card-platforms">
+                PC, PlayStation 4, Xbox One, Nintendo Switch
+              </p>
+            </div>
+          </article>
+          <article
+            class="card"
+            data-title="Hades II"
+            data-year="2024"
+            data-platforms="PC, PlayStation 5, Xbox Series X"
+          >
+            <div
+              class="cover"
+              style="--c1: #a05a33; --c2: #4e2a18"
+              role="img"
+              aria-label="Placeholder cover for Hades II"
+            >
+              <span class="monogram" aria-hidden="true">H</span>
+            </div>
+            <div class="card-body">
+              <h3 class="card-title">Hades II</h3>
+              <p class="card-platforms">PC, PlayStation 5, Xbox Series X</p>
+            </div>
+          </article>
+          <article
+            class="card"
+            data-title="Elden Ring"
+            data-year="2022"
+            data-platforms="PC, PlayStation 5, Xbox Series X"
+          >
+            <div
+              class="cover"
+              style="--c1: #8e8163; --c2: #453e2d"
+              role="img"
+              aria-label="Placeholder cover for Elden Ring"
+            >
+              <span class="monogram" aria-hidden="true">E</span>
+            </div>
+            <div class="card-body">
+              <h3 class="card-title">Elden Ring</h3>
+              <p class="card-platforms">PC, PlayStation 5, Xbox Series X</p>
+            </div>
+          </article>
+          <article
+            class="card"
+            data-title="Hollow Knight"
+            data-year="2017"
+            data-platforms="PC, Nintendo Switch, PlayStation 4, Xbox One"
+          >
+            <div
+              class="cover"
+              style="--c1: #5a6b5e; --c2: #2a332c"
+              role="img"
+              aria-label="Placeholder cover for Hollow Knight"
+            >
+              <span class="monogram" aria-hidden="true">H</span>
+            </div>
+            <div class="card-body">
+              <h3 class="card-title">Hollow Knight</h3>
+              <p class="card-platforms">
+                PC, Nintendo Switch, PlayStation 4, Xbox One
+              </p>
+            </div>
+          </article>
+          <article
+            class="card"
+            data-title="Celeste"
+            data-year="2018"
+            data-platforms="PC, Nintendo Switch, PlayStation 4, Xbox One"
+          >
+            <div
+              class="cover"
+              style="--c1: #a9737b; --c2: #573a41"
+              role="img"
+              aria-label="Placeholder cover for Celeste"
+            >
+              <span class="monogram" aria-hidden="true">C</span>
+            </div>
+            <div class="card-body">
+              <h3 class="card-title">Celeste</h3>
+              <p class="card-platforms">
+                PC, Nintendo Switch, PlayStation 4, Xbox One
+              </p>
+            </div>
+          </article>
+          <article
+            class="card"
+            data-title="Stardew Valley"
+            data-year="2016"
+            data-platforms="PC, Nintendo Switch, PlayStation 4, Xbox One, iOS"
+          >
+            <div
+              class="cover"
+              style="--c1: #7c8f67; --c2: #414f37"
+              role="img"
+              aria-label="Placeholder cover for Stardew Valley"
+            >
+              <span class="monogram" aria-hidden="true">S</span>
+            </div>
+            <div class="card-body">
+              <h3 class="card-title">Stardew Valley</h3>
+              <p class="card-platforms">
+                PC, Nintendo Switch, PlayStation 4, Xbox One, iOS
+              </p>
+            </div>
+          </article>
+          <article
+            class="card"
+            data-title="Baldur's Gate 3"
+            data-year="2023"
+            data-platforms="PC, PlayStation 5, Xbox Series X"
+          >
+            <div
+              class="cover"
+              style="--c1: #99713f; --c2: #4b351b"
+              role="img"
+              aria-label="Placeholder cover for Baldur's Gate 3"
+            >
+              <span class="monogram" aria-hidden="true">B</span>
+            </div>
+            <div class="card-body">
+              <h3 class="card-title">Baldur's Gate 3</h3>
+              <p class="card-platforms">PC, PlayStation 5, Xbox Series X</p>
+            </div>
+          </article>
+          <article
+            class="card"
+            data-title="Disco Elysium"
+            data-year="2019"
+            data-platforms="PC, PlayStation 4, Xbox One, Nintendo Switch"
+          >
+            <div
+              class="cover"
+              style="--c1: #8c4a4e; --c2: #422429"
+              role="img"
+              aria-label="Placeholder cover for Disco Elysium"
+            >
+              <span class="monogram" aria-hidden="true">D</span>
+            </div>
+            <div class="card-body">
+              <h3 class="card-title">Disco Elysium</h3>
+              <p class="card-platforms">
+                PC, PlayStation 4, Xbox One, Nintendo Switch
+              </p>
+            </div>
+          </article>
+          <article
+            class="card"
+            data-title="Outer Wilds"
+            data-year="2019"
+            data-platforms="PC, Nintendo Switch, PlayStation 4, Xbox One"
+          >
+            <div
+              class="cover"
+              style="--c1: #b09868; --c2: #5a4a2d"
+              role="img"
+              aria-label="Placeholder cover for Outer Wilds"
+            >
+              <span class="monogram" aria-hidden="true">O</span>
+            </div>
+            <div class="card-body">
+              <h3 class="card-title">Outer Wilds</h3>
+              <p class="card-platforms">
+                PC, Nintendo Switch, PlayStation 4, Xbox One
+              </p>
+            </div>
+          </article>
+          <article
+            class="card"
+            data-title="Cuphead"
+            data-year="2017"
+            data-platforms="PC, Nintendo Switch, Xbox One"
+          >
+            <div
+              class="cover"
+              style="--c1: #a34e42; --c2: #522a24"
+              role="img"
+              aria-label="Placeholder cover for Cuphead"
+            >
+              <span class="monogram" aria-hidden="true">C</span>
+            </div>
+            <div class="card-body">
+              <h3 class="card-title">Cuphead</h3>
+              <p class="card-platforms">PC, Nintendo Switch, Xbox One</p>
+            </div>
+          </article>
+          <article
+            class="card"
+            data-title="It Takes Two"
+            data-year="2021"
+            data-platforms="PC, PlayStation 4, Xbox One"
+          >
+            <div
+              class="cover"
+              style="--c1: #5b7f8f; --c2: #2c4653"
+              role="img"
+              aria-label="Placeholder cover for It Takes Two"
+            >
+              <span class="monogram" aria-hidden="true">I</span>
+            </div>
+            <div class="card-body">
+              <h3 class="card-title">It Takes Two</h3>
+              <p class="card-platforms">PC, PlayStation 4, Xbox One</p>
+            </div>
+          </article>
+          <article
+            class="card"
+            data-title="Ori and the Will of the Wisps"
+            data-year="2020"
+            data-platforms="PC, Xbox One, Nintendo Switch"
+          >
+            <div
+              class="cover"
+              style="--c1: #4f7a62; --c2: #263e32"
+              role="img"
+              aria-label="Placeholder cover for Ori and the Will of the Wisps"
+            >
+              <span class="monogram" aria-hidden="true">O</span>
+            </div>
+            <div class="card-body">
+              <h3 class="card-title">Ori and the Will of the Wisps</h3>
+              <p class="card-platforms">PC, Xbox One, Nintendo Switch</p>
+            </div>
+          </article>
+        </div>
+        <div class="empty" id="empty" hidden>
+          No games match. Try clearing the search.
+        </div>
+      </section>
+
+      <nav class="pagination" aria-label="Catalog pages">
+        <button
+          type="button"
+          class="page-num"
+          disabled
+          aria-label="Previous page"
+        >
+          ‹
+        </button>
+        <span class="page-num current" aria-current="page">1</span>
+        <button type="button" class="page-num">2</button>
+        <button type="button" class="page-num">3</button>
+        <button type="button" class="page-num" aria-label="Next page">›</button>
+      </nav>
+
+      <footer class="foot">
+        <p>Design mockup · Not connected to the app</p>
+      </footer>
+    </main>
+
+    <script>
+      (function () {
+        'use strict';
+        var grid = document.getElementById('grid');
+        var cards = Array.prototype.slice.call(grid.querySelectorAll('.card'));
+        var search = document.getElementById('search');
+        var sortSelect = document.getElementById('sort');
+        var empty = document.getElementById('empty');
+        var chips = Array.prototype.slice.call(
+          document.querySelectorAll('.chip'),
+        );
+        var activePlatform = 'All';
+
+        function platformMatches(card, platform) {
+          if (platform === 'All') return true;
+          var list = card.getAttribute('data-platforms').split(',');
+          if (platform === 'Xbox') {
+            return list.some(function (p) {
+              return p.trim().indexOf('Xbox') === 0;
+            });
+          }
+          return list.some(function (p) {
+            return p.trim() === platform;
+          });
+        }
+
+        function applyFilters() {
+          var q = search.value.trim().toLowerCase();
+          var visible = 0;
+          cards.forEach(function (card) {
+            var title = card.getAttribute('data-title').toLowerCase();
+            var ok =
+              (!q || title.indexOf(q) !== -1) &&
+              platformMatches(card, activePlatform);
+            card.hidden = !ok;
+            if (ok) visible += 1;
+          });
+          empty.hidden = visible !== 0;
+        }
+
+        function applySort() {
+          var mode = sortSelect.value;
+          var sorted = cards.slice().sort(function (a, b) {
+            if (mode === 'year') {
+              var diff =
+                parseInt(b.getAttribute('data-year'), 10) -
+                parseInt(a.getAttribute('data-year'), 10);
+              if (diff !== 0) return diff;
+            }
+            return a
+              .getAttribute('data-title')
+              .localeCompare(b.getAttribute('data-title'));
+          });
+          sorted.forEach(function (card) {
+            grid.appendChild(card);
+          });
+        }
+
+        search.addEventListener('input', applyFilters);
+        sortSelect.addEventListener('change', function () {
+          applySort();
+          applyFilters();
+        });
+        chips.forEach(function (chip) {
+          chip.addEventListener('click', function () {
+            chips.forEach(function (c) {
+              c.classList.remove('active');
+              c.setAttribute('aria-pressed', 'false');
+            });
+            chip.classList.add('active');
+            chip.setAttribute('aria-pressed', 'true');
+            activePlatform = chip.getAttribute('data-platform');
+            applyFilters();
+          });
+        });
+        document.querySelectorAll('a[href="#"]').forEach(function (a) {
+          a.addEventListener('click', function (e) {
+            e.preventDefault();
+          });
+        });
+
+        applySort();
+        applyFilters();
+      })();
+    </script>
+  </body>
 </html>
