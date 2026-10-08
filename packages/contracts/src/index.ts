@@ -300,7 +300,7 @@ export interface DismissUnrecognizedItemRequest {
 }
 
 // ── LLM settings ─────────────────────────────────────────────────────────
-export type VisionProviderId = 'gemini' | 'openai';
+export type VisionProviderId = 'gemini' | 'openai' | 'custom';
 
 export interface LlmProviderSummary {
   id: VisionProviderId;
@@ -312,6 +312,8 @@ export interface LlmProviderSummary {
 export interface LlmSettingsModel {
   provider: VisionProviderId;
   model: string;
+  // The custom provider's base URL; null for the built-in providers.
+  baseUrl: string | null;
   keyPresent: boolean;
   importEnabled: boolean;
   availableProviders: LlmProviderSummary[];
@@ -324,6 +326,9 @@ export interface PutLlmSettingsRequest {
   // Omit = keep when `provider` is unchanged; reset to the provider default
   // when it changes. "" = clear back to the default.
   model?: string;
+  // Required when provider is "custom" (absolute http(s) URL, trailing /
+  // normalized). Must be omitted/empty for openai/gemini (fixed endpoints).
+  baseUrl?: string;
   // Omit = keep when `provider` is unchanged; the stored key is cleared when it
   // changes. "" = clear.
   apiKey?: string;

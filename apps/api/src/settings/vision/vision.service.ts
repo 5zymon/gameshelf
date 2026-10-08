@@ -43,6 +43,7 @@ export class VisionService {
     return provider.recognize(input, {
       apiKey: active.apiKey,
       model: active.model,
+      ...(active.baseUrl !== undefined && { baseUrl: active.baseUrl }),
     });
   }
 
@@ -66,7 +67,11 @@ export class VisionService {
     try {
       await provider.recognize(
         { image: TEST_IMAGE, mimeType: TEST_MIME_TYPE },
-        { apiKey: active.apiKey, model: active.model },
+        {
+          apiKey: active.apiKey,
+          model: active.model,
+          ...(active.baseUrl !== undefined && { baseUrl: active.baseUrl }),
+        },
       );
       return {
         ok: true,

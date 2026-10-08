@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { VisionProviderError } from './vision.errors';
 import type { VisionProvider, VisionProviderId } from './vision-provider';
+import { CustomVisionProvider } from './custom-vision.provider';
 import { GeminiVisionProvider } from './gemini-vision.provider';
 import { OpenAiVisionProvider } from './openai-vision.provider';
 
@@ -13,9 +14,14 @@ import { OpenAiVisionProvider } from './openai-vision.provider';
 export class VisionProviderRegistry {
   private readonly providers = new Map<VisionProviderId, VisionProvider>();
 
-  constructor(gemini: GeminiVisionProvider, openai: OpenAiVisionProvider) {
+  constructor(
+    gemini: GeminiVisionProvider,
+    openai: OpenAiVisionProvider,
+    custom: CustomVisionProvider,
+  ) {
     this.register(gemini);
     this.register(openai);
+    this.register(custom);
   }
 
   private register(provider: VisionProvider): void {

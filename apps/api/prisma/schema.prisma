@@ -239,11 +239,13 @@ model UnrecognizedItem {
 // Runtime LLM provider settings (ticket 3.3). A singleton row (`id = 1`) so
 // the user can switch provider/model and store a key after first run without
 // touching env. `api_key_ciphertext` is AES-256-GCM (LlmKeyCryptoService),
-// never stored or returned in plaintext.
+// never stored or returned in plaintext. `base_url` (ticket 8.1) is the
+// OpenAI-compatible endpoint for the `custom` provider; null for the built-ins.
 model LlmSetting {
   id               Int      @id @default(autoincrement())
   provider         String   @db.VarChar(32)
   model            String?  @db.VarChar(128)
+  baseUrl          String?  @map("base_url") @db.VarChar(512)
   apiKeyCiphertext String?  @map("api_key_ciphertext") @db.Text
   updatedAt        DateTime @updatedAt @map("updated_at")
 

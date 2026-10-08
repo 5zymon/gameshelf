@@ -20,6 +20,25 @@ export interface ActiveLlmConfig {
   provider: VisionProviderId;
   model: string;
   apiKey: string;
+  baseUrl?: string;
+}
+
+/**
+ * Validates and normalizes a `custom` provider base URL. Returns the
+ * canonical form (`origin + pathname`, trailing `/` stripped) or `null` when
+ * the input is not an absolute `http://`/`https://` URL. Query and hash are
+ * dropped.
+ */
+export function normalizeBaseUrl(raw: string): string | null {
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+  if (url.hostname === '') return null;
+  return (url.origin + url.pathname).replace(/\/+$/, '');
 }
 
 /**
@@ -48,9 +67,12 @@ export class LlmSettingsService {
     const provider = this.resolveProviderId(row);
     const apiKey = this.resolveApiKey(provider, row);
     const keyPresent = apiKey !== null;
+    const baseUrl =
+      provider === 'custom' ? (this.resolveBaseUrl(row) ?? null) : null;
     return {
       provider,
       model: this.resolveModel(provider, row),
+      baseUrl,
       keyPresent,
       importEnabled: keyPresent,
       availableProviders: this.availableProviders(),
@@ -66,7 +88,12 @@ export class LlmSettingsService {
     if (apiKey === null) {
       return null;
     }
-    return { provider, model: this.resolveModel(provider, row), apiKey };
+    return {
+      provider,
+      model: this.resolveModel(provider, row),
+      apiKey,
+      ...(provider === 'custom' && { baseUrl: this.resolveBaseUrl(row) }),
+    };
   }
 
   async isConfigured(): Promise<boolean> {
@@ -101,17 +128,60 @@ export class LlmSettingsService {
           ? null
           : this.crypto.encrypt(dto.apiKey.trim());
 
+    // The base URL belongs to the `custom` provider only. It is required when
+    // saving `custom` (a fixed endpoint for the built-ins is not overridable),
+    // and must be omitted/empty for them.
+    let baseUrl: string | null | undefined;
+    if (provider === 'custom') {
+      if (dto.baseUrl !== undefined) {
+        const trimmed = dto.baseUrl.trim();
+        if (trimmed === '') {
+          throw new BadRequestException(
+            'Base URL is required for the custom provider',
+          );
+        }
+        const normalized = normalizeBaseUrl(trimmed);
+        if (normalized === null) {
+          throw new BadRequestException(
+            'Base URL must be an absolute http:// or https:// URL',
+          );
+        }
+        baseUrl = normalized;
+      } else if (switchesProvider) {
+        throw new BadRequestException(
+          'Base URL is required for the custom provider',
+        );
+      } else {
+        const stored = this.readStoredBaseUrl(existing);
+        if (stored === undefined) {
+          throw new BadRequestException(
+            'Base URL is required for the custom provider',
+          );
+        }
+        baseUrl = undefined; // keep the column as-is
+      }
+    } else {
+      if (dto.baseUrl !== undefined && dto.baseUrl.trim() !== '') {
+        throw new BadRequestException(
+          'Base URL is only supported by the custom provider',
+        );
+      }
+      baseUrl = null; // clear for the built-in providers
+    }
+
     await this.prisma.llmSetting.upsert({
       where: { id: SINGLETON_ID },
       create: {
         id: SINGLETON_ID,
         provider,
         model: model ?? null,
+        baseUrl: baseUrl ?? null,
         apiKeyCiphertext: ciphertext ?? null,
       },
       update: {
         provider,
         ...(model !== undefined && { model }),
+        ...(baseUrl !== undefined && { baseUrl }),
         ...(ciphertext !== undefined && { apiKeyCiphertext: ciphertext }),
       },
     });
@@ -126,6 +196,12 @@ export class LlmSettingsService {
 
   private readRow(): Promise<LlmSetting | null> {
     return this.prisma.llmSetting.findUnique({ where: { id: SINGLETON_ID } });
+  }
+
+  /** The existing row's base URL (custom rows only), for the save cross-check. */
+  private readStoredBaseUrl(row: LlmSetting | null): string | undefined {
+    const url = row?.provider === 'custom' ? row.baseUrl?.trim() : undefined;
+    return url !== undefined && url !== '' ? url : undefined;
   }
 
   /** DB row provider if valid, else `LLM_PROVIDER`, else the default (`gemini`). */
@@ -155,6 +231,15 @@ export class LlmSettingsService {
       return envModel;
     }
     return this.registry.get(provider).defaultModel;
+  }
+
+  /** The stored base URL (custom rows only), trimmed, or `undefined` when absent. */
+  private resolveBaseUrl(row: LlmSetting | null): string | undefined {
+    const rowUrl =
+      row !== null && row.provider === 'custom'
+        ? row.baseUrl?.trim()
+        : undefined;
+    return rowUrl !== undefined && rowUrl !== '' ? rowUrl : undefined;
   }
 
   /**

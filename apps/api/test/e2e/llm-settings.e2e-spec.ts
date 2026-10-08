@@ -25,6 +25,7 @@ const SECRET_KEY = 'sk-e2e-secret-do-not-leak';
 interface SettingsBody {
   provider: string;
   model: string;
+  baseUrl: string | null;
   keyPresent: boolean;
   importEnabled: boolean;
   availableProviders: unknown[];
@@ -38,6 +39,18 @@ function geminiBody(items: unknown[]): VisionHttpResponse {
     json: () =>
       Promise.resolve({
         candidates: [{ content: { parts: [{ text: JSON.stringify(items) }] } }],
+      }),
+    text: () => Promise.resolve(''),
+  };
+}
+
+function openAiBody(content: unknown): VisionHttpResponse {
+  return {
+    status: 200,
+    ok: true,
+    json: () =>
+      Promise.resolve({
+        choices: [{ message: { content: JSON.stringify(content) } }],
       }),
     text: () => Promise.resolve(''),
   };
@@ -108,7 +121,7 @@ describe('LLM settings API (e2e)', () => {
       importEnabled: true,
       updatedAt: null,
     });
-    expect(body.availableProviders).toHaveLength(2);
+    expect(body.availableProviders).toHaveLength(3);
     expect(JSON.stringify(body)).not.toContain('test-llm-key');
   });
 
@@ -227,6 +240,103 @@ describe('LLM settings API (e2e)', () => {
       .put(BASE)
       .send({ provider: 'gemini', bogus: true })
       .expect(400);
+  });
+
+  it('PUT stores a custom base URL and never echoes the key', async () => {
+    const res = await test.request
+      .put(BASE)
+      .send({
+        provider: 'custom',
+        baseUrl: 'http://localhost:11434/v1',
+        model: 'llava:7b',
+        apiKey: SECRET_KEY,
+      })
+      .expect(200);
+
+    expect(res.body).toMatchObject({
+      provider: 'custom',
+      model: 'llava:7b',
+      baseUrl: 'http://localhost:11434/v1',
+      keyPresent: true,
+      importEnabled: true,
+    });
+    expect(JSON.stringify(res.body)).not.toContain(SECRET_KEY);
+
+    const row = await test.prisma.llmSetting.findUnique({ where: { id: 1 } });
+    expect(row?.provider).toBe('custom');
+    expect(row?.baseUrl).toBe('http://localhost:11434/v1');
+    expect(row?.apiKeyCiphertext).not.toBeNull();
+  });
+
+  it('PUT custom without a base URL is rejected with 400', async () => {
+    await test.request
+      .put(BASE)
+      .send({ provider: 'custom', apiKey: SECRET_KEY })
+      .expect(400);
+  });
+
+  it('PUT custom with a non-URL base URL is rejected with 400', async () => {
+    await test.request
+      .put(BASE)
+      .send({ provider: 'custom', baseUrl: 'localhost:11434/v1' })
+      .expect(400);
+  });
+
+  it('PUT openai with a base URL is rejected with 400', async () => {
+    await test.request
+      .put(BASE)
+      .send({ provider: 'openai', baseUrl: 'http://x/v1' })
+      .expect(400);
+  });
+
+  it('GET returns the stored base URL for custom and null after switching back', async () => {
+    await test.request
+      .put(BASE)
+      .send({
+        provider: 'custom',
+        baseUrl: 'http://localhost:11434/v1/',
+        model: 'llava:7b',
+        apiKey: SECRET_KEY,
+      })
+      .expect(200);
+
+    const customRead = await test.request.get(BASE).expect(200);
+    expect((customRead.body as SettingsBody).baseUrl).toBe(
+      'http://localhost:11434/v1',
+    );
+
+    await test.request
+      .put(BASE)
+      .send({ provider: 'gemini', apiKey: SECRET_KEY })
+      .expect(200);
+
+    const geminiRead = await test.request.get(BASE).expect(200);
+    expect((geminiRead.body as SettingsBody).baseUrl).toBeNull();
+  });
+
+  it('POST test calls the custom endpoint with the stored base URL', async () => {
+    await test.request
+      .put(BASE)
+      .send({
+        provider: 'custom',
+        baseUrl: 'http://localhost:11434/v1',
+        model: 'llava:7b',
+        apiKey: SECRET_KEY,
+      })
+      .expect(200);
+    postJson.mockResolvedValue(openAiBody([]));
+
+    const res = await test.request.post(`${BASE}/test`).expect(200);
+
+    expect(res.body).toMatchObject({
+      ok: true,
+      code: 'ok',
+      provider: 'custom',
+    });
+    expect(postJson).toHaveBeenCalledTimes(1);
+    const request = postJson.mock.calls[0]?.[0];
+    expect(request?.url).toBe('http://localhost:11434/v1/chat/completions');
+    expect(request?.headers.authorization).toBe(`Bearer ${SECRET_KEY}`);
   });
 
   it('POST test returns ok on a successful provider call', async () => {

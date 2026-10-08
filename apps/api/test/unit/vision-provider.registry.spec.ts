@@ -6,10 +6,11 @@ import type {
   VisionRecognitionInput,
   VisionRecognitionResult,
 } from '../../src/settings/vision/vision-provider';
+import type { CustomVisionProvider } from '../../src/settings/vision/custom-vision.provider';
 import type { GeminiVisionProvider } from '../../src/settings/vision/gemini-vision.provider';
 import type { OpenAiVisionProvider } from '../../src/settings/vision/openai-vision.provider';
 
-function fakeProvider(id: 'gemini' | 'openai'): VisionProvider {
+function fakeProvider(id: 'gemini' | 'openai' | 'custom'): VisionProvider {
   return {
     id,
     label: `${id} label`,
@@ -26,21 +27,24 @@ function createRegistry(): {
   registry: VisionProviderRegistry;
   gemini: VisionProvider;
   openai: VisionProvider;
+  custom: VisionProvider;
 } {
   const gemini = fakeProvider('gemini');
   const openai = fakeProvider('openai');
+  const custom = fakeProvider('custom');
   const registry = new VisionProviderRegistry(
     gemini as unknown as GeminiVisionProvider,
     openai as unknown as OpenAiVisionProvider,
+    custom as unknown as CustomVisionProvider,
   );
-  return { registry, gemini, openai };
+  return { registry, gemini, openai, custom };
 }
 
 describe('VisionProviderRegistry (unit)', () => {
   it('lists the registered provider ids', () => {
     const { registry } = createRegistry();
 
-    expect(registry.ids()).toEqual(['gemini', 'openai']);
+    expect(registry.ids()).toEqual(['gemini', 'openai', 'custom']);
   });
 
   it('knows which ids are registered', () => {
@@ -48,6 +52,7 @@ describe('VisionProviderRegistry (unit)', () => {
 
     expect(registry.has('gemini')).toBe(true);
     expect(registry.has('openai')).toBe(true);
+    expect(registry.has('custom')).toBe(true);
     expect(registry.has('anthropic')).toBe(false);
   });
 
@@ -55,6 +60,12 @@ describe('VisionProviderRegistry (unit)', () => {
     const { registry, openai } = createRegistry();
 
     expect(registry.get('openai')).toBe(openai);
+  });
+
+  it('returns the custom provider for its id', () => {
+    const { registry, custom } = createRegistry();
+
+    expect(registry.get('custom')).toBe(custom);
   });
 
   it('throws unknown_provider for an unregistered id', () => {
