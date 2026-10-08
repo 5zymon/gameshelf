@@ -24,9 +24,13 @@ function contentSecurityPolicy(nonce: string): string {
     // dropped because `'unsafe-inline'` is ignored whenever a nonce is present.
     // Never in production.
     `style-src 'self'${isDev ? " 'unsafe-inline'" : ` 'nonce-${nonce}'`}`,
-    "img-src 'self'",
+    // `blob:` is required by the photo import screen: thumbnails are local
+    // `URL.createObjectURL` blobs and the HEIC→JPEG converter spawns a
+    // blob worker.
+    "img-src 'self' blob:",
     "font-src 'self'",
     "connect-src 'self'",
+    "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",

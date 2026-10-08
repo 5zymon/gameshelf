@@ -291,6 +291,25 @@ export interface DismissUnrecognizedItemRequest {
   dismissed: boolean;
 }
 
+// ── LLM settings ─────────────────────────────────────────────────────────
+export type VisionProviderId = 'gemini' | 'openai';
+
+export interface LlmProviderSummary {
+  id: VisionProviderId;
+  label: string;
+  defaultModel: string;
+}
+
+/** Mirrors `apps/api/src/settings/dto/llm-settings.model.ts` (dates → string). */
+export interface LlmSettingsModel {
+  provider: VisionProviderId;
+  model: string;
+  keyPresent: boolean;
+  importEnabled: boolean;
+  availableProviders: LlmProviderSummary[];
+  updatedAt: string | null;
+}
+
 // ── Auth / setup ─────────────────────────────────────────────────────────
 export interface AuthUser {
   id: number;

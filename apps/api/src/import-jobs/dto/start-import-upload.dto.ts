@@ -37,7 +37,7 @@ export class StartImportUploadDto {
   @ApiPropertyOptional({
     type: 'array',
     items: { type: 'string', format: 'binary' },
-    description: 'JPEG/PNG/WebP photos, max 10 files, 15 MB each',
+    description: 'JPEG/PNG/WebP photos, max 50 files, 20 MB each',
   })
   files?: string[];
 }

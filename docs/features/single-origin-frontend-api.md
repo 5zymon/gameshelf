@@ -34,18 +34,19 @@ middleware matcher covers every document route but excludes `/api`,
 (`/login`, `/setup`) are matched so they receive a nonce too, and are allowed to
 render without a session.
 
-| Directive         | Value                                     | Notes                                                        |
-| ----------------- | ----------------------------------------- | ------------------------------------------------------------ |
-| `default-src`     | `'self'`                                  | Fallback for every unlisted type                             |
-| `script-src`      | `'self' 'nonce-<nonce>' 'strict-dynamic'` | `'unsafe-eval'` is dev-only                                  |
-| `style-src`       | `'self' 'nonce-<nonce>'`                  | No `'unsafe-inline'` anywhere                                |
-| `img-src`         | `'self'`                                  | Covers/images must be same-origin; external URLs are blocked |
-| `font-src`        | `'self'`                                  | Fonts are served from `/_next/static/media`                  |
-| `connect-src`     | `'self'`                                  | `fetch`/XHR only to the app origin                           |
-| `object-src`      | `'none'`                                  | No plugins                                                   |
-| `base-uri`        | `'self'`                                  | No injected `<base>`                                         |
-| `form-action`     | `'self'`                                  | Forms post to the app origin only                            |
-| `frame-ancestors` | `'none'`                                  | Clickjacking protection                                      |
+| Directive         | Value                                     | Notes                                                         |
+| ----------------- | ----------------------------------------- | ------------------------------------------------------------- |
+| `default-src`     | `'self'`                                  | Fallback for every unlisted type                              |
+| `script-src`      | `'self' 'nonce-<nonce>' 'strict-dynamic'` | `'unsafe-eval'` is dev-only                                   |
+| `style-src`       | `'self' 'nonce-<nonce>'`                  | No `'unsafe-inline'` anywhere                                 |
+| `img-src`         | `'self' blob:`                            | Covers same-origin; local `blob:` thumbnails for photo import |
+| `font-src`        | `'self'`                                  | Fonts are served from `/_next/static/media`                   |
+| `connect-src`     | `'self'`                                  | `fetch`/XHR only to the app origin                            |
+| `worker-src`      | `'self' blob:`                            | The HEIC→JPEG libheif worker is spawned from a `blob:` URL    |
+| `object-src`      | `'none'`                                  | No plugins                                                    |
+| `base-uri`        | `'self'`                                  | No injected `<base>`                                          |
+| `form-action`     | `'self'`                                  | Forms post to the app origin only                             |
+| `frame-ancestors` | `'none'`                                  | Clickjacking protection                                       |
 
 Key properties:
 
@@ -58,8 +59,10 @@ Key properties:
   production omits it.
 - **No `upgrade-insecure-requests`.** That directive would rewrite plain-HTTP
   subresource URLs to HTTPS and break the supported `http://localhost` install.
-- **No external host.** Every directive is `'self'` (plus the nonce and
-  `'strict-dynamic'`); there is no `http://`, `https://`, or `*` source.
+- **No external host.** Every directive is `'self'` (plus the nonce,
+  `'strict-dynamic'`, and the local-only `blob:` used for photo-import
+  thumbnails and the HEIC converter worker); there is no `http://`, `https://`,
+  or `*` source.
 - **Covers are same-origin.** A saved `Game.coverUrl` is a first-party
   `/api/covers/<file>` path, not an external URL: the import downloads the
   external cover once into the local cache and the API serves it through

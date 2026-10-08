@@ -3,8 +3,10 @@ import { cookies } from 'next/headers';
 import type {
   AuthUser,
   GameDetail,
+  ImportBatchProgress,
   ListGamesQuery,
   ListGamesResponse,
+  LlmSettingsModel,
   Platform,
 } from './contracts';
 import { createApiClient, type Transport } from './client';
@@ -65,4 +67,28 @@ export async function getGame(id: number): Promise<GameDetail | null> {
 /** All platforms for the edit select (`GET /platforms`, sorted import-first then name). */
 export async function getPlatforms(): Promise<Platform[]> {
   return api.platforms.list();
+}
+
+/** LLM readiness for the import gate. 401 → null (not signed in). */
+export async function getLlmSettings(): Promise<LlmSettingsModel | null> {
+  try {
+    return await api.settings.llm.get();
+  } catch (error) {
+    if (isApiError(error) && error.status === 401) return null;
+    throw error;
+  }
+}
+
+/** Aggregated batch progress. 400/404 → null (unknown/invalid batch). */
+export async function getImportBatch(
+  batchId: string,
+): Promise<ImportBatchProgress | null> {
+  try {
+    return await api.importJobs.getBatch(batchId);
+  } catch (error) {
+    if (isApiError(error) && (error.status === 400 || error.status === 404)) {
+      return null;
+    }
+    throw error;
+  }
 }

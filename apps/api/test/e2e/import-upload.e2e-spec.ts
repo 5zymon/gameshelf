@@ -5,7 +5,10 @@ import { Queue } from 'bullmq';
 import request from 'supertest';
 import { LlmSettingsService } from '../../src/settings/llm-settings.service';
 import { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
-import { MAX_UPLOAD_FILE_SIZE_BYTES } from '../../src/import-jobs/upload.options';
+import {
+  MAX_UPLOAD_FILE_SIZE_BYTES,
+  MAX_UPLOAD_FILES,
+} from '../../src/import-jobs/upload.options';
 import { PhotoImportHandler } from '../../src/queue/photo-import.handler';
 import { PHOTO_IMPORT_QUEUE } from '../../src/queue/queue.constants';
 import { createTestApp, type TestApp } from '../helpers/test-app';
@@ -209,6 +212,29 @@ describe('Import photo upload API (e2e)', () => {
         buffer: Buffer.alloc(MAX_UPLOAD_FILE_SIZE_BYTES + 1, 1),
       },
     ]).expect(400);
+
+    expect(await test.prisma.importJob.count()).toBe(0);
+  });
+
+  it(`accepts exactly ${String(MAX_UPLOAD_FILES)} photos and queues one job each`, async () => {
+    const files = Array.from({ length: MAX_UPLOAD_FILES }, (_, index) =>
+      photo(index),
+    );
+
+    const res = await uploadRequest(test, files).expect(202);
+
+    expect((res.body as UploadResponseBody).jobs).toHaveLength(
+      MAX_UPLOAD_FILES,
+    );
+    expect(await test.prisma.importJob.count()).toBe(MAX_UPLOAD_FILES);
+  });
+
+  it(`rejects ${String(MAX_UPLOAD_FILES + 1)} photos with 400 and creates nothing`, async () => {
+    const files = Array.from({ length: MAX_UPLOAD_FILES + 1 }, (_, index) =>
+      photo(index),
+    );
+
+    await uploadRequest(test, files).expect(400);
 
     expect(await test.prisma.importJob.count()).toBe(0);
   });
