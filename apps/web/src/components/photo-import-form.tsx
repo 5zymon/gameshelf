@@ -27,6 +27,9 @@ const SECONDARY_BUTTON =
 /** How many HEIC files are decoded at once, across every drop on the page. */
 const HEIC_CONCURRENCY = 3;
 
+/** Where the last uploaded batch id is kept so a returning user can find it. */
+const LAST_BATCH_KEY = 'gameshelf.lastImportBatchId';
+
 let heicInFlight = 0;
 const heicWaiting: (() => void)[] = [];
 
@@ -89,6 +92,7 @@ export function PhotoImportForm({
     total: number;
   } | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [lastBatchId, setLastBatchId] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const urlsRef = useRef<Set<string>>(new Set());
@@ -104,6 +108,16 @@ export function PhotoImportForm({
       for (const url of urls) URL.revokeObjectURL(url);
       urls.clear();
     };
+  }, []);
+
+  // Surface the previous batch (if any) so a returning user can reopen it.
+  // Read in an effect: localStorage is unavailable during server rendering.
+  useEffect(() => {
+    try {
+      setLastBatchId(window.localStorage.getItem(LAST_BATCH_KEY));
+    } catch {
+      // Storage can be unavailable (private mode); the link just stays hidden.
+    }
   }, []);
 
   const enabled = readiness.state === 'enabled';
@@ -283,6 +297,11 @@ export function PhotoImportForm({
       const res = await uploadImportPhotos(files, counts, {
         onProgress: setProgress,
       });
+      try {
+        window.localStorage.setItem(LAST_BATCH_KEY, res.batchId);
+      } catch {
+        // Non-blocking: navigation still works if storage is unavailable.
+      }
       router.push(`/import/progress/${res.batchId}`);
     } catch (caught) {
       if (isApiError(caught) && caught.status === 401) {
@@ -315,6 +334,17 @@ export function PhotoImportForm({
       }}
       className="space-y-8"
     >
+      {lastBatchId !== null && (
+        <p className="text-sm text-muted">
+          <Link
+            href={`/import/progress/${lastBatchId}`}
+            className="text-accent underline underline-offset-4"
+          >
+            Check your most recent import
+          </Link>
+        </p>
+      )}
+
       {readiness.state !== 'enabled' && (
         <div
           role="status"

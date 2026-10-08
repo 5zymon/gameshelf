@@ -138,6 +138,5 @@ never fails the settings write. See [LLM Settings API](/llm-settings-api.md).
 
 # Out of scope
 
-- The frontend "queue paused" banner (ticket 6.3).
 - Blocking `POST /import/upload` while the queue is paused.
 - Surfacing the pause on `/health/queue`.

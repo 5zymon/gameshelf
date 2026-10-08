@@ -23,10 +23,10 @@ explanation, and manual entry stays reachable.
 
 # Routes
 
-| Route                        | Renders                                                                                                                                                                                              |
-| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/import`                    | `(app)/import/page.tsx` (server) → `PhotoImportForm` (client). `force-dynamic`, `requireUser`, reads `GET /settings/llm` for the gate.                                                               |
-| `/import/progress/[batchId]` | `(app)/import/progress/[batchId]/page.tsx` (server). Minimal, reload-safe landing target: `requireUser`, `GET /import-jobs/batches/:batchId`, shows "X of Y". The full per-photo view is ticket 6.3. |
+| Route                        | Renders                                                                                                                                                                                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/import`                    | `(app)/import/page.tsx` (server) → `PhotoImportForm` (client). `force-dynamic`, `requireUser`, reads `GET /settings/llm` for the gate.                                                                                                                  |
+| `/import/progress/[batchId]` | `(app)/import/progress/[batchId]/page.tsx` (server) → `ImportProgressView` (client). `requireUser`, `GET /import-jobs/batches/:batchId` + `GET /import-jobs?batchId=…`, then live per-photo progress. See [Import Progress UI](/import-progress-ui.md). |
 
 Manual entry (`/games/new`) is always reachable from the disabled state, so a
 missing LLM key never blocks adding games by hand.
@@ -99,7 +99,9 @@ same-origin `/api` rewrite carries the session cookie.
 
 While `submitting`, a `role="progressbar"` bar and "Uploading… N%" status render
 from the progress event, and the submit button is disabled. On success the form
-navigates to `/import/progress/<batchId>`. A `401` redirects to `/login`; other
+navigates to `/import/progress/<batchId>` and records the batch id under
+`localStorage` key `gameshelf.lastImportBatchId`, so a return visit to `/import`
+shows a **Check your most recent import** link. A `401` redirects to `/login`; other
 errors show a `role="alert"` message.
 
 # Accessibility
@@ -172,8 +174,6 @@ npm run dev               # API :3001, web :3000
 
 # Out of scope
 
-- The full import progress view (per-photo status/counts/failures, polling,
-  queue-paused banner) — ticket 6.3.
 - The LLM settings screen itself — see [LLM Settings UI](/llm-settings-ui.md);
   the disabled gate links to the real `/settings` screen.
 - A game-database (IGDB) readiness gate — the gate is LLM-only, mirroring the
