@@ -17,6 +17,11 @@ export const dynamic = 'force-dynamic';
 
 const PAGE_SIZE = 24;
 
+const PRIMARY_BUTTON =
+  'inline-flex items-center justify-center rounded-control bg-accent px-4 py-2.5 text-sm leading-none font-semibold text-accent-ink transition-colors duration-[140ms] ease-[ease] hover:bg-accent-strong motion-reduce:transition-none disabled:opacity-60';
+const SECONDARY_BUTTON =
+  'inline-flex items-center justify-center rounded-control border border-edge bg-surface px-4 py-2.5 text-sm leading-none font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60';
+
 function parsePage(value: string | string[] | undefined): number {
   const raw = Array.isArray(value) ? value[0] : value;
   if (raw === undefined) return 1;
@@ -64,11 +69,11 @@ export default async function CatalogPage({
   return (
     <section className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+        <h1 className="text-[clamp(27px,4.5vw,34px)] leading-[1.15] font-bold tracking-[-0.02em]">
           {t('title')}
         </h1>
         {items.length > 0 && (
-          <p className="text-sm text-muted">
+          <p className="text-[15px] text-muted">
             {active
               ? t('showingFiltered', { first, last, total: meta.total })
               : t('showing', { first, last, total: meta.total })}
@@ -85,19 +90,19 @@ export default async function CatalogPage({
       {meta.total === 0 ? (
         <NoResults t={t} />
       ) : items.length === 0 ? (
-        <div className="rounded-lg border border-edge/70 bg-shelf/30 px-6 py-10">
+        <div className="rounded-card border border-edge bg-surface px-6 py-10">
           <p className="text-sm text-muted">
             {t('pageEmpty')}{' '}
             <Link
               href={pageHref(params, 1)}
-              className="text-accent underline-offset-4 hover:underline hover:text-accent-strong"
+              className="text-accent-text underline-offset-4 hover:underline"
             >
               {t('backToFirst')}
             </Link>
           </p>
         </div>
       ) : (
-        <ul className="grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 lg:grid-cols-5">
+        <ul className="grid grid-cols-2 gap-4 md:grid-cols-3 md:gap-[18px] lg:grid-cols-4 xl:grid-cols-5">
           {items.map((game, index) => (
             <GameCard key={game.id} game={game} priority={index < 4} />
           ))}
@@ -124,25 +129,21 @@ function EmptyCatalog({
   return (
     <section className="space-y-6">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+        <h1 className="text-[clamp(27px,4.5vw,34px)] leading-[1.15] font-bold tracking-[-0.02em]">
           {t('title')}
         </h1>
       </header>
-      <div className="rounded-lg border border-edge/70 bg-shelf/30 px-6 py-12 text-left">
-        <span aria-hidden className="mb-4 block h-0.5 w-10 bg-accent" />
-        <h2 className="text-lg font-medium text-fog">{t('empty.title')}</h2>
+      <div className="rounded-card border border-edge bg-surface p-6 sm:p-8">
+        <h2 className="text-lg font-semibold text-ink">{t('empty.title')}</h2>
         <p className="mt-2 max-w-md text-sm text-muted">{t('empty.body')}</p>
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <Link
             href="/games/new"
-            className="rounded-md bg-accent px-4 py-2 font-medium text-on-accent hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong"
+            className={`${PRIMARY_BUTTON} whitespace-nowrap`}
           >
             {t('empty.addGame')}
           </Link>
-          <Link
-            href="/import"
-            className="rounded-md border border-edge px-4 py-2 font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
+          <Link href="/import" className={SECONDARY_BUTTON}>
             {t('empty.import')}
           </Link>
         </div>
@@ -153,16 +154,14 @@ function EmptyCatalog({
 
 function NoResults({ t }: { t: TranslatorFor<'catalog'> }): React.ReactElement {
   return (
-    <div className="rounded-lg border border-edge/70 bg-shelf/30 px-6 py-12 text-left">
-      <span aria-hidden className="mb-4 block h-0.5 w-10 bg-accent" />
-      <h2 className="text-lg font-medium text-fog">{t('noResults.title')}</h2>
+    <div className="rounded-card border border-edge bg-surface p-6 sm:p-8">
+      <h2 className="text-lg font-semibold text-ink">{t('noResults.title')}</h2>
       <p className="mt-2 max-w-md text-sm text-muted">{t('noResults.body')}</p>
-      <Link
-        href="/"
-        className="mt-6 inline-block rounded-md border border-edge px-4 py-2 font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-      >
-        {t('noResults.clear')}
-      </Link>
+      <div className="mt-6 flex flex-wrap items-center gap-3">
+        <Link href="/" className={SECONDARY_BUTTON}>
+          {t('noResults.clear')}
+        </Link>
+      </div>
     </div>
   );
 }

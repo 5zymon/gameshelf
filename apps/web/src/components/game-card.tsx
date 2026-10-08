@@ -17,7 +17,7 @@ export function GameCard({
       <Link
         href={`/games/${String(game.id)}`}
         aria-label={`${game.title} — ${game.platform.name}`}
-        className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="block overflow-hidden rounded-card border border-edge bg-surface shadow-[var(--shadow-card)] transition-[transform,box-shadow,border-color] duration-[160ms] ease-[ease] motion-reduce:transition-none motion-safe:hover:-translate-y-1 hover:border-accent-soft hover:shadow-[var(--shadow-card-hover)]"
       >
         <GameCover
           title={game.title}
@@ -25,14 +25,16 @@ export function GameCard({
           priority={priority}
           alt=""
         />
-        <div className="mt-2 min-w-0">
+        <div className="px-3.5 pt-3 pb-3.5 min-w-0">
           <p
-            className="truncate text-sm font-medium text-fog"
+            className="truncate font-display text-[15px] leading-[1.3] font-semibold tracking-[-0.01em] text-ink"
             title={game.title}
           >
             {game.title}
           </p>
-          <p className="truncate text-xs text-muted">{game.platform.name}</p>
+          <p className="truncate text-xs leading-[1.45] text-muted">
+            {game.platform.name}
+          </p>
         </div>
       </Link>
     </li>
