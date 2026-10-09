@@ -10,7 +10,7 @@ export default async function PlatformsPage(): Promise<React.ReactElement> {
   const t = await getTranslations('platforms');
   const platforms = await getPlatforms();
   return (
-    <section className="mx-auto w-full max-w-5xl space-y-6">
+    <section className="space-y-6">
       <header className="space-y-1">
         <h1 className="text-[clamp(27px,4.5vw,34px)] leading-[1.15] font-bold tracking-[-0.02em]">
           {t('title')}

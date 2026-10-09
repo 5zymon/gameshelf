@@ -10,7 +10,7 @@ export default async function NewGamePage(): Promise<React.ReactElement> {
   const t = await getTranslations('manualAdd');
   const platforms = await getPlatforms();
   return (
-    <section className="mx-auto w-full max-w-5xl space-y-6">
+    <section className="space-y-6">
       <header>
         <p className="text-xs font-medium tracking-widest text-accent-text uppercase">
           {t('eyebrow')}
