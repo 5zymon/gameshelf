@@ -1,6 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type { Prisma } from '../generated/prisma/client';
 import type { CatalogCandidate } from '../game-catalog/game-catalog.resolver';
 import { CoverCacheService } from '../covers/cover-cache.service';
+
+/** One locally cached gallery image (same-origin served path + source URL). */
+export interface GalleryImageInput {
+  /** Same-origin served path (/api/covers/<file>). */
+  url: string;
+  /** External IGDB URL (internal; never serialized). */
+  sourceUrl: string | null;
+}
 
 /** The exact `Game` columns the candidate mapping writes. */
 export interface EnrichedGameData {
@@ -14,6 +23,8 @@ export interface EnrichedGameData {
   coverUrl: string | null;
   /** External catalog cover URL (internal; drives the background retry). */
   sourceCoverUrl: string | null;
+  /** Locally cached, ordered gallery images. */
+  images: GalleryImageInput[];
   rawMetadata: string;
   enrichedAt: Date;
   source: CatalogCandidate['source'];
@@ -27,6 +38,8 @@ export interface GameMappingInput {
   edition: string | null;
   /** Already-local served path (`/api/covers/<file>`), or `null`. */
   coverUrl: string | null;
+  /** Locally cached gallery images, in display order. */
+  images: GalleryImageInput[];
   fetchedAt?: Date;
 }
 
@@ -39,7 +52,7 @@ export interface GameMappingInput {
 export function mapCandidateToGameData(
   input: GameMappingInput,
 ): EnrichedGameData {
-  const { candidate, platformId, edition, coverUrl } = input;
+  const { candidate, platformId, edition, coverUrl, images } = input;
   return {
     title: candidate.title,
     platformId,
@@ -50,10 +63,32 @@ export function mapCandidateToGameData(
     playerCount: candidate.playerCount,
     coverUrl,
     sourceCoverUrl: candidate.coverUrl,
+    images,
     rawMetadata: JSON.stringify(candidate.raw),
     enrichedAt: input.fetchedAt ?? new Date(),
     source: candidate.source,
     externalId: candidate.externalId,
+  };
+}
+
+/**
+ * A Prisma `game.create` data object with the ordered gallery nested-create.
+ * Splitting `images` out keeps the flat `EnrichedGameData` usable where only
+ * scalar columns are wanted (e.g. the re-enrichment merge input).
+ */
+export function toGameCreateData(
+  enriched: EnrichedGameData,
+): Prisma.GameUncheckedCreateInput {
+  const { images, ...scalars } = enriched;
+  return {
+    ...scalars,
+    images: {
+      create: images.map((image, index) => ({
+        position: index,
+        url: image.url,
+        sourceUrl: image.sourceUrl,
+      })),
+    },
   };
 }
 
@@ -73,7 +108,26 @@ export class GameEnrichmentService {
     platformId: number,
     edition: string | null,
   ): Promise<EnrichedGameData> {
-    const coverUrl = await this.covers.cacheFromUrl(candidate.coverUrl);
-    return mapCandidateToGameData({ candidate, platformId, edition, coverUrl });
+    const [coverUrl, gallery] = await Promise.all([
+      this.covers.cacheFromUrl(candidate.coverUrl),
+      Promise.all(
+        candidate.images.map(
+          async (sourceUrl): Promise<GalleryImageInput | null> => {
+            const url = await this.covers.cacheFromUrl(sourceUrl);
+            return url === null ? null : { url, sourceUrl };
+          },
+        ),
+      ),
+    ]);
+    const images = gallery.filter(
+      (image): image is GalleryImageInput => image !== null,
+    );
+    return mapCandidateToGameData({
+      candidate,
+      platformId,
+      edition,
+      coverUrl,
+      images,
+    });
   }
 }

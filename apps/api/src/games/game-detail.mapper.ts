@@ -19,9 +19,14 @@ export const GAME_LIST_SELECT = {
   platform: { select: PLATFORM_SELECT },
 } satisfies Prisma.GameSelect;
 
-/** A `Game` row with the shared platform projection. */
-export type GameWithPlatform = Prisma.GameGetPayload<{
-  include: { platform: { select: typeof PLATFORM_SELECT } };
+/** The game detail projection: platform + ordered gallery. */
+export const GAME_DETAIL_INCLUDE = {
+  platform: { select: PLATFORM_SELECT },
+  images: { select: { url: true }, orderBy: { position: 'asc' } },
+} satisfies Prisma.GameInclude;
+
+export type GameDetailRow = Prisma.GameGetPayload<{
+  include: typeof GAME_DETAIL_INCLUDE;
 }>;
 
 /** A `Game` row with the lighter list projection. */
@@ -31,16 +36,21 @@ export type GameListRow = Prisma.GameGetPayload<{
 
 /**
  * Maps a persisted `Game` row onto the full response model, decoding the JSON
- * provenance column into an array and deriving the same-origin thumbnail URL.
- * The internal `sourceCoverUrl` is stripped so an external host can never reach
- * a response body.
+ * provenance column into an array, deriving the same-origin thumbnail URL, and
+ * exposing the ordered gallery as same-origin `url` + `thumbUrl` pairs. The
+ * internal `sourceCoverUrl` is stripped so an external host can never reach a
+ * response body.
  */
-export function toGameDetail(game: GameWithPlatform): GameDetailModel {
-  const { sourceCoverUrl: _sourceCoverUrl, ...rest } = game;
+export function toGameDetail(game: GameDetailRow): GameDetailModel {
+  const { sourceCoverUrl: _sourceCoverUrl, images, ...rest } = game;
   return {
     ...rest,
     coverThumbUrl: coverThumbUrlFor(rest.coverUrl),
     userEditedFields: parseEditedFields(rest.userEditedFields),
+    images: images.map((image) => ({
+      url: image.url,
+      thumbUrl: coverThumbUrlFor(image.url),
+    })),
   };
 }
 

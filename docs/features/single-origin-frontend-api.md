@@ -4,7 +4,7 @@ title: Single-Origin Frontend & API with Strict CSP
 description: The Next.js frontend and the NestJS API share one origin via a server-side /api rewrite with a first-party session cookie, a nonce-based 'self'-only Content Security Policy, and build-time self-hosted fonts.
 tags: [web, security, csp, fonts]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T17:00:00Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T21:54:58Z }
 ---
 
 # Overview
@@ -77,17 +77,23 @@ document routes are dynamically rendered (`export const dynamic =
 
 # Self-hosted fonts
 
-The root layout loads Geist through `next/font/google`:
+The root layout loads two faces through `next/font/google`, both self-hosted
+at build time: **Manrope** (body) and **Sora** (display/headings).
 
 ```ts
-import { Geist } from 'next/font/google';
+import { Manrope, Sora } from 'next/font/google';
 
-// `latin-ext` covers the Polish diacritics (ą, ć, ę, ł, ń, ó, ś, ź, ż); without
-// it the browser would fall back to a non-Geist font for accented characters.
-const geistSans = Geist({
+// `latin-ext` covers the Polish diacritics (ą, ć, ę, ł, ń, ó, ś, ź, ż) for
+// both faces; without it the browser falls back to another font for accents.
+const manrope = Manrope({
   subsets: ['latin', 'latin-ext'],
   display: 'swap',
-  variable: '--font-geist-sans',
+  variable: '--font-manrope',
+});
+const sora = Sora({
+  subsets: ['latin', 'latin-ext'],
+  display: 'swap',
+  variable: '--font-sora',
 });
 ```
 
@@ -98,25 +104,35 @@ browser would fall back to a different font for every ą/ę/ł/ó/ś/ź/ż.
 
 `next/font` downloads the font files **at build time** and emits them under
 `/_next/static/media/*.woff2`, served by the app itself. At runtime the browser
-requests the font from the app origin only — there is no request to a font CDN
-(`fonts.googleapis.com`, `fonts.gstatic.com`). `globals.css` consumes the
-generated CSS variable:
+requests the fonts from the app origin only — there is no request to a font
+CDN. `globals.css` declares the font tokens in `@theme` from the generated CSS
+variables and applies the body face:
 
 ```css
+@theme {
+  --font-sans:
+    var(--font-manrope), ui-sans-serif, system-ui, -apple-system, 'Segoe UI',
+    sans-serif;
+  --font-display:
+    var(--font-sora), var(--font-manrope), ui-sans-serif, system-ui,
+    -apple-system, 'Segoe UI', sans-serif;
+}
+
 body {
-  font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans);
 }
 ```
 
-Because the font is first-party, `font-src 'self'` is sufficient and no font host
-appears in the CSP.
+`h1`–`h3` (and the wordmark) use `--font-display`. Because the fonts are
+first-party, `font-src 'self'` is sufficient and no font host appears in the
+CSP.
 
-> **Offline / air-gapped builds.** `next/font/google` downloads Geist from Google
-> at **build time**, so `next build` needs network access to `fonts.googleapis.com`
-> / `fonts.gstatic.com`; an offline build fails. The alternative is
-> `next/font/local` with the OFL-licensed Geist `.woff2` file (and its license)
-> committed to the repo. Either way the runtime result is identical: the font is
-> self-hosted and `font-src 'self'` is sufficient.
+> **Offline / air-gapped builds.** `next/font/google` downloads **both faces**
+> from the Google Fonts CDN at **build time**, so `next build` needs network
+> access to it; an offline build fails. The alternative is `next/font/local`
+> with the OFL-licensed `.woff2` files (and their licenses) committed to the
+> repo. Either way the runtime result is identical: the fonts are self-hosted
+> and `font-src 'self'` is sufficient.
 
 # Zero external requests
 
@@ -125,9 +141,8 @@ its fonts and any rendered cover is a same-origin `/api/covers/<file>` asset.
 Verify it two ways:
 
 - **Network panel.** Open DevTools → Network, hard-reload `/login` (or any page),
-  and confirm every request's host is the app origin. There is no
-  `fonts.googleapis.com`, `fonts.gstatic.com`, `images.igdb.com`, CDN, or
-  analytics host.
+  and confirm every request's host is the app origin. There is no Google Fonts,
+  image CDN, or analytics host.
 - **Grep the served HTML.** Inline `src`/`href` attributes must never point at an
   absolute external URL:
 
@@ -138,7 +153,7 @@ Verify it two ways:
   And the built CSS/JS must not reference a font CDN:
 
   ```bash
-  grep -rIl 'fonts.gstatic\|fonts.googleapis' apps/web/.next/static || echo OK
+  grep -rIlE 'fonts\.(gstatic|googleapis)' apps/web/.next/static || echo OK
   ```
 
 > **Covers.** A saved `Game.coverUrl` is a same-origin `/api/covers/<file>` path,

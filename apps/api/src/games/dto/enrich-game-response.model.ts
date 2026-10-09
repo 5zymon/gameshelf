@@ -61,7 +61,7 @@ export function toEnrichCandidateModel(
   candidate: CatalogCandidate,
   coverUrl: string | null,
 ): EnrichCandidateModel {
-  const { raw: _raw, ...rest } = candidate;
+  const { raw: _raw, images: _images, ...rest } = candidate;
   return { ...rest, coverUrl };
 }
 

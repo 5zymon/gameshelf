@@ -158,6 +158,7 @@ function toCandidate(game: MobygameGame): CatalogCandidate {
     // forbidden, so a MobyGames import always leaves `playerCount` null.
     playerCount: null,
     coverUrl: coverUrl(game),
+    images: [],
     platforms: objects(game.platforms).map(toPlatform),
     source: 'MobyGames',
     raw: game,

@@ -7,7 +7,7 @@ import { isApiError } from '@/lib/api';
 import { api } from '@/lib/api/browser';
 
 const SECONDARY_BUTTON =
-  'rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control border border-edge bg-surface px-4 py-2.5 text-sm leading-none font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60';
 
 export function RefreshPlatformsControl(): React.ReactElement {
   const router = useRouter();
@@ -49,10 +49,10 @@ export function RefreshPlatformsControl(): React.ReactElement {
 
   return (
     <section
-      className="space-y-3 rounded-xl border border-edge bg-shelf/40 p-4"
+      className="space-y-3 rounded-card border border-edge bg-surface p-4 shadow-[var(--shadow-card)]"
       aria-labelledby="platforms-heading"
     >
-      <h2 id="platforms-heading" className="text-lg font-medium text-fog">
+      <h2 id="platforms-heading" className="text-lg font-semibold text-ink">
         {t('refresh.heading')}
       </h2>
       <p className="text-sm text-muted">{t('refresh.body')}</p>

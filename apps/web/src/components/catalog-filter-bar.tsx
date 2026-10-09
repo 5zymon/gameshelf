@@ -12,7 +12,7 @@ import {
 
 const DEBOUNCE_MS = 300;
 const FIELD =
-  'w-full rounded-md border border-edge bg-ink px-3 py-2 text-fog outline-none focus-visible:ring-2 focus-visible:ring-accent';
+  'w-full h-10 rounded-control border border-edge bg-field px-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent/55 focus:ring-[3px] focus:ring-accent/15 disabled:opacity-60';
 const LABEL = 'block text-sm text-muted';
 
 type TextKey = 'q' | 'year' | 'publisher' | 'genre' | 'playerCount';
@@ -74,13 +74,13 @@ function Chip({
 }): React.ReactElement {
   const t = useTranslations('catalogFilters');
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-edge bg-shelf px-3 py-1 text-xs text-fog">
+    <span className="inline-flex items-center gap-1 rounded-full border border-edge bg-surface py-1 pr-1 pl-3 text-xs text-ink">
       {label}
       <button
         type="button"
         aria-label={t('removeFilter', { label })}
         onClick={onRemove}
-        className="-mr-1.5 ml-0.5 inline-flex h-6 w-6 items-center justify-center rounded text-muted hover:text-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="-mr-1.5 ml-0.5 inline-flex h-6 w-6 items-center justify-center rounded-full text-muted hover:text-danger"
       >
         ×
       </button>
@@ -229,18 +229,32 @@ export function CatalogFilterBar({
             <label htmlFor="catalog-q" className={LABEL}>
               {t('searchTitles')}
             </label>
-            <input
-              id="catalog-q"
-              name="q"
-              type="search"
-              autoComplete="off"
-              maxLength={255}
-              value={draft.q}
-              onChange={(event) => {
-                setField('q', event.target.value);
-              }}
-              className={FIELD}
-            />
+            <div className="relative">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2}
+                strokeLinecap="round"
+                aria-hidden="true"
+                className="pointer-events-none absolute top-1/2 left-3 h-[15px] w-[15px] -translate-y-1/2 text-faint"
+              >
+                <circle cx={11} cy={11} r={7} />
+                <path d="m20 20-3.5-3.5" />
+              </svg>
+              <input
+                id="catalog-q"
+                name="q"
+                type="search"
+                autoComplete="off"
+                maxLength={255}
+                value={draft.q}
+                onChange={(event) => {
+                  setField('q', event.target.value);
+                }}
+                className={`${FIELD} pl-9`}
+              />
+            </div>
           </div>
 
           <div className="space-y-1.5">
@@ -257,7 +271,7 @@ export function CatalogFilterBar({
                 const v = event.target.value;
                 commit({ platformId: v === '' ? undefined : Number(v) });
               }}
-              className={FIELD}
+              className={`${FIELD} select-field`}
             >
               <option value="">{t('allPlatforms')}</option>
               {platforms.map((platform) => (
@@ -280,7 +294,7 @@ export function CatalogFilterBar({
                 const v = event.target.value;
                 commit({ edition: v === '' ? undefined : v });
               }}
-              className={FIELD}
+              className={`${FIELD} select-field`}
             >
               <option value="">{t('allEditions')}</option>
               {editions.map((edition) => (
@@ -431,7 +445,7 @@ export function CatalogFilterBar({
           <button
             type="button"
             onClick={clearAll}
-            className="text-sm text-accent underline-offset-4 hover:underline hover:text-accent-strong"
+            className="text-sm text-accent-text underline-offset-4 hover:underline"
           >
             {t('clearAll')}
           </button>

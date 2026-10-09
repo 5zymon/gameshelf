@@ -36,7 +36,8 @@
     "settings": "Settings",
     "signOut": "Sign out",
     "signingOut": "Signing out…",
-    "signOutError": "Couldn't sign out. Try again."
+    "signOutError": "Couldn't sign out. Try again.",
+    "account": "Signed in as {email}"
   },
   "common": {
     "tryAgain": "Try again",
@@ -218,7 +219,15 @@
     "noRawMetadata": "No raw metadata stored.",
     "never": "Never",
     "unknown": "Unknown",
-    "coverAlt": "{title} cover art"
+    "coverAlt": "{title} cover art",
+    "gallery": {
+      "heading": "Gallery",
+      "open": "Open image {index}",
+      "imageAlt": "{title} — image {index}",
+      "close": "Close",
+      "previous": "Previous image",
+      "next": "Next image"
+    }
   },
   "gameEdit": {
     "toggleOpen": "Edit record",

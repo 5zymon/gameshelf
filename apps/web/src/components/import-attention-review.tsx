@@ -22,21 +22,21 @@ import {
 } from '@/lib/import/progress';
 
 const PRIMARY_BUTTON =
-  'rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control bg-accent px-4 py-2.5 text-sm leading-none font-semibold text-accent-ink transition-colors duration-[140ms] ease-[ease] hover:bg-accent-strong motion-reduce:transition-none disabled:opacity-60';
 const SECONDARY_BUTTON =
-  'rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control border border-edge bg-surface px-4 py-2.5 text-sm leading-none font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60';
 const DANGER_BUTTON =
-  'rounded-md border border-danger/40 px-4 py-2 text-sm font-medium text-danger hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control border border-danger/40 px-4 py-2.5 text-sm leading-none font-medium text-danger transition-colors duration-[140ms] ease-[ease] hover:bg-danger/10 motion-reduce:transition-none disabled:opacity-60';
 const SMALL_BUTTON =
-  'rounded-md border border-edge px-3 py-1.5 text-xs font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control border border-edge bg-surface px-3 py-1.5 text-xs leading-none font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60';
 const SMALL_DANGER_BUTTON =
-  'rounded-md border border-danger/40 px-3 py-1.5 text-xs font-medium text-danger hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control border border-danger/40 px-3 py-1.5 text-xs leading-none font-medium text-danger transition-colors duration-[140ms] ease-[ease] hover:bg-danger/10 motion-reduce:transition-none disabled:opacity-60';
 
 const TONE_TEXT: Readonly<Record<ProgressTone, string>> = {
   muted: 'text-muted',
-  active: 'text-accent',
-  success: 'text-fog',
-  warning: 'text-accent-strong',
+  active: 'text-accent-text',
+  success: 'text-ink',
+  warning: 'text-accent-text',
   danger: 'text-danger',
 };
 
@@ -57,7 +57,7 @@ export function ImportAttentionReview({
   return (
     <section aria-labelledby="attention-heading" className="space-y-3">
       <div className="space-y-1">
-        <h2 id="attention-heading" className="text-lg font-medium text-fog">
+        <h2 id="attention-heading" className="text-lg font-medium text-ink">
           {t('heading')}
         </h2>
         <p className="text-sm text-muted">
@@ -269,10 +269,10 @@ function AttentionCard({
 
   return (
     <div
-      className={`space-y-3 rounded-lg border p-4 ${failed ? 'border-danger/40 bg-danger/5' : 'border-accent-strong/50 bg-accent-strong/5'}`}
+      className={`space-y-3 rounded-control border p-4 ${failed ? 'border-danger/40 bg-danger/5' : 'border-accent/40 bg-accent-soft'}`}
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-        <p className="text-sm font-medium text-fog">
+        <p className="text-sm font-medium text-ink">
           {tProgress('photo', { n: photoNumber })}
         </p>
         <span className={`text-xs ${TONE_TEXT[view.tone]}`}>{view.label}</span>
@@ -333,10 +333,10 @@ function AttentionCard({
               {items.map((item) => (
                 <li
                   key={item.id}
-                  className="space-y-2 rounded-md border border-edge bg-ink/40 p-3"
+                  className="space-y-2 rounded-control border border-edge bg-canvas p-3"
                 >
                   <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                    <p className="text-sm text-fog">{item.rawTitle}</p>
+                    <p className="text-sm text-ink">{item.rawTitle}</p>
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
@@ -374,7 +374,7 @@ function AttentionCard({
                     </p>
                   )}
                   {addItemId === item.id && (
-                    <div className="rounded-md border border-edge bg-shelf/40 p-3">
+                    <div className="rounded-control border border-edge bg-surface p-3">
                       <ManualAddForm
                         platforms={platforms}
                         initialTitle={item.rawTitle}
@@ -443,9 +443,9 @@ function AttentionCard({
           role="alertdialog"
           aria-labelledby={`${idBase}-title`}
           aria-describedby={`${idBase}-body`}
-          className="space-y-2 rounded-md border border-danger/40 bg-danger/5 p-3"
+          className="space-y-2 rounded-control border border-danger/40 bg-danger/5 p-3"
         >
-          <p id={`${idBase}-title`} className="text-sm font-medium text-fog">
+          <p id={`${idBase}-title`} className="text-sm font-medium text-ink">
             {t('confirmTitle')}
           </p>
           <p id={`${idBase}-body`} className="text-sm text-muted">

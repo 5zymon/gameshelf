@@ -87,6 +87,7 @@ describe('MobygamesGameCatalogResolver (unit)', () => {
         genre: 'Shooter',
         playerCount: null,
         coverUrl: 'https://cdn.mobygames.com/halo.jpg',
+        images: [],
         platforms: [{ igdbId: null, name: 'Xbox', abbreviation: null }],
         source: 'MobyGames',
         raw: expect.anything() as unknown,
@@ -115,6 +116,7 @@ describe('MobygamesGameCatalogResolver (unit)', () => {
         playerCount: null,
         coverUrl:
           'https://cdn.mobygames.com/covers/4074-halo-combat-evolved-xbox-front-cover.jpg',
+        images: [],
         platforms: [{ igdbId: null, name: 'Xbox', abbreviation: null }],
         source: 'MobyGames',
         raw: expect.anything() as unknown,
@@ -210,6 +212,7 @@ describe('MobygamesGameCatalogResolver (unit)', () => {
         genre: null,
         playerCount: null,
         coverUrl: null,
+        images: [],
         platforms: [{ igdbId: null, name: 'Xbox', abbreviation: null }],
         source: 'MobyGames',
         raw: expect.anything() as unknown,

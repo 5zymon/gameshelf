@@ -44,7 +44,8 @@ const IGDB_GAME_FIELDS =
   'name,first_release_date,cover.url,involved_companies.company.name,' +
   'genres.name,platforms.id,platforms.name,platforms.abbreviation,' +
   'summary,version_parent,multiplayer_modes.offlinemax,multiplayer_modes.onlinemax,' +
-  'multiplayer_modes.offlinecoopmax,multiplayer_modes.onlinecoopmax';
+  'multiplayer_modes.offlinecoopmax,multiplayer_modes.onlinecoopmax,' +
+  'screenshots.url,artworks.url';
 
 /** IGDB `multiplayer_modes` row (only the player-count maxima are requested). */
 export interface IgdbMultiplayerMode {
@@ -68,6 +69,10 @@ export interface IgdbGame {
   version_parent?: number;
   /** IGDB multiplayer modes; the max over their max fields is the player count. */
   multiplayer_modes?: IgdbMultiplayerMode[];
+  /** IGDB screenshots (gameplay); used for the local gallery. */
+  screenshots?: { url?: string }[];
+  /** IGDB artworks (key art); used for the local gallery. */
+  artworks?: { url?: string }[];
 }
 
 /**

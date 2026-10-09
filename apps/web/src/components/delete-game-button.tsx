@@ -94,7 +94,7 @@ export function DeleteGameButton({
         role="alertdialog"
         aria-labelledby={labelId}
         aria-describedby={descriptionId}
-        className="rounded-xl border border-danger/40 bg-danger/5 p-4"
+        className="rounded-control border border-danger/40 bg-danger/5 p-4"
         onKeyDown={(event) => {
           if (event.key !== 'Tab') return;
           const first = cancelRef.current;
@@ -112,7 +112,7 @@ export function DeleteGameButton({
           }
         }}
       >
-        <p id={labelId} className="text-sm font-medium text-fog">
+        <p id={labelId} className="text-sm font-medium text-ink">
           {t('confirmTitle', { title })}
         </p>
         <p id={descriptionId} className="mt-1 text-sm text-muted">
@@ -129,7 +129,7 @@ export function DeleteGameButton({
             type="button"
             onClick={cancel}
             disabled={deleting}
-            className="rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60"
+            className="inline-flex items-center justify-center rounded-control border border-edge bg-surface px-4 py-2.5 text-sm leading-none font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60"
           >
             {t('cancel')}
           </button>
@@ -140,7 +140,7 @@ export function DeleteGameButton({
               void handleConfirm();
             }}
             disabled={deleting}
-            className="rounded-md bg-danger px-4 py-2 text-sm font-medium text-on-danger hover:bg-danger/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:opacity-60"
+            className="inline-flex items-center justify-center rounded-control bg-danger px-4 py-2.5 text-sm leading-none font-medium text-danger-ink transition-colors duration-[140ms] ease-[ease] hover:bg-danger/90 motion-reduce:transition-none disabled:opacity-60"
           >
             {deleting ? t('deleting') : t('delete')}
           </button>
@@ -158,7 +158,7 @@ export function DeleteGameButton({
           setError(null);
           setConfirming(true);
         }}
-        className="rounded-md border border-danger/40 px-4 py-2 text-sm font-medium text-danger hover:bg-danger/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+        className="inline-flex items-center justify-center rounded-control border border-danger/40 px-4 py-2.5 text-sm leading-none font-medium text-danger transition-colors duration-[140ms] ease-[ease] hover:bg-danger/10 motion-reduce:transition-none disabled:opacity-60"
       >
         {t('open')}
       </button>

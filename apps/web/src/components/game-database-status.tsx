@@ -19,7 +19,7 @@ function stateLabel(
 function stateClass(state: GameDatabaseState): string {
   switch (state) {
     case 'configured':
-      return 'text-fog';
+      return 'text-ink';
     case 'missing':
       return 'text-muted';
     case 'rejected':
@@ -35,10 +35,10 @@ export async function GameDatabaseStatusPanel({
   const t = await getTranslations('gameDatabases');
   return (
     <section
-      className="space-y-3 rounded-xl border border-edge bg-shelf/40 p-4"
+      className="space-y-3 rounded-card border border-edge bg-surface p-4 shadow-[var(--shadow-card)]"
       aria-labelledby="gamedb-heading"
     >
-      <h2 id="gamedb-heading" className="text-lg font-medium text-fog">
+      <h2 id="gamedb-heading" className="text-lg font-semibold text-ink">
         {t('heading')}
       </h2>
       {statuses === null ? (
@@ -52,7 +52,7 @@ export async function GameDatabaseStatusPanel({
               key={db.id}
               className="flex flex-wrap items-center gap-2 text-sm"
             >
-              <span className="text-fog">{db.label}</span>
+              <span className="text-ink">{db.label}</span>
               <span className={stateClass(db.state)}>
                 {stateLabel(db.state, t)}
               </span>

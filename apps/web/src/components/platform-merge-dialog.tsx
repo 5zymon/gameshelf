@@ -8,12 +8,12 @@ import { api } from '@/lib/api/browser';
 import { mergeConfirmation, platformErrorMessage } from '@/lib/platforms';
 
 const FIELD =
-  'w-full rounded-md border border-edge bg-ink px-3 py-2 text-fog outline-none focus-visible:ring-2 focus-visible:ring-accent';
+  'w-full h-10 rounded-control border border-edge bg-field px-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent/55 focus:ring-[3px] focus:ring-accent/15 disabled:opacity-60';
 const LABEL = 'block text-sm text-muted';
 const PRIMARY_BUTTON =
-  'rounded-md bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control bg-accent px-4 py-2.5 text-sm leading-none font-semibold text-accent-ink transition-colors duration-[140ms] ease-[ease] hover:bg-accent-strong motion-reduce:transition-none disabled:opacity-60';
 const SECONDARY_BUTTON =
-  'rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control border border-edge bg-surface px-4 py-2.5 text-sm leading-none font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60';
 
 interface Preview {
   total: number;
@@ -147,7 +147,7 @@ export function PlatformMergeDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-ink/80 p-4 sm:items-center"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-canvas/80 p-4 sm:items-center"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !merging) onClose();
       }}
@@ -158,7 +158,7 @@ export function PlatformMergeDialog({
         aria-modal="true"
         aria-labelledby={headingId}
         tabIndex={-1}
-        className="w-full max-w-lg space-y-4 rounded-xl border border-edge bg-shelf p-4 outline-none sm:p-6"
+        className="w-full max-w-lg space-y-4 rounded-card border border-edge bg-surface p-4 shadow-[var(--shadow-card-hover)] outline-none sm:p-6"
         onKeyDown={(event) => {
           if (event.key !== 'Tab') return;
           const node = dialogRef.current;
@@ -180,7 +180,7 @@ export function PlatformMergeDialog({
           }
         }}
       >
-        <h2 id={headingId} className="text-lg font-medium text-fog">
+        <h2 id={headingId} className="text-lg font-semibold text-ink">
           {t('merge.title', { name: source.name })}
         </h2>
 
@@ -193,7 +193,7 @@ export function PlatformMergeDialog({
             {t('merge.loading')}
           </p>
         ) : (
-          <div className="space-y-2 rounded-lg border border-edge bg-ink/40 p-3">
+          <div className="space-y-2 rounded-control border border-edge bg-canvas p-3">
             <p className="text-sm text-muted">
               {t('merge.move', {
                 count: preview.total,
@@ -229,7 +229,7 @@ export function PlatformMergeDialog({
               onChange={(event) => {
                 setTargetId(event.target.value);
               }}
-              className={FIELD}
+              className={`${FIELD} select-field`}
             >
               {targets.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -241,7 +241,7 @@ export function PlatformMergeDialog({
         )}
 
         {target !== undefined && (
-          <p className="text-sm text-fog">
+          <p className="text-sm text-ink">
             {mergeConfirmation(source.name, target.name, total, t)}
           </p>
         )}

@@ -8,7 +8,7 @@ import { CoverCacheService } from '../../src/covers/cover-cache.service';
 import { GameEnrichmentService } from '../../src/enrichment/game-enrichment.service';
 
 const NORMALIZED_COVER =
-  'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg';
+  'https://images.igdb.com/igdb/image/upload/t_1080p/co61gh.jpg';
 
 function igdbFixture(): IgdbGame {
   return JSON.parse(
@@ -30,6 +30,19 @@ interface Harness {
 
 function createHarness(served: string | null): Harness {
   const cache = { cacheFromUrl: jest.fn(() => Promise.resolve(served)) };
+  return {
+    service: new GameEnrichmentService(cache as unknown as CoverCacheService),
+    cache,
+  };
+}
+
+/** A harness whose per-URL download result is decided by the supplied map. */
+function createMappingHarness(served: Record<string, string | null>): Harness {
+  const cache = {
+    cacheFromUrl: jest.fn((url: string) =>
+      Promise.resolve(served[url] ?? null),
+    ),
+  };
   return {
     service: new GameEnrichmentService(cache as unknown as CoverCacheService),
     cache,
@@ -75,6 +88,7 @@ describe('GameEnrichmentService (unit)', () => {
       playerCount: 16,
       coverUrl: `/api/covers/${hash}.jpg`,
       sourceCoverUrl: NORMALIZED_COVER,
+      images: [],
       rawMetadata: JSON.stringify(fixture),
       enrichedAt: expect.any(Date) as Date,
       source: 'IGDB',
@@ -106,6 +120,7 @@ describe('GameEnrichmentService (unit)', () => {
       playerCount: null,
       coverUrl: null,
       sourceCoverUrl: null,
+      images: [],
       rawMetadata: JSON.stringify({ id: 5, name: 'Mystery' }),
       enrichedAt: expect.any(Date) as Date,
       source: 'IGDB',
@@ -136,5 +151,63 @@ describe('GameEnrichmentService (unit)', () => {
     const data = await h.service.enrichCandidate(candidate, 3, null);
 
     expect(data.edition).toBeNull();
+  });
+
+  it('caches every gallery image and maps local paths in order with sourceUrl', async () => {
+    const candidate = await resolveCandidate(
+      {
+        id: 5,
+        name: 'Mystery',
+        artworks: [
+          { url: '//images.igdb.com/igdb/image/upload/t_thumb/art.jpg' },
+        ],
+        screenshots: [
+          { url: '//images.igdb.com/igdb/image/upload/t_thumb/shot.jpg' },
+        ],
+      },
+      'Mystery',
+    );
+    const artUrl = 'https://images.igdb.com/igdb/image/upload/t_1080p/art.jpg';
+    const shotUrl =
+      'https://images.igdb.com/igdb/image/upload/t_1080p/shot.jpg';
+    const h = createMappingHarness({
+      [artUrl]: '/api/covers/art.jpg',
+      [shotUrl]: '/api/covers/shot.jpg',
+    });
+
+    const data = await h.service.enrichCandidate(candidate, 9, null);
+
+    expect(data.images).toEqual([
+      { url: '/api/covers/art.jpg', sourceUrl: artUrl },
+      { url: '/api/covers/shot.jpg', sourceUrl: shotUrl },
+    ]);
+    expect(h.cache.cacheFromUrl).toHaveBeenCalledWith(artUrl);
+    expect(h.cache.cacheFromUrl).toHaveBeenCalledWith(shotUrl);
+  });
+
+  it('drops a gallery image whose download fails', async () => {
+    const candidate = await resolveCandidate(
+      {
+        id: 5,
+        name: 'Mystery',
+        screenshots: [
+          { url: '//images.igdb.com/igdb/image/upload/t_thumb/ok.jpg' },
+          { url: '//images.igdb.com/igdb/image/upload/t_thumb/bad.jpg' },
+        ],
+      },
+      'Mystery',
+    );
+    const okUrl = 'https://images.igdb.com/igdb/image/upload/t_1080p/ok.jpg';
+    const badUrl = 'https://images.igdb.com/igdb/image/upload/t_1080p/bad.jpg';
+    const h = createMappingHarness({
+      [okUrl]: '/api/covers/ok.jpg',
+      [badUrl]: null,
+    });
+
+    const data = await h.service.enrichCandidate(candidate, 9, null);
+
+    expect(data.images).toEqual([
+      { url: '/api/covers/ok.jpg', sourceUrl: okUrl },
+    ]);
   });
 });

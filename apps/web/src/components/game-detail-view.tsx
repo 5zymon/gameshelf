@@ -4,6 +4,7 @@ import type { TranslatorFor } from '@/i18n/translate';
 import type { GameDetail, GamePlatform } from '@/lib/api';
 import { DeleteGameButton } from './delete-game-button';
 import { GameCover } from './game-cover';
+import { GameGallery } from './game-gallery';
 import { GameEditForm } from './game-edit-form';
 import { ReEnrichControl } from './re-enrich-control';
 
@@ -37,7 +38,7 @@ function Chip({
       ? 'text-danger'
       : tone === 'muted'
         ? 'text-muted'
-        : 'text-fog';
+        : 'text-ink';
   const dotClass =
     tone === 'danger'
       ? 'bg-danger'
@@ -46,7 +47,7 @@ function Chip({
         : 'bg-accent';
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded border border-edge bg-shelf px-2 py-0.5 text-xs ${toneClass}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border border-edge bg-surface px-2.5 py-1 text-xs ${toneClass}`}
     >
       <span aria-hidden className={`h-1.5 w-1.5 rounded-full ${dotClass}`} />
       {children}
@@ -68,9 +69,9 @@ function DataRow({
   handEdited: string;
 }): React.ReactElement {
   return (
-    <div className="flex flex-col gap-0.5 border-b border-edge/60 py-2 last:border-b-0">
+    <div className="flex flex-col gap-0.5 border-b border-edge-soft py-2 last:border-b-0">
       <dt className="text-xs font-medium text-muted">{label}</dt>
-      <dd className="text-sm text-fog">
+      <dd className="text-sm text-ink">
         {value === null || value === '' ? (
           <span className="text-muted">{notSet}</span>
         ) : (
@@ -120,7 +121,7 @@ export async function GameDetailView({
     <article className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
         <div className="min-w-0 space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+          <h1 className="text-[clamp(27px,4.5vw,34px)] leading-[1.15] font-bold tracking-[-0.02em]">
             {game.title}
           </h1>
           {metaParts.length > 0 && (
@@ -130,7 +131,7 @@ export async function GameDetailView({
                   {index > 0 && (
                     <span aria-hidden className="h-3 w-px bg-edge" />
                   )}
-                  <span className={index === 0 ? 'text-fog' : undefined}>
+                  <span className={index === 0 ? 'text-ink' : undefined}>
                     {part}
                   </span>
                 </Fragment>
@@ -158,12 +159,14 @@ export async function GameDetailView({
 
       <div className="grid gap-6 md:grid-cols-[minmax(0,13rem)_minmax(0,1fr)]">
         <div className="min-w-0 max-w-[10rem] sm:max-w-[12rem] md:sticky md:top-6 md:max-w-none md:self-start">
-          <GameCover
-            title={game.title}
-            thumbUrl={game.coverUrl ?? game.coverThumbUrl}
-            priority
-            alt={t('coverAlt', { title: game.title })}
-          />
+          <div className="overflow-hidden rounded-card border border-edge bg-surface shadow-[var(--shadow-card)]">
+            <GameCover
+              title={game.title}
+              thumbUrl={game.coverUrl ?? game.coverThumbUrl}
+              priority
+              alt={t('coverAlt', { title: game.title })}
+            />
+          </div>
         </div>
 
         <div className="min-w-0 space-y-6">
@@ -265,7 +268,7 @@ export async function GameDetailView({
             </div>
           </div>
 
-          <details className="rounded-xl border border-edge bg-shelf/40">
+          <details className="rounded-card border border-edge bg-surface">
             <summary className="cursor-pointer px-4 py-3 text-sm text-muted select-none">
               {t('rawMetadata')}
             </summary>
@@ -275,6 +278,8 @@ export async function GameDetailView({
           </details>
         </div>
       </div>
+
+      <GameGallery title={game.title} images={game.images} />
     </article>
   );
 }

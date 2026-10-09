@@ -1,17 +1,34 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { sameOriginPath } from '@/lib/image-url';
 
 type LoadState = 'loading' | 'loaded' | 'error';
 
-const FRAME =
-  'relative aspect-[3/4] w-full overflow-hidden rounded-lg border border-edge bg-shelf transition-colors group-hover:border-accent/70 motion-reduce:transition-none';
+const FRAME = 'relative aspect-[3/4] w-full overflow-hidden bg-surface-2';
 
-/** Same-origin only: a cover must be a root-relative path, never an external URL. CSP sets img-src 'self'. */
-function sameOriginPath(url: string | null): string | null {
-  return url !== null && url.startsWith('/') && !url.startsWith('//')
-    ? url
-    : null;
+const COVER_TONES = [
+  'cover-tone-1',
+  'cover-tone-2',
+  'cover-tone-3',
+  'cover-tone-4',
+  'cover-tone-5',
+  'cover-tone-6',
+  'cover-tone-7',
+  'cover-tone-8',
+  'cover-tone-9',
+  'cover-tone-10',
+  'cover-tone-11',
+  'cover-tone-12',
+] as const;
+
+/** Deterministic per-title tone so a given game keeps the same placeholder gradient. */
+function coverTone(title: string): string {
+  let hash = 0;
+  for (const char of title) {
+    hash = (hash * 31 + (char.codePointAt(0) ?? 0)) >>> 0;
+  }
+  return COVER_TONES[hash % COVER_TONES.length] ?? 'cover-tone-1';
 }
 
 interface GameCoverProps {
@@ -71,15 +88,13 @@ export function GameCover({
   }, [src]);
 
   if (src === null || state === 'error') {
+    const initial = (title.trim().charAt(0) || '?').toUpperCase();
     return (
       <div
-        className={`${FRAME} flex flex-col items-center justify-center gap-3 p-3 text-center`}
+        className={`${FRAME} cover-placeholder ${coverTone(title)}`}
         aria-hidden="true"
       >
-        <span className="h-0.5 w-8 bg-accent/70" />
-        <span className="line-clamp-4 text-sm font-medium text-muted">
-          {title}
-        </span>
+        <span className="cover-initial">{initial}</span>
       </div>
     );
   }

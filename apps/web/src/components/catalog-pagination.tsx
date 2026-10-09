@@ -9,9 +9,9 @@ interface CatalogPaginationProps {
 }
 
 const LINK =
-  'rounded-md border border-edge px-3 py-1.5 text-sm text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent';
+  'inline-flex h-[38px] min-w-[38px] items-center justify-center rounded-control border border-edge px-3.5 text-sm font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:bg-surface-2 motion-reduce:transition-none';
 const DISABLED =
-  'rounded-md border border-edge px-3 py-1.5 text-sm text-muted opacity-40';
+  'inline-flex h-[38px] min-w-[38px] items-center justify-center rounded-control border border-transparent px-3.5 text-sm text-muted opacity-40';
 
 export async function CatalogPagination({
   page,
@@ -24,7 +24,7 @@ export async function CatalogPagination({
   return (
     <nav
       aria-label={t('ariaLabel')}
-      className="flex items-center justify-between gap-4"
+      className="flex items-center justify-center gap-4"
     >
       {prevHref === null ? (
         <span aria-disabled="true" className={DISABLED}>

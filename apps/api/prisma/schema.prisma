@@ -136,6 +136,7 @@ model Game {
   platform Platform @relation(fields: [platformId], references: [id])
 
   recognizedItems RecognizedItem[]
+  images          GameImage[]
 
   @@index([platformId])
   @@index([edition])
@@ -234,6 +235,26 @@ model UnrecognizedItem {
 
   @@index([importJobId])
   @@map("unrecognized_items")
+}
+
+// One locally cached gallery image for a game (IGDB screenshots/artworks).
+// `url` is a same-origin served path (/api/covers/<file>); `sourceUrl` is the
+// external IGDB URL (internal, never serialized). Rows are replaced wholesale
+// on re-enrichment, so `position` is the display order.
+model GameImage {
+  id        Int      @id @default(autoincrement())
+  gameId    Int      @map("game_id")
+  position  Int
+  url       String   @db.VarChar(2083)
+  sourceUrl String?  @map("source_url") @db.VarChar(2083)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, position])
+  @@index([gameId])
+  @@map("game_images")
 }
 
 // Runtime LLM provider settings (ticket 3.3). A singleton row (`id = 1`) so

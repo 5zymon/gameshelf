@@ -12,13 +12,13 @@ export default async function NewGamePage(): Promise<React.ReactElement> {
   return (
     <section className="space-y-6">
       <header>
-        <p className="text-xs tracking-widest text-accent uppercase">
+        <p className="text-xs font-medium tracking-widest text-accent-text uppercase">
           {t('eyebrow')}
         </p>
-        <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+        <h1 className="text-[clamp(27px,4.5vw,34px)] leading-[1.15] font-bold tracking-[-0.02em]">
           {t('heading')}
         </h1>
-        <p className="mt-1 text-sm text-muted">{t('subheading')}</p>
+        <p className="mt-1 text-[15px] text-muted">{t('subheading')}</p>
       </header>
       <ManualAddForm platforms={platforms} />
     </section>

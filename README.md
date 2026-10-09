@@ -160,10 +160,10 @@ The app ships a strict Content Security Policy (`apps/web/src/middleware.ts`):
 - there is deliberately no `upgrade-insecure-requests`, so the supported
   `http://localhost` install keeps working.
 
-Fonts are **self-hosted at build time**: `next/font/google` downloads Geist
-during `npm run build` and emits it under `/_next/static/media/*.woff2`, served
-by the app. No font CDN is contacted at runtime, which is why `font-src 'self'`
-is sufficient.
+Fonts are **self-hosted at build time**: `next/font/google` downloads Sora
+(display) and Manrope (body) during `npm run build` and emits them under
+`/_next/static/media/*.woff2`, served by the app. No font CDN is contacted at
+runtime, which is why `font-src 'self'` is sufficient.
 
 **Zero-external-request guarantee.** A page load makes no request to a
 non-GameShelf origin. Verify it in DevTools → Network (hard-reload any page; every
@@ -171,7 +171,7 @@ request host is the app origin), or from the shell:
 
 ```bash
 curl -sS http://localhost:3000/login | grep -oE '(src|href)="https?://[^"]+"' || echo 'OK: none'
-grep -rIl 'fonts.gstatic\|fonts.googleapis' apps/web/.next/static || echo OK
+grep -rIlE 'fonts\.(gstatic|googleapis)' apps/web/.next/static || echo OK
 ```
 
 See [`docs/features/single-origin-frontend-api.md`](./docs/features/single-origin-frontend-api.md)

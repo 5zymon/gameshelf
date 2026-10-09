@@ -197,6 +197,7 @@ describe('Anti-hallucination validation (e2e)', () => {
         genre: 'Puzzle',
         playerCount: null,
         coverUrl: null,
+        images: [],
         platforms: [
           { igdbId: null, name: 'PlayStation 5', abbreviation: null },
         ],

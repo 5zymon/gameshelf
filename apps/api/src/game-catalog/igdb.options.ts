@@ -27,6 +27,11 @@ export const IGDB_SEARCH_LIMIT = 10;
 /** IGDB games endpoint hard cap: max rows per hydration request. */
 export const IGDB_HYDRATION_MAX_IDS = 500;
 
+/** IGDB image size segment for covers and gallery images (high quality). */
+export const IGDB_IMAGE_SIZE = 't_1080p';
+/** Max gallery images persisted per game (artworks, then screenshots). */
+export const IGDB_GALLERY_MAX_IMAGES = 8;
+
 /** Optional override of the OAuth token endpoint. */
 export const IGDB_TOKEN_URL_ENV = 'IGDB_TOKEN_URL';
 /** Canonical Twitch client-credentials endpoint (card 4.1). */

@@ -29,7 +29,9 @@ feature extends that cache into a complete local cover store:
   for example after the cover directory is wiped.
 
 It is the backend half of the catalog cover experience; the catalog grid UI
-(ticket 5.2) is out of scope.
+(ticket 5.2) is out of scope. The [Game Image Gallery](/game-image-gallery.md)
+builds on the same cache for per-game IGDB screenshots/artworks and rewrites
+IGDB covers to `t_1080p`.
 
 # Storage & naming
 
@@ -128,14 +130,17 @@ from a database dump without files.
 
 # Deletion & replacement
 
-`CoverMaintenanceService.removeIfUnreferenced(servedUrl, exceptGameId?)` deletes
-a stored cover (and its thumbnail) only when no other game still references the
-same path — ref-counted, so a sibling imported from the same candidate is never
-broken. It is invoked when a game's cover changes on `PATCH`/re-enrichment and
-when a game is deleted. On `PATCH`, re-submitting the game's **current** local
-path preserves its stored `sourceCoverUrl` (only an explicit `null` clears it),
-and re-enrichment removes a downloaded candidate cover that provenance refused
-to adopt, so neither path orphans a file.
+`CoverMaintenanceService.removeIfUnreferenced(servedUrl: string | null, except?: { exceptCoverGameId?: number; exceptImageGameId?: number }): Promise<void>` deletes
+a stored cover (and its thumbnail) only when neither a `Game.coverUrl` nor a
+`GameImage.url` still references the same path — ref-counted, so a sibling
+imported from the same candidate is never broken. It is invoked when a game's
+cover changes on `PATCH`/re-enrichment and when a game is deleted; the
+[Game Image Gallery](/game-image-gallery.md) additionally removes replaced
+gallery files on re-enrichment and all gallery files on delete/duplicate import.
+On `PATCH`, re-submitting the game's **current** local path preserves its stored
+`sourceCoverUrl` (only an explicit `null` clears it), and re-enrichment removes a
+downloaded candidate cover that provenance refused to adopt, so neither path
+orphans a file.
 
 # Configuration
 

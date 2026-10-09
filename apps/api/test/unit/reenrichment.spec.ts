@@ -25,6 +25,7 @@ function existing(
     externalId: null,
     platformUnverified: false,
     userEditedFields: null,
+    images: [],
     ...overrides,
   };
 }
@@ -45,6 +46,7 @@ function enriched(overrides: Partial<EnrichedGameData> = {}): EnrichedGameData {
     enrichedAt: new Date('2026-10-07T00:00:00.000Z'),
     source: 'IGDB',
     externalId: 1036,
+    images: [],
     ...overrides,
   };
 }
@@ -294,5 +296,75 @@ describe('buildReenrichmentUpdate', () => {
       rawMetadata: JSON.stringify({ id: 1036 }),
       enrichedAt: new Date('2026-10-07T00:00:00.000Z'),
     });
+  });
+
+  it('replaces the gallery when the candidate supplies a different one', () => {
+    const data = buildReenrichmentUpdate({
+      existing: existing({
+        source: 'IGDB',
+        externalId: 1036,
+        images: [{ url: '/api/covers/old.jpg' }],
+      }),
+      enriched: enriched({
+        images: [
+          { url: '/api/covers/new1.jpg', sourceUrl: 'https://x/1.jpg' },
+          { url: '/api/covers/new2.jpg', sourceUrl: null },
+        ],
+      }),
+    });
+
+    expect(data).toMatchObject({
+      images: {
+        deleteMany: {},
+        create: [
+          {
+            position: 0,
+            url: '/api/covers/new1.jpg',
+            sourceUrl: 'https://x/1.jpg',
+          },
+          { position: 1, url: '/api/covers/new2.jpg', sourceUrl: null },
+        ],
+      },
+    });
+  });
+
+  it('writes nothing when the candidate gallery order is identical', () => {
+    const gallery = [
+      { url: '/api/covers/g1.jpg' },
+      { url: '/api/covers/g2.jpg' },
+    ];
+    const data = buildReenrichmentUpdate({
+      existing: existing({
+        releaseYear: 2001,
+        publisher: 'Bungie',
+        genre: 'Shooter',
+        playerCount: 16,
+        coverUrl: '/api/covers/abc.jpg',
+        sourceCoverUrl:
+          'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
+        source: 'IGDB',
+        externalId: 1036,
+        images: gallery,
+      }),
+      enriched: enriched({
+        images: gallery.map((image) => ({ ...image, sourceUrl: null })),
+      }),
+    });
+
+    expect(data).toBeNull();
+  });
+
+  it('keeps the existing gallery when the candidate supplies none', () => {
+    const data = buildReenrichmentUpdate({
+      existing: existing({
+        source: 'IGDB',
+        externalId: 1036,
+        images: [{ url: '/api/covers/keep.jpg' }],
+      }),
+      enriched: enriched({ source: 'IGDB', externalId: 1036 }),
+    });
+
+    expect(data).not.toBeNull();
+    expect(data).not.toHaveProperty('images');
   });
 });

@@ -19,8 +19,11 @@ export default function RootError({
   }
 
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center px-6">
-      <ErrorState reset={reset} showCatalogLink={false} onReload={reload} />
+    <main className="relative mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center px-6">
+      <div className="nocturne-glow" aria-hidden="true" />
+      <div className="relative z-[1] w-full">
+        <ErrorState reset={reset} showCatalogLink={false} onReload={reload} />
+      </div>
     </main>
   );
 }

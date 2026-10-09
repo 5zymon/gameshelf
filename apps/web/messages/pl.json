@@ -36,7 +36,8 @@
     "settings": "Ustawienia",
     "signOut": "Wyloguj się",
     "signingOut": "Wylogowywanie…",
-    "signOutError": "Nie udało się wylogować. Spróbuj ponownie."
+    "signOutError": "Nie udało się wylogować. Spróbuj ponownie.",
+    "account": "Zalogowano jako {email}"
   },
   "common": {
     "tryAgain": "Spróbuj ponownie",
@@ -218,7 +219,15 @@
     "noRawMetadata": "Nie zapisano surowych metadanych.",
     "never": "Nigdy",
     "unknown": "Nieznana",
-    "coverAlt": "Okładka gry {title}"
+    "coverAlt": "Okładka gry {title}",
+    "gallery": {
+      "heading": "Galeria",
+      "open": "Otwórz obraz {index}",
+      "imageAlt": "{title} — obraz {index}",
+      "close": "Zamknij",
+      "previous": "Poprzedni obraz",
+      "next": "Następny obraz"
+    }
   },
   "gameEdit": {
     "toggleOpen": "Edytuj rekord",

@@ -4,7 +4,7 @@ title: Web Auth UI
 description: Browser login and first-run setup flows, the authenticated navigation shell, layered route protection, the same-origin /api proxy, and the cookie-only auth guarantee.
 tags: [web, auth, ui]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T00:00:00Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T22:16:06Z }
 ---
 
 # Overview
@@ -54,11 +54,13 @@ Unauthenticated `GET /` (and every other `(app)` route) returns a `307` to
 # Navigation shell (ticket 2.6)
 
 `(app)/layout.tsx` is a server component that wraps every catalog route with the
-same chrome: the **GameShelf** brand link, `components/main-nav.tsx`, the current
-user's email, and `components/logout-button.tsx`. `requireUser()` resolves the
-email before render, so the initial HTML already contains it — there is no
+same chrome: the **GameShelf** brand link, `components/main-nav.tsx`, the
+**Add game** CTA, a sign-out button (`components/logout-button.tsx`), and a
+30 px initials avatar (initials derived from the account email; the email itself
+is exposed via the `nav.account` aria-label). `requireUser()` resolves the email
+before render, so the initial HTML already contains the initials — there is no
 client-side round-trip and therefore no flash of an empty or signed-out shell.
-`LogoutButton` is the only client component and it does not fetch on mount.
+`LogoutButton` does not fetch on mount.
 
 `components/main-nav.tsx` is a small client component (it needs `usePathname`
 for active state) rendering four links:
@@ -70,7 +72,8 @@ for active state) rendering four links:
 | Import    | `/import`    |
 | Settings  | `/settings`  |
 
-The active link gets `aria-current="page"` and the `bg-shelf text-fog` style;
+The active link gets `aria-current="page"` and a `bg-accent-soft text-accent-text`
+rounded-full pill style;
 `/` matches exactly while the others also match their sub-paths, so `/platforms`
 does not light up for a hypothetical `/platforms-x`.
 
@@ -185,11 +188,12 @@ Then walk the seven acceptance criteria:
 again.` (not the connection message), because the API replies `400`.
 4. **Login lands on the catalog; the shell navigates and guards every route.**
    Sign in with the correct credentials. Expect the catalog page at `/` with the
-   account email in the header and the **Catalog / Platforms / Import / Settings**
-   nav. Click each nav item: expect the matching page (with the same shell) and
-   the active link carrying `aria-current="page"`. Click **Sign out**; expect
-   `/login`. Open `/`, `/platforms`, `/import` and `/settings` again; expect a
-   `307` back to `/login` each time.
+   account's initials avatar in the header (the email is exposed via the avatar's
+   `aria-label`) and the **Catalog / Platforms / Import / Settings** nav. Click
+   each nav item: expect the matching page (with the same shell) and the active
+   link carrying `aria-current="page"`. Click **Sign out**; expect `/login`. Open
+   `/`, `/platforms`, `/import` and `/settings` again; expect a `307` back to
+   `/login` each time.
 5. **No signup link anywhere.** Inspect `/login` and `/setup` (and the catalog
    header). There is no "Sign up", "Register" or "Create account" link. The only
    `Create account` text is the setup form's submit button, which is reachable

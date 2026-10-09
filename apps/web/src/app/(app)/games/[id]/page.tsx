@@ -35,7 +35,7 @@ export default async function GameDetailPage({
     <section className="space-y-6">
       <Link
         href="/"
-        className="text-sm text-accent underline-offset-4 hover:text-accent-strong hover:underline"
+        className="text-sm text-accent-text underline-offset-4 hover:underline"
       >
         ← {t('backToCatalog')}
       </Link>

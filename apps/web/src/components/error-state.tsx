@@ -5,6 +5,12 @@ import { startTransition } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
+const PRIMARY_BUTTON =
+  'inline-flex items-center justify-center rounded-control bg-accent px-4 py-2.5 text-sm leading-none font-semibold text-accent-ink transition-colors duration-[140ms] ease-[ease] hover:bg-accent-strong motion-reduce:transition-none disabled:opacity-60';
+
+const SECONDARY_BUTTON =
+  'inline-flex items-center justify-center rounded-control border border-edge bg-surface px-4 py-2.5 text-sm leading-none font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60';
+
 export function ErrorState({
   reset,
   showCatalogLink = true,
@@ -43,32 +49,21 @@ export function ErrorState({
 
   return (
     <div className="flex max-w-md flex-col items-start gap-3">
-      <h1 className="text-2xl font-semibold tracking-tight text-fog">
+      <h1 className="text-2xl font-bold tracking-[-0.02em] text-ink">
         {t('errorTitle')}
       </h1>
       <p className="text-sm text-muted">{t('errorBody')}</p>
       <div className="mt-1 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          onClick={retry}
-          className="rounded-md bg-accent px-4 py-2 font-medium text-on-accent hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong"
-        >
+        <button type="button" onClick={retry} className={PRIMARY_BUTTON}>
           {t('tryAgain')}
         </button>
         {showCatalogLink && (
-          <Link
-            href="/"
-            className="rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
+          <Link href="/" className={SECONDARY_BUTTON}>
             {t('backToCatalog')}
           </Link>
         )}
         {onReload && (
-          <button
-            type="button"
-            onClick={onReload}
-            className="rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-          >
+          <button type="button" onClick={onReload} className={SECONDARY_BUTTON}>
             {t('reloadPage')}
           </button>
         )}

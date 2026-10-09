@@ -45,7 +45,7 @@ export function LogoutButton(): React.ReactElement {
           void handleLogout();
         }}
         disabled={busy}
-        className="rounded-md border border-edge px-3 py-1.5 text-sm text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60"
+        className="inline-flex items-center rounded-control border border-edge bg-surface px-3 py-2 text-sm font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60"
       >
         {busy ? t('signingOut') : t('signOut')}
       </button>

@@ -271,7 +271,8 @@ describe('IgdbClient (unit)', () => {
         'involved_companies.company.name,genres.name,platforms.id,' +
         'platforms.name,platforms.abbreviation,summary,version_parent,' +
         'multiplayer_modes.offlinemax,multiplayer_modes.onlinemax,' +
-        'multiplayer_modes.offlinecoopmax,multiplayer_modes.onlinecoopmax; limit 10;',
+        'multiplayer_modes.offlinecoopmax,multiplayer_modes.onlinecoopmax,' +
+        'screenshots.url,artworks.url; limit 10;',
     );
     expect(gamesRequest?.body).not.toContain('fields *');
     expect(gamesRequest?.body).not.toContain('alternative_names');
@@ -898,6 +899,7 @@ describe('IgdbClient.multiqueryGames (unit)', () => {
       http.requests.find((r) => r.url === MULTIQUERY_URL)?.body ?? '';
     expect(multiBody).toContain('fields id;');
     expect(multiBody).not.toContain('cover.url');
+    expect(multiBody).not.toContain('screenshots.url');
     expect(multiBody).not.toContain('alternative_names');
 
     const gamesBody =
@@ -907,7 +909,8 @@ describe('IgdbClient.multiqueryGames (unit)', () => {
         'involved_companies.company.name,genres.name,platforms.id,' +
         'platforms.name,platforms.abbreviation,summary,version_parent,' +
         'multiplayer_modes.offlinemax,multiplayer_modes.onlinemax,' +
-        'multiplayer_modes.offlinecoopmax,multiplayer_modes.onlinecoopmax; ' +
+        'multiplayer_modes.offlinecoopmax,multiplayer_modes.onlinecoopmax,' +
+        'screenshots.url,artworks.url; ' +
         'where id = (5); limit 500;',
     );
     expect(gamesBody).not.toContain('fields *');

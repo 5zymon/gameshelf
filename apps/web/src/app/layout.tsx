@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Geist } from 'next/font/google';
+import { Manrope, Sora } from 'next/font/google';
 import { NextIntlClientProvider } from 'next-intl';
 import { getLocale, getMessages, getTranslations } from 'next-intl/server';
 import { cookies, headers } from 'next/headers';
@@ -7,12 +7,17 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { DEFAULT_THEME, isTheme, THEME_COOKIE_NAME } from '@/theme/config';
 import './globals.css';
 
-// `latin-ext` covers the Polish diacritics (ą, ć, ę, ł, ń, ó, ś, ź, ż); without
-// it the browser would fall back to a non-Geist font for accented characters.
-const geistSans = Geist({
+// `latin-ext` covers the Polish diacritics (ą, ć, ę, ł, ń, ó, ś, ź, ż) for both
+// faces; without it the browser falls back to another font for accents.
+const manrope = Manrope({
   subsets: ['latin', 'latin-ext'],
   display: 'swap',
-  variable: '--font-geist-sans',
+  variable: '--font-manrope',
+});
+const sora = Sora({
+  subsets: ['latin', 'latin-ext'],
+  display: 'swap',
+  variable: '--font-sora',
 });
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -78,7 +83,11 @@ export default async function RootLayout({
   })();`;
 
   return (
-    <html lang={locale} className={geistSans.variable} suppressHydrationWarning>
+    <html
+      lang={locale}
+      className={`${manrope.variable} ${sora.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         {/*
           `suppressHydrationWarning`: the nonce is per-request (random) and read
@@ -107,7 +116,7 @@ export default async function RootLayout({
         warning for `<body>` attribute drift injected by an extension.
       */}
       <body
-        className="min-h-dvh bg-ink text-fog antialiased"
+        className="min-h-dvh bg-canvas text-ink antialiased"
         suppressHydrationWarning
       >
         <NextIntlClientProvider locale={locale} messages={messages}>

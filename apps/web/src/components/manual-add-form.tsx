@@ -23,12 +23,12 @@ import {
 } from '@/lib/manual-add';
 
 const FIELD =
-  'w-full rounded-md border border-edge bg-ink px-3 py-2 text-fog outline-none focus-visible:ring-2 focus-visible:ring-accent';
+  'w-full h-10 rounded-control border border-edge bg-field px-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent/55 focus:ring-[3px] focus:ring-accent/15 disabled:opacity-60';
 const LABEL = 'block text-sm text-muted';
 const PRIMARY_BUTTON =
-  'rounded-md bg-accent px-4 py-2 font-medium text-on-accent hover:bg-accent-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-strong disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control bg-accent px-4 py-2.5 text-sm leading-none font-semibold text-accent-ink transition-colors duration-[140ms] ease-[ease] hover:bg-accent-strong motion-reduce:transition-none disabled:opacity-60';
 const SECONDARY_BUTTON =
-  'rounded-md border border-edge px-4 py-2 text-sm font-medium text-fog hover:border-accent hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-60';
+  'inline-flex items-center justify-center rounded-control border border-edge bg-surface px-4 py-2.5 text-sm leading-none font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60';
 
 type Intent = 'save' | 'save-and-add-another';
 
@@ -327,7 +327,7 @@ export function ManualAddForm({
       {formError !== null && (
         <p
           role="alert"
-          className="rounded-md border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger"
+          className="rounded-control border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger"
         >
           {formError}
         </p>
@@ -337,7 +337,7 @@ export function ManualAddForm({
         <p
           role="status"
           aria-live="polite"
-          className="rounded-md border border-edge bg-shelf px-3 py-2 text-sm text-muted"
+          className="rounded-control border border-edge bg-surface px-3 py-2 text-sm text-muted"
         >
           {status}
           {lastCreated !== null && (
@@ -345,7 +345,7 @@ export function ManualAddForm({
               {' '}
               <Link
                 href={`/games/${String(lastCreated.id)}`}
-                className="text-accent underline-offset-4 hover:text-accent-strong hover:underline"
+                className="text-accent-text underline-offset-4 hover:underline"
               >
                 {t('viewGame')}
               </Link>
@@ -359,11 +359,11 @@ export function ManualAddForm({
           role="alertdialog"
           aria-labelledby={`${uid}-conflict-title`}
           aria-describedby={`${uid}-conflict-body`}
-          className="rounded-xl border border-accent/40 bg-accent/5 p-4"
+          className="rounded-card border border-accent/40 bg-accent-soft p-4"
         >
           <p
             id={`${uid}-conflict-title`}
-            className="text-sm font-medium text-fog"
+            className="text-sm font-medium text-ink"
           >
             {t('conflict.title', { title: conflict.title })}
           </p>
@@ -397,7 +397,7 @@ export function ManualAddForm({
         </div>
       )}
 
-      <div className="grid gap-3 rounded-xl border border-edge bg-shelf/40 p-4 sm:grid-cols-2 sm:p-6">
+      <div className="grid gap-3 rounded-card border border-edge bg-surface p-4 shadow-[var(--shadow-card)] sm:grid-cols-2 sm:p-6">
         <div className="space-y-1.5 sm:col-span-2">
           <label htmlFor={`${uid}-title`} className={LABEL}>
             {t('field.title')}
@@ -439,7 +439,7 @@ export function ManualAddForm({
               onChange={(event) => {
                 setField('platformId', event.target.value);
               }}
-              className={`${FIELD} sm:max-w-xs`}
+              className={`${FIELD} select-field sm:max-w-xs`}
               aria-invalid={fieldErrors.platformId !== undefined}
               aria-describedby={
                 fieldErrors.platformId !== undefined
@@ -469,7 +469,7 @@ export function ManualAddForm({
             <p className="text-xs text-muted">{t('noPlatforms')}</p>
           )}
           {platformOpen && (
-            <div className="mt-2 rounded-lg border border-edge bg-ink/40 p-3">
+            <div className="mt-2 rounded-control border border-edge bg-canvas p-3">
               <label htmlFor={`${uid}-new-platform`} className={LABEL}>
                 {t('newPlatformName')}
               </label>
