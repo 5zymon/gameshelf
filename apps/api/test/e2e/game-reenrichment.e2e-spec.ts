@@ -28,6 +28,10 @@ const COVER_URL_B =
   'https://images.igdb.com/igdb/image/upload/t_thumb/halo-b.jpg';
 const COVER_BYTES = Buffer.from('fake-cover-bytes');
 const OLD_COVER = `/api/covers/${'a'.repeat(32)}.jpg`;
+const GALLERY_ART = 'https://images.igdb.com/igdb/image/upload/t_1080p/art.jpg';
+const GALLERY_SHOT =
+  'https://images.igdb.com/igdb/image/upload/t_1080p/shot.jpg';
+const GALLERY_NEW = 'https://images.igdb.com/igdb/image/upload/t_1080p/new.jpg';
 
 interface EnrichPlatformBody {
   igdbId: number | null;
@@ -64,6 +68,7 @@ interface GameDetailBody {
   externalId: number | null;
   platformUnverified: boolean;
   userEditedFields: string[];
+  images: { url: string; thumbUrl: string | null }[];
   platform: { id: number; name: string; slug: string };
 }
 
@@ -88,6 +93,11 @@ function servedCover(url: string): string {
   return `/api/covers/${hash}.jpg`;
 }
 
+/** The same-origin thumbnail path for a served image URL. */
+function servedThumb(servedUrl: string): string {
+  return servedUrl.replace('/api/covers/', '/api/covers/thumbs/');
+}
+
 function candidate(
   overrides: Partial<CatalogCandidate> = {},
 ): CatalogCandidate {
@@ -99,6 +109,7 @@ function candidate(
     genre: 'Shooter',
     playerCount: 16,
     coverUrl: COVER_URL_A,
+    images: [],
     platforms: [{ igdbId: 11, name: 'Xbox', abbreviation: 'XBOX' }],
     source: 'IGDB',
     raw: { id: 1036 },
@@ -450,6 +461,107 @@ describe('Game re-enrichment (e2e)', () => {
     });
     // Byte-identical: no second write, so updatedAt/enrichedAt are unchanged.
     expect(afterSecond).toEqual(afterFirst);
+  });
+
+  it('caches and persists the candidate gallery on apply', async () => {
+    const { gameId } = await seedGameWith();
+    resolver.resolve.mockResolvedValue(
+      matched({ images: [GALLERY_ART, GALLERY_SHOT] }),
+    );
+    coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
+
+    const res = await test.request
+      .post(`/games/${String(gameId)}/enrich`)
+      .send({ candidate: { source: 'IGDB', externalId: 1036 } });
+    expect(res.status).toBe(200);
+
+    const images = await test.prisma.gameImage.findMany({
+      where: { gameId },
+      orderBy: { position: 'asc' },
+    });
+    expect(images.map((image) => image.url)).toEqual([
+      servedCover(GALLERY_ART),
+      servedCover(GALLERY_SHOT),
+    ]);
+    expect(images.map((image) => image.sourceUrl)).toEqual([
+      GALLERY_ART,
+      GALLERY_SHOT,
+    ]);
+
+    const cache = app.get(CoverCacheService);
+    for (const url of [GALLERY_ART, GALLERY_SHOT]) {
+      const file = servedCover(url).split('/').pop() ?? '';
+      await expect(cache.has(file)).resolves.toBe(true);
+    }
+
+    // The detail response exposes the ordered gallery, same-origin only.
+    const detail = await test.request.get(`/games/${String(gameId)}`);
+    const detailBody = detail.body as GameDetailBody;
+    expect(detailBody.images).toEqual([
+      {
+        url: servedCover(GALLERY_ART),
+        thumbUrl: servedThumb(servedCover(GALLERY_ART)),
+      },
+      {
+        url: servedCover(GALLERY_SHOT),
+        thumbUrl: servedThumb(servedCover(GALLERY_SHOT)),
+      },
+    ]);
+    expect(JSON.stringify(detailBody.images)).not.toContain('images.igdb.com');
+    expect(detailBody).not.toHaveProperty('sourceCoverUrl');
+  });
+
+  it('replaces the gallery and removes dropped files on re-apply', async () => {
+    const { gameId } = await seedGameWith();
+    resolver.resolve.mockResolvedValue(
+      matched({ images: [GALLERY_ART, GALLERY_SHOT] }),
+    );
+    coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
+    await test.request
+      .post(`/games/${String(gameId)}/enrich`)
+      .send({ candidate: { source: 'IGDB', externalId: 1036 } });
+
+    resolver.resolve.mockResolvedValue(matched({ images: [GALLERY_NEW] }));
+    const res = await test.request
+      .post(`/games/${String(gameId)}/enrich`)
+      .send({ candidate: { source: 'IGDB', externalId: 1036 } });
+    expect(res.status).toBe(200);
+
+    const images = await test.prisma.gameImage.findMany({ where: { gameId } });
+    expect(images.map((image) => image.url)).toEqual([
+      servedCover(GALLERY_NEW),
+    ]);
+
+    const cache = app.get(CoverCacheService);
+    for (const url of [GALLERY_ART, GALLERY_SHOT]) {
+      const file = servedCover(url).split('/').pop() ?? '';
+      await expect(cache.has(file)).resolves.toBe(false);
+    }
+    const newFile = servedCover(GALLERY_NEW).split('/').pop() ?? '';
+    await expect(cache.has(newFile)).resolves.toBe(true);
+  });
+
+  it('keeps the existing gallery when the candidate supplies none', async () => {
+    const { gameId } = await seedGameWith();
+    resolver.resolve.mockResolvedValue(matched({ images: [GALLERY_ART] }));
+    coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
+    await test.request
+      .post(`/games/${String(gameId)}/enrich`)
+      .send({ candidate: { source: 'IGDB', externalId: 1036 } });
+
+    resolver.resolve.mockResolvedValue(matched({ images: [] }));
+    const res = await test.request
+      .post(`/games/${String(gameId)}/enrich`)
+      .send({ candidate: { source: 'IGDB', externalId: 1036 } });
+    expect(res.status).toBe(200);
+    expect((res.body as EnrichBody).applied).toBe(false);
+
+    const images = await test.prisma.gameImage.findMany({ where: { gameId } });
+    expect(images.map((image) => image.url)).toEqual([
+      servedCover(GALLERY_ART),
+    ]);
+    const file = servedCover(GALLERY_ART).split('/').pop() ?? '';
+    await expect(app.get(CoverCacheService).has(file)).resolves.toBe(true);
   });
 
   describe('errors', () => {

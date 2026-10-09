@@ -13,7 +13,10 @@ import type {
   CatalogCandidate,
   CatalogPlatform,
 } from '../game-catalog/game-catalog.resolver';
-import { GameEnrichmentService } from '../enrichment/game-enrichment.service';
+import {
+  GameEnrichmentService,
+  toGameCreateData,
+} from '../enrichment/game-enrichment.service';
 import { CoverMaintenanceService } from '../covers/cover-maintenance.service';
 import type { GameIdentity } from '../games/game-identity';
 import { GameIdentityService } from '../games/game-identity.service';
@@ -909,9 +912,9 @@ export class ImportJobsService {
       })),
     );
 
-    // Covers downloaded for duplicate items that were not adopted (ref-counted
-    // cleanup happens after the transaction commits).
-    const duplicateCovers: (string | null)[] = [];
+    // Covers and gallery images downloaded for duplicate items that were not
+    // adopted (ref-counted cleanup happens after the transaction commits).
+    const duplicateAssets: (string | null)[] = [];
 
     await this.prisma.$transaction(async (tx) => {
       // Re-check inside the transaction so a job that turned terminal while the
@@ -939,9 +942,11 @@ export class ImportJobsService {
         let gameId: number;
         if (existing !== null) {
           gameId = existing.id;
-          duplicateCovers.push(item.data.coverUrl);
+          duplicateAssets.push(item.data.coverUrl);
+          for (const image of item.data.images) duplicateAssets.push(image.url);
         } else {
-          gameId = (await tx.game.create({ data: item.data })).id;
+          gameId = (await tx.game.create({ data: toGameCreateData(item.data) }))
+            .id;
         }
         const claim = await tx.recognizedItem.updateMany({
           where: {
@@ -985,11 +990,12 @@ export class ImportJobsService {
       }
     });
 
-    // A duplicate item's freshly downloaded cover was not adopted by an insert;
-    // remove it if no other game row references it (a shared/live cover is kept).
-    for (const coverUrl of duplicateCovers) {
-      if (coverUrl !== null) {
-        await this.maintenance.removeIfUnreferenced(coverUrl);
+    // A duplicate item's freshly downloaded cover/gallery files were not
+    // adopted by an insert; remove each if no other game row references it (a
+    // shared/live file is kept).
+    for (const assetUrl of duplicateAssets) {
+      if (assetUrl !== null) {
+        await this.maintenance.removeIfUnreferenced(assetUrl);
       }
     }
   }

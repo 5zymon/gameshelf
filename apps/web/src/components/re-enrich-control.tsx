@@ -5,15 +5,9 @@ import { useRouter } from 'next/navigation';
 import { Fragment, useState } from 'react';
 import { isApiError, type EnrichCandidate } from '@/lib/api';
 import { api } from '@/lib/api/browser';
+import { sameOriginPath } from '@/lib/image-url';
 
 type Phase = 'idle' | 'searching' | 'matched' | 'applying' | 'done';
-
-/** Same-origin only: the API's preview cover is a root-relative path. */
-function sameOriginPath(url: string | null): string | null {
-  return url !== null && url.startsWith('/') && !url.startsWith('//')
-    ? url
-    : null;
-}
 
 export function ReEnrichControl({
   gameId,

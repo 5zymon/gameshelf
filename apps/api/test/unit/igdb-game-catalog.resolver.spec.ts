@@ -194,7 +194,8 @@ describe('IgdbGameCatalogResolver (unit)', () => {
         publisher: 'Bungie',
         genre: 'Shooter',
         playerCount: null,
-        coverUrl: 'https://images.igdb.com/igdb/image/upload/t_thumb/halo.jpg',
+        coverUrl: 'https://images.igdb.com/igdb/image/upload/t_1080p/halo.jpg',
+        images: [],
         platforms: [{ igdbId: 11, name: 'Xbox', abbreviation: 'XBOX' }],
         source: 'IGDB',
         raw: expect.anything() as unknown,
@@ -220,7 +221,7 @@ describe('IgdbGameCatalogResolver (unit)', () => {
       genre: 'Shooter',
       // max(onlinemax=16, offlinemax=4, offlinecoopmax=2, onlinecoopmax=4)
       playerCount: 16,
-      coverUrl: 'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
+      coverUrl: 'https://images.igdb.com/igdb/image/upload/t_1080p/co61gh.jpg',
       source: 'IGDB',
     });
   });
@@ -236,6 +237,91 @@ describe('IgdbGameCatalogResolver (unit)', () => {
     expect(result.kind).toBe('matched');
     if (result.kind !== 'matched') return;
     expect(result.candidate.playerCount).toBeNull();
+  });
+
+  it('orders gallery images artworks-first, then screenshots, normalized', async () => {
+    const search = jest.fn<Promise<IgdbGame[]>, [string]>().mockResolvedValue([
+      game({
+        id: 1,
+        name: 'Halo',
+        artworks: [
+          { url: '//images.igdb.com/igdb/image/upload/t_thumb/art1.jpg' },
+        ],
+        screenshots: [
+          { url: '//images.igdb.com/igdb/image/upload/t_thumb/shot1.jpg' },
+        ],
+      }),
+    ]);
+    const resolver = createResolver(search);
+
+    const result = await resolver.resolve(item('Halo'));
+
+    expect(result.kind).toBe('matched');
+    if (result.kind !== 'matched') return;
+    expect(result.candidate.images).toEqual([
+      'https://images.igdb.com/igdb/image/upload/t_1080p/art1.jpg',
+      'https://images.igdb.com/igdb/image/upload/t_1080p/shot1.jpg',
+    ]);
+  });
+
+  it('dedupes gallery images by resolved URL (artworks win)', async () => {
+    const search = jest.fn<Promise<IgdbGame[]>, [string]>().mockResolvedValue([
+      game({
+        id: 1,
+        name: 'Halo',
+        artworks: [
+          { url: '//images.igdb.com/igdb/image/upload/t_thumb/same.jpg' },
+        ],
+        screenshots: [
+          { url: '//images.igdb.com/igdb/image/upload/t_thumb/same.jpg' },
+          { url: '//images.igdb.com/igdb/image/upload/t_thumb/other.jpg' },
+        ],
+      }),
+    ]);
+    const resolver = createResolver(search);
+
+    const result = await resolver.resolve(item('Halo'));
+
+    expect(result.kind).toBe('matched');
+    if (result.kind !== 'matched') return;
+    expect(result.candidate.images).toEqual([
+      'https://images.igdb.com/igdb/image/upload/t_1080p/same.jpg',
+      'https://images.igdb.com/igdb/image/upload/t_1080p/other.jpg',
+    ]);
+  });
+
+  it('caps the gallery at eight images', async () => {
+    const screenshots = Array.from({ length: 10 }, (_, i) => ({
+      url: `//images.igdb.com/igdb/image/upload/t_thumb/shot${String(i)}.jpg`,
+    }));
+    const search = jest
+      .fn<Promise<IgdbGame[]>, [string]>()
+      .mockResolvedValue([game({ id: 1, name: 'Halo', screenshots })]);
+    const resolver = createResolver(search);
+
+    const result = await resolver.resolve(item('Halo'));
+
+    expect(result.kind).toBe('matched');
+    if (result.kind !== 'matched') return;
+    expect(result.candidate.images).toHaveLength(8);
+  });
+
+  it('drops malformed gallery entries and leaves images empty when absent', async () => {
+    const search = jest.fn<Promise<IgdbGame[]>, [string]>().mockResolvedValue([
+      game({
+        id: 1,
+        name: 'Halo',
+        artworks: [{ url: '' }, {}],
+        screenshots: [{ url: 'not-an-igdb-url.jpg' }],
+      }),
+    ]);
+    const resolver = createResolver(search);
+
+    const result = await resolver.resolve(item('Halo'));
+
+    expect(result.kind).toBe('matched');
+    if (result.kind !== 'matched') return;
+    expect(result.candidate.images).toEqual(['not-an-igdb-url.jpg']);
   });
 });
 
@@ -368,7 +454,7 @@ describe('IgdbGameCatalogResolver.search (unit)', () => {
       releaseYear: 2001,
       publisher: 'Bungie',
       genre: 'Shooter',
-      coverUrl: 'https://images.igdb.com/igdb/image/upload/t_thumb/halo.jpg',
+      coverUrl: 'https://images.igdb.com/igdb/image/upload/t_1080p/halo.jpg',
     });
   });
 

@@ -1314,6 +1314,7 @@ describe('ImportJobsService (unit)', () => {
       genre: 'Shooter',
       playerCount: 16,
       coverUrl: 'https://images.igdb.com/halo.jpg',
+      images: [],
       platforms: [],
       source: 'IGDB' as const,
       raw: { id: 7 },
@@ -1330,6 +1331,7 @@ describe('ImportJobsService (unit)', () => {
       playerCount: 16,
       coverUrl: '/api/covers/0123456789abcdef0123456789abcdef.jpg',
       sourceCoverUrl: 'https://images.igdb.com/halo.jpg',
+      images: [],
       rawMetadata: JSON.stringify({ id: 7 }),
       enrichedAt: new Date('2026-10-07T00:00:00.000Z'),
       source: 'IGDB' as const,
@@ -1357,7 +1359,9 @@ describe('ImportJobsService (unit)', () => {
         'GOTY',
       );
       expect(mock.$transaction).toHaveBeenCalledTimes(1);
-      expect(mock.game.create).toHaveBeenCalledWith({ data: enriched });
+      expect(mock.game.create).toHaveBeenCalledWith({
+        data: { ...enriched, images: { create: [] } },
+      });
       expect(mock.recognizedItem.updateMany).toHaveBeenCalledWith({
         where: { id: 1, importJobId: 5, status: 'pending' },
         data: { status: 'imported', gameId: 42 },
@@ -1432,6 +1436,78 @@ describe('ImportJobsService (unit)', () => {
       // The downloaded candidate cover was not adopted and is cleaned up.
       expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(
         enriched.coverUrl,
+      );
+    });
+
+    it('threads the candidate gallery into a nested create', async () => {
+      const galleryEnriched = {
+        ...enriched,
+        images: [
+          {
+            url: '/api/covers/art.jpg',
+            sourceUrl:
+              'https://images.igdb.com/igdb/image/upload/t_1080p/art.jpg',
+          },
+        ],
+      };
+      enrichment.enrichCandidate.mockResolvedValue(galleryEnriched);
+      mock.game.create.mockResolvedValue({ id: 42 });
+      mock.recognizedItem.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.commitImportBatch(5, {
+        resolved: [
+          { recognizedItemId: 1, platformId: 3, edition: 'GOTY', candidate },
+        ],
+        unrecognized: [],
+        transient: [],
+      });
+
+      expect(mock.game.create).toHaveBeenCalledWith({
+        data: {
+          ...galleryEnriched,
+          images: {
+            create: [
+              {
+                position: 0,
+                url: '/api/covers/art.jpg',
+                sourceUrl:
+                  'https://images.igdb.com/igdb/image/upload/t_1080p/art.jpg',
+              },
+            ],
+          },
+        },
+      });
+    });
+
+    it('cleans up downloaded gallery files for a duplicate item', async () => {
+      const galleryEnriched = {
+        ...enriched,
+        images: [
+          { url: '/api/covers/art.jpg', sourceUrl: 'https://x/art.jpg' },
+          { url: '/api/covers/shot.jpg', sourceUrl: 'https://x/shot.jpg' },
+        ],
+      };
+      enrichment.enrichCandidate.mockResolvedValue(galleryEnriched);
+      identity.findExisting.mockResolvedValue({ id: 77, copyCount: 1 });
+      mock.recognizedItem.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.commitImportBatch(5, {
+        resolved: [
+          { recognizedItemId: 1, platformId: 3, edition: 'GOTY', candidate },
+        ],
+        unrecognized: [],
+        transient: [],
+      });
+
+      expect(mock.game.create).not.toHaveBeenCalled();
+      expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(
+        galleryEnriched.coverUrl,
+      );
+      expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(
+        '/api/covers/art.jpg',
+      );
+      expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(
+        '/api/covers/shot.jpg',
       );
     });
 

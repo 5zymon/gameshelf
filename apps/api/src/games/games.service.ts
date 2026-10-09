@@ -12,7 +12,10 @@ import {
   GameCatalogResolver,
 } from '../game-catalog/game-catalog.resolver';
 import { CatalogSearchService } from '../game-catalog/catalog-search.service';
-import { GameEnrichmentService } from '../enrichment/game-enrichment.service';
+import {
+  GameEnrichmentService,
+  toGameCreateData,
+} from '../enrichment/game-enrichment.service';
 import { CoverCacheService } from '../covers/cover-cache.service';
 import { CoverMaintenanceService } from '../covers/cover-maintenance.service';
 import { CoverPreviewService } from '../covers/cover-preview.service';
@@ -41,6 +44,7 @@ import { UpdateGameDto } from './dto/update-game.dto';
 import { GAME_ALREADY_IN_CATALOG, type GameIdentity } from './game-identity';
 import { GameIdentityService } from './game-identity.service';
 import {
+  GAME_DETAIL_INCLUDE,
   PLATFORM_SELECT,
   toGameDetail,
   toGameListItem,
@@ -112,7 +116,7 @@ export class GamesService {
   async findOne(id: number): Promise<GameDetailModel> {
     const game = await this.prisma.game.findUnique({
       where: { id },
-      include: { platform: { select: PLATFORM_SELECT } },
+      include: GAME_DETAIL_INCLUDE,
     });
     if (!game) {
       throw new NotFoundException(`Game with id ${String(id)} not found`);
@@ -180,7 +184,7 @@ export class GamesService {
     if (existing !== null) {
       const existingGame = await this.prisma.game.findUnique({
         where: { id: existing.id },
-        include: { platform: { select: PLATFORM_SELECT } },
+        include: GAME_DETAIL_INCLUDE,
       });
       if (existingGame !== null) {
         throw new ConflictException({
@@ -197,13 +201,14 @@ export class GamesService {
     // 3. Linked path: reuse the import mapping (candidate is source of truth for
     //    metadata + cover; platform/edition are the user's confirmed inputs).
     if (candidate !== null) {
+      const enriched = await this.enrichment.enrichCandidate(
+        candidate,
+        dto.platformId,
+        edition,
+      );
       const game = await this.prisma.game.create({
-        data: await this.enrichment.enrichCandidate(
-          candidate,
-          dto.platformId,
-          edition,
-        ),
-        include: { platform: { select: PLATFORM_SELECT } },
+        data: toGameCreateData(enriched),
+        include: GAME_DETAIL_INCLUDE,
       });
       return toGameDetail(game);
     }
@@ -228,7 +233,7 @@ export class GamesService {
           userEditedFields: serializeEditedFields(editedNow),
         }),
       },
-      include: { platform: { select: PLATFORM_SELECT } },
+      include: GAME_DETAIL_INCLUDE,
     });
     return toGameDetail(game);
   }
@@ -244,7 +249,7 @@ export class GamesService {
     const game = await this.prisma.game.update({
       where: { id },
       data: { copyCount: { increment: 1 } }, // atomic
-      include: { platform: { select: PLATFORM_SELECT } },
+      include: GAME_DETAIL_INCLUDE,
     });
     return toGameDetail(game);
   }
@@ -316,10 +321,14 @@ export class GamesService {
           ),
         }),
       },
-      include: { platform: { select: PLATFORM_SELECT } },
+      include: GAME_DETAIL_INCLUDE,
     });
     if (coverWrite !== null && existing.coverUrl !== game.coverUrl) {
-      await this.maintenance.removeIfUnreferenced(existing.coverUrl, id);
+      // The cover moved away from this game; its gallery may still point at the
+      // old file, so exclude the game only from the cover count.
+      await this.maintenance.removeIfUnreferenced(existing.coverUrl, {
+        exceptCoverGameId: id,
+      });
     }
     return toGameDetail(game);
   }
@@ -340,7 +349,7 @@ export class GamesService {
   ): Promise<EnrichGameResponseModel> {
     const raw = await this.prisma.game.findUnique({
       where: { id },
-      include: { platform: { select: PLATFORM_SELECT } },
+      include: GAME_DETAIL_INCLUDE,
     });
     if (!raw) {
       throw new NotFoundException(`Game with id ${String(id)} not found`);
@@ -420,7 +429,12 @@ export class GamesService {
       candidateCover !== raw.coverUrl &&
       !(updateData !== null && updateData.coverUrl === candidateCover)
     ) {
-      await this.maintenance.removeIfUnreferenced(candidateCover, id);
+      // The downloaded file was not adopted as this game's cover; exclude the
+      // game only from the cover count so a coincidental gallery reference still
+      // keeps the file.
+      await this.maintenance.removeIfUnreferenced(candidateCover, {
+        exceptCoverGameId: id,
+      });
     }
 
     const updated =
@@ -430,14 +444,34 @@ export class GamesService {
             await this.prisma.game.update({
               where: { id },
               data: updateData,
-              include: { platform: { select: PLATFORM_SELECT } },
+              include: GAME_DETAIL_INCLUDE,
             }),
           );
 
     // Ref-counted deletion: drop the replaced file only when no other game
     // still points at it (e.g. a sibling imported from the same candidate).
+    // The game's unchanged gallery may still reference the old cover, so it is
+    // excluded only from the cover count.
     if (raw.coverUrl !== updated.coverUrl) {
-      await this.maintenance.removeIfUnreferenced(raw.coverUrl, id);
+      await this.maintenance.removeIfUnreferenced(raw.coverUrl, {
+        exceptCoverGameId: id,
+      });
+    }
+
+    // The gallery rows now reflect the new image set, so any previous file not
+    // kept by the replacement can be removed (ref-counted: a file still
+    // referenced by another game or gallery row is kept). A dropped gallery file
+    // may still be this game's current cover, so exclude the game only from the
+    // gallery count.
+    if (updateData?.images !== undefined) {
+      const kept = new Set(enriched.images.map((image) => image.url));
+      for (const previous of raw.images) {
+        if (!kept.has(previous.url)) {
+          await this.maintenance.removeIfUnreferenced(previous.url, {
+            exceptImageGameId: id,
+          });
+        }
+      }
     }
 
     return {
@@ -452,13 +486,16 @@ export class GamesService {
   async remove(id: number): Promise<void> {
     const existing = await this.prisma.game.findUnique({
       where: { id },
-      select: { id: true, coverUrl: true },
+      select: { id: true, coverUrl: true, images: { select: { url: true } } },
     });
     if (!existing) {
       throw new NotFoundException(`Game with id ${String(id)} not found`);
     }
     await this.prisma.game.delete({ where: { id } });
     await this.maintenance.removeIfUnreferenced(existing.coverUrl);
+    for (const image of existing.images) {
+      await this.maintenance.removeIfUnreferenced(image.url);
+    }
   }
 
   /**

@@ -28,6 +28,11 @@ export interface GameListItem {
 /** `Game.source` — mirrored from the Prisma `GameSource` enum. */
 export type GameSource = 'IGDB' | 'MobyGames' | 'MANUAL';
 
+export interface GameImage {
+  url: string;
+  thumbUrl: string | null;
+}
+
 export interface GameDetail {
   id: number;
   title: string;
@@ -40,6 +45,7 @@ export interface GameDetail {
   copyCount: number;
   coverUrl: string | null;
   coverThumbUrl: string | null;
+  images: GameImage[];
   rawMetadata: string | null;
   enrichedAt: string | null;
   source: GameSource;

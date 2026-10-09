@@ -85,6 +85,7 @@ function candidate(
     genre: 'Action',
     playerCount: null,
     coverUrl: null,
+    images: [],
     platforms,
     source: 'IGDB',
     raw: { title },
