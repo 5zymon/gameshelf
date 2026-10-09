@@ -10,6 +10,7 @@ import { VisionProviderError } from '../../src/settings/vision/vision.errors';
 import {
   parseJsonResponse,
   parseVisionRecognition,
+  VISION_INSTRUCTION_PROMPT,
   type VisionProviderConfig,
   type VisionRecognitionInput,
 } from '../../src/settings/vision/vision-provider';
@@ -169,6 +170,32 @@ describe('Vision recognition parsing (unit)', () => {
     expect(parsed.countVisible).toBe(9);
   });
 
+  it.each(['N/A', 'NA', 'N.A.', 'unknown', 'None', 'not visible'])(
+    'normalizes the "no platform" sentinel %p to null',
+    (platform) => {
+      const parsed = parseVisionRecognition({
+        items: [{ title: 'Hades', edition: null, platform, confidence: 0.8 }],
+        count_visible: 1,
+      });
+
+      expect(parsed.items[0]?.platform).toBeNull();
+    },
+  );
+
+  it.each(['Nintendo Switch', 'PC DVD ROM', 'PC', 'PlayStation 5'])(
+    'preserves the real platform %p',
+    (platform) => {
+      const parsed = parseVisionRecognition({
+        items: [{ title: 'Hades', edition: null, platform, confidence: 0.8 }],
+        count_visible: 1,
+      });
+
+      // "PC DVD ROM" is expanded to its canonical equivalent later, in
+      // resolvePlatformId — the parser leaves it untouched.
+      expect(parsed.items[0]?.platform).toBe(platform);
+    },
+  );
+
   it('rounds a fractional advisory count down to an integer', () => {
     expect(
       parseVisionRecognition({ items: [], count_visible: 2.9 }).countVisible,
@@ -179,6 +206,17 @@ describe('Vision recognition parsing (unit)', () => {
     expect(
       parseVisionRecognition({ items: [], count_visible: -1 }).countVisible,
     ).toBeNull();
+  });
+});
+
+describe('VISION_INSTRUCTION_PROMPT (unit)', () => {
+  it('reads the platform off the physical box and forbids inferring it', () => {
+    expect(VISION_INSTRUCTION_PROMPT).toContain(
+      'read the platform printed on the physical box',
+    );
+    expect(VISION_INSTRUCTION_PROMPT).toContain('canonical platform name');
+    expect(VISION_INSTRUCTION_PROMPT).toContain('Never infer the platform');
+    expect(VISION_INSTRUCTION_PROMPT).toContain('PC DVD ROM');
   });
 });
 

@@ -74,14 +74,22 @@ export const VISION_INSTRUCTION_PROMPT =
   'You read photos of physical video-game shelves. List EVERY distinct video ' +
   'game you can see (spines, covers, boxes). Never guess or estimate how many ' +
   'games are in the photo — counting objects is unreliable, so return the list ' +
-  'instead. Read each title off its box; when the text is unreadable, use your ' +
-  'knowledge of the cover art to identify the game. Return a JSON object with: ' +
-  '"items", one object per game with "title" (the title as printed, required), ' +
-  '"edition" (e.g. "GOTY Edition", or null), "platform" (e.g. "PlayStation 5", ' +
-  'or null) and "confidence" (a number from 0 to 1); and "count_visible", the ' +
-  'number of games you listed, or null if unsure. "count_visible" is advisory ' +
-  'only and must match the number of items. Only include actual video games; ' +
-  'if none are visible, return an empty "items" array and "count_visible": 0.';
+  'instead. Read each title off its box; when the title text is unreadable, ' +
+  'use your knowledge of the cover art to identify the game. For "platform", ' +
+  'read the platform printed on the physical box, disc, cartridge or media ' +
+  'banner (e.g. "PC DVD ROM", "PC", "Nintendo Switch", "PlayStation 5", ' +
+  '"Xbox One", "PlayStation 4"), and give its canonical platform name (for ' +
+  'example, a "PC DVD ROM" banner means the platform is "PC"). Never infer ' +
+  'the platform from the game title, the cover art, or your prior knowledge ' +
+  'of which platforms the game was released on — report only the platform ' +
+  'you can actually read on the item; use null when no platform is visible. ' +
+  'Return a JSON object with: "items", one object per game with "title" (the ' +
+  'title as printed, required), "edition" (e.g. "GOTY Edition", or null), ' +
+  '"platform" (the canonical platform read from the box, or null) and ' +
+  '"confidence" (a number from 0 to 1); and "count_visible", the number of ' +
+  'games you listed, or null if unsure. "count_visible" is advisory only and ' +
+  'must match the number of items. Only include actual video games; if none ' +
+  'are visible, return an empty "items" array and "count_visible": 0.';
 
 /**
  * Canonical strict JSON Schema for the `items` value of the full recognition
@@ -143,6 +151,62 @@ export function truncateForLog(
 }
 
 /**
+ * Non-platform strings a vision model may return for "no platform visible".
+ * Compared after lowercasing, stripping diacritics, and reducing any run of
+ * non-alphanumeric characters to a single space, so "N/A", "N.A." and "n a"
+ * all collapse to the same key. Such values are treated as absent (null) so
+ * they never become an authoritative import platform.
+ */
+const NON_PLATFORM_SENTINEL_KEYS = new Set([
+  'n a',
+  'na',
+  'none',
+  'null',
+  'unknown',
+  'not visible',
+  'not readable',
+  'unreadable',
+  'unclear',
+  'unspecified',
+]);
+
+/**
+ * Sentinel key for a model-reported platform string. Mirrors
+ * `normalizePlatformName` (NFKD, strip diacritics, lowercase, `&` → " and ",
+ * non-alphanumeric → a single space, trim, collapse) so the two agree on what
+ * counts as a blank or sentinel value.
+ */
+export function platformSentinelKey(value: string): string {
+  return value
+    .normalize('NFKD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .replace(/&/g, ' and ')
+    .replace(/[^\p{Letter}\p{Number}]+/gu, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+/**
+ * Normalizes a model-reported platform: blank/whitespace and obvious
+ * "no platform" sentinels ("N/A", "unknown", "none", …) become `null`, so
+ * downstream resolution falls back to the catalog candidate instead of
+ * creating a junk platform from the sentinel. Real values are returned
+ * trimmed and unchanged.
+ */
+function parsePlatformValue(value: unknown): string | null {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  const key = platformSentinelKey(trimmed);
+  if (key === '' || NON_PLATFORM_SENTINEL_KEYS.has(key)) {
+    return null;
+  }
+  return trimmed;
+}
+
+/**
  * Validates the model's decoded JSON into `RecognizedItem[]`. Both providers
  * share this so a malformed payload always surfaces as `bad_response` rather
  * than a downstream crash.
@@ -180,7 +244,7 @@ export function parseRecognizedItems(raw: unknown): RecognizedItem[] {
     return {
       title: title.trim(),
       edition: typeof edition === 'string' ? edition.trim() : null,
-      platform: typeof platform === 'string' ? platform.trim() : null,
+      platform: parsePlatformValue(platform),
       confidence: Math.min(1, Math.max(0, confidence)),
     };
   });

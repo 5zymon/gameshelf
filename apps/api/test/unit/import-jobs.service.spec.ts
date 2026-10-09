@@ -1180,14 +1180,22 @@ describe('ImportJobsService (unit)', () => {
       };
     }
 
-    it('prefers an IGDB-id match with a single platform query (select includes aliases)', async () => {
+    it('matches the raw platform first with a single platform query (select includes aliases)', async () => {
       mock.platform.findMany.mockResolvedValue([
+        // The old IGDB-id-first code would have picked this lower-id row for
+        // the candidate's igdbId (130); the raw platform must win instead.
+        row({
+          id: 2,
+          name: 'Nintendo Switch',
+          abbreviation: 'NS',
+          igdbId: 130,
+        }),
         row({ id: 5, name: 'Xbox', abbreviation: 'XBOX', igdbId: 11 }),
       ]);
 
       await expect(
         service.resolvePlatformId(
-          [{ igdbId: 11, name: 'Xbox', abbreviation: 'XBOX' }],
+          [{ igdbId: 130, name: 'Nintendo Switch', abbreviation: 'NS' }],
           'Xbox',
         ),
       ).resolves.toBe(5);
@@ -1203,6 +1211,96 @@ describe('ImportJobsService (unit)', () => {
           aliases: { select: { name: true } },
         },
       });
+      expect(platforms.createFromImport).not.toHaveBeenCalled();
+    });
+
+    it('matches the raw platform before any candidate, even a lower-id candidate', async () => {
+      mock.platform.findMany.mockResolvedValue([
+        row({
+          id: 2,
+          name: 'Nintendo Switch',
+          abbreviation: 'NS',
+          igdbId: 130,
+        }),
+        row({
+          id: 9,
+          name: 'PC (Microsoft Windows)',
+          abbreviation: 'PC',
+          igdbId: 6,
+        }),
+      ]);
+
+      await expect(
+        service.resolvePlatformId(
+          [
+            { igdbId: 130, name: 'Nintendo Switch', abbreviation: 'NS' },
+            { igdbId: 6, name: 'PC (Microsoft Windows)', abbreviation: 'PC' },
+          ],
+          'PC DVD ROM',
+        ),
+      ).resolves.toBe(9);
+      expect(platforms.createFromImport).not.toHaveBeenCalled();
+    });
+
+    it('creates a platform from the photo string when the raw platform matches nothing', async () => {
+      mock.platform.findMany.mockResolvedValue([
+        row({
+          id: 2,
+          name: 'Nintendo Switch',
+          abbreviation: 'NS',
+          igdbId: 130,
+        }),
+      ]);
+      platforms.createFromImport.mockResolvedValue(77);
+
+      await expect(
+        service.resolvePlatformId(
+          [{ igdbId: 130, name: 'Nintendo Switch', abbreviation: 'NS' }],
+          'Sega Saturn',
+        ),
+      ).resolves.toBe(77);
+      expect(platforms.createFromImport).toHaveBeenCalledWith('Sega Saturn');
+    });
+
+    it('matches the candidate name when the raw platform is blank', async () => {
+      mock.platform.findMany.mockResolvedValue([
+        row({ id: 9, name: 'Nintendo Switch', abbreviation: 'NS' }),
+      ]);
+
+      await expect(
+        service.resolvePlatformId(
+          [{ igdbId: 130, name: 'Nintendo Switch', abbreviation: 'NS' }],
+          null,
+        ),
+      ).resolves.toBe(9);
+      expect(platforms.createFromImport).not.toHaveBeenCalled();
+    });
+
+    it('falls back to the first candidate IGDB id in catalog order when no name matches', async () => {
+      mock.platform.findMany.mockResolvedValue([
+        row({
+          id: 2,
+          name: 'Nintendo Switch',
+          abbreviation: 'NS',
+          igdbId: 130,
+        }),
+        row({
+          id: 9,
+          name: 'PC (Microsoft Windows)',
+          abbreviation: 'PC',
+          igdbId: 6,
+        }),
+      ]);
+
+      await expect(
+        service.resolvePlatformId(
+          [
+            { igdbId: 6, name: 'Personal Computer', abbreviation: 'PC-98' },
+            { igdbId: 130, name: 'Switch', abbreviation: 'NX' },
+          ],
+          null,
+        ),
+      ).resolves.toBe(9);
       expect(platforms.createFromImport).not.toHaveBeenCalled();
     });
 

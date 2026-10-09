@@ -79,6 +79,73 @@ describe('Platforms sync (e2e)', () => {
     ).resolves.toMatchObject({ igdbId: 6, platformFamily: null });
   });
 
+  it('reuses an existing canonical PC row by exact name when it has no abbreviation (regression)', async () => {
+    // C1: the row is named exactly as IGDB names it but carries no
+    // abbreviation/alias, so only the pure matcher's exact-name key can match
+    // it. Rewriting the input "PC (Microsoft Windows)" to "pc" instead would
+    // miss the row, fall through to createCanonical, and hit the unique
+    // platforms_name_key (P2002).
+    const pc = await seedPlatform(test.prisma, {
+      name: 'PC (Microsoft Windows)',
+      slug: 'pc',
+      igdbId: 6,
+    });
+    fetchPlatforms.mockResolvedValue([
+      {
+        id: 6,
+        name: 'PC (Microsoft Windows)',
+        abbreviation: 'PC',
+        platform_family: 1,
+      },
+    ]);
+
+    const result = await syncService.sync();
+
+    expect(result.created).toBe(0);
+    expect(result.updated + result.unchanged).toBe(1);
+    await expect(test.prisma.platform.count()).resolves.toBe(1);
+    await expect(
+      test.prisma.platform.findUnique({ where: { id: pc.id } }),
+    ).resolves.toMatchObject({
+      id: pc.id,
+      name: 'PC (Microsoft Windows)',
+      abbreviation: 'PC',
+      igdbId: 6,
+    });
+  });
+
+  it('reuses the canonical PC row by exact name even when a legacy Windows row exists (regression)', async () => {
+    const legacy = await seedPlatform(test.prisma, {
+      name: 'Windows',
+      slug: 'windows',
+    });
+    const pc = await seedPlatform(test.prisma, {
+      name: 'PC (Microsoft Windows)',
+      slug: 'pc',
+      igdbId: 6,
+    });
+    fetchPlatforms.mockResolvedValue([
+      {
+        id: 6,
+        name: 'PC (Microsoft Windows)',
+        abbreviation: 'PC',
+        platform_family: 1,
+      },
+    ]);
+
+    const result = await syncService.sync();
+
+    expect(result.created).toBe(0);
+    expect(result.updated + result.unchanged).toBe(1);
+    await expect(test.prisma.platform.count()).resolves.toBe(2);
+    await expect(
+      test.prisma.platform.findUnique({ where: { id: pc.id } }),
+    ).resolves.toMatchObject({ id: pc.id, igdbId: 6 });
+    await expect(
+      test.prisma.platform.findUnique({ where: { id: legacy.id } }),
+    ).resolves.toMatchObject({ id: legacy.id, name: 'Windows', igdbId: null });
+  });
+
   it('is idempotent on a second run', async () => {
     await seedPlatform(test.prisma, { name: 'PS5', slug: 'ps5' });
     fetchPlatforms.mockResolvedValue([

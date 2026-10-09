@@ -22,6 +22,7 @@ import type { GameIdentity } from '../games/game-identity';
 import { GameIdentityService } from '../games/game-identity.service';
 import { PlatformsService } from '../platforms/platforms.service';
 import {
+  expandPlatformInputs,
   findPlatformMatch,
   normalizePlatformName,
 } from '../platforms/platform-match';
@@ -795,19 +796,29 @@ export class ImportJobsService {
   }
 
   /**
-   * Maps a resolved candidate onto a `Platform` row. IGDB id first (the
-   * canonical link), then anchored equality matching over the candidate's
-   * name/abbreviation and the raw platform string against every platform's
-   * name/abbreviation/alternative name and aliases (case-, diacritic-,
-   * punctuation-, and whitespace-insensitive). One DB query per call and
-   * **zero** IGDB platform-list requests.
+   * Maps a resolved candidate onto a `Platform` row, with the platform read off
+   * the physical item (`rawPlatform`) authoritative.
    *
-   * When nothing matches, the platform is created for the next import to
-   * reuse (spec §4.2.3/§4.6.6): the first usable of the raw platform name,
-   * the first candidate name, then the first candidate abbreviation. The new
-   * row is flagged `addedByImport` (see `PlatformsService.createFromImport`).
-   * Returns `null` only when no usable platform name exists at all, so the
-   * caller flags the item rather than creating a blank platform.
+   * Resolution order:
+   * 1. The raw platform from the photo, expanded to its canonical equivalents
+   *    (the explicit PC-banner synonyms) before matching. It is matched first —
+   *    through the shared anchored equality matcher — so the external catalog
+   *    can never substitute a different platform. When the photo names a
+   *    platform the catalog does not know, it is created for review rather than
+   *    silently replaced by a candidate platform.
+   * 2. Only when the raw platform is null/blank: the candidate's own
+   *    name/abbreviation, in catalog order.
+   * 3. Then the candidate's canonical IGDB id — the first candidate in catalog
+   *    order that maps to a seeded platform, never an arbitrary lowest-local-id
+   *    pick.
+   * 4. Finally, create from the first usable candidate name, then abbreviation.
+   *
+   * One platform query per call, plus a create when a new platform is needed,
+   * and **zero** IGDB platform-list requests. Returns
+   * `null` only when neither the photo nor any candidate yields a usable
+   * platform name, so the caller flags the item rather than creating a blank
+   * platform. The new row is flagged `addedByImport` (see
+   * `PlatformsService.createFromImport`).
    */
   async resolvePlatformId(
     candidatePlatforms: CatalogPlatform[],
@@ -828,30 +839,52 @@ export class ImportJobsService {
       ...row,
       aliases: row.aliases.map((alias) => alias.name),
     }));
-    const igdbIds = candidatePlatforms
-      .map((platform) => platform.igdbId)
-      .filter((id): id is number => id !== null);
-    if (igdbIds.length > 0) {
+
+    // 1. The platform read off the photo is authoritative. It is expanded to
+    //    its canonical equivalents first (e.g. a "PC DVD ROM" banner → "PC" /
+    //    "PC (Microsoft Windows)"), then matched.
+    if (rawPlatform !== null && normalizePlatformName(rawPlatform) !== '') {
+      const rawMatch = findPlatformMatch(
+        platforms,
+        expandPlatformInputs(rawPlatform),
+      );
+      if (rawMatch) {
+        return rawMatch.id;
+      }
+      // The photo named a platform the catalog does not know: create it for
+      // review instead of silently substituting a candidate platform.
+      return this.platforms.createFromImport(rawPlatform);
+    }
+
+    // 2. No usable photo platform: candidate name/abbreviation, in catalog
+    //    order (deterministic — never a lowest-local-id pick).
+    const byName = findPlatformMatch(
+      platforms,
+      candidatePlatforms.flatMap((platform) => [
+        platform.name,
+        platform.abbreviation,
+      ]),
+    );
+    if (byName) {
+      return byName.id;
+    }
+
+    // 3. Last resort before creating: the candidate's canonical IGDB id, first
+    //    candidate in catalog order that maps to a local reference platform.
+    for (const candidate of candidatePlatforms) {
+      if (candidate.igdbId === null) {
+        continue;
+      }
       const byIgdbId = platforms.find(
-        (platform) =>
-          platform.igdbId !== null && igdbIds.includes(platform.igdbId),
+        (platform) => platform.igdbId === candidate.igdbId,
       );
       if (byIgdbId) {
         return byIgdbId.id;
       }
     }
-    const match = findPlatformMatch(platforms, [
-      ...candidatePlatforms.flatMap((platform) => [
-        platform.name,
-        platform.abbreviation,
-      ]),
-      rawPlatform ?? '',
-    ]);
-    if (match) {
-      return match.id;
-    }
+
+    // 4. Create from the first usable candidate name, then abbreviation.
     const creationName = [
-      rawPlatform,
       ...candidatePlatforms.map((platform) => platform.name),
       ...candidatePlatforms.map((platform) => platform.abbreviation),
     ].find(
