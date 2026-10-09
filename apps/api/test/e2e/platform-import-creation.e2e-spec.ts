@@ -108,4 +108,33 @@ describe('Platform import creation (e2e)', () => {
     ).resolves.toBeNull();
     await expect(test.prisma.platform.count()).resolves.toBe(0);
   });
+
+  it('uses the platform read off the photo over the candidate platforms (regression)', async () => {
+    // Seed Switch first so its local id is lower than PC's: the old
+    // lowest-local-id pick over candidate IGDB ids would choose Switch.
+    const switchRow = await seedPlatform(test.prisma, {
+      name: 'Nintendo Switch',
+      slug: 'nintendo-switch',
+      igdbId: 130,
+      abbreviation: 'NS',
+    });
+    const pc = await seedPlatform(test.prisma, {
+      name: 'PC (Microsoft Windows)',
+      slug: 'pc',
+      igdbId: 6,
+      abbreviation: 'PC',
+    });
+    expect(switchRow.id).toBeLessThan(pc.id);
+
+    await expect(
+      importJobs.resolvePlatformId(
+        [
+          { igdbId: 130, name: 'Nintendo Switch', abbreviation: 'NS' },
+          { igdbId: 6, name: 'PC (Microsoft Windows)', abbreviation: 'PC' },
+        ],
+        'PC DVD ROM',
+      ),
+    ).resolves.toBe(pc.id);
+    await expect(test.prisma.platform.count()).resolves.toBe(2); // no junk row
+  });
 });

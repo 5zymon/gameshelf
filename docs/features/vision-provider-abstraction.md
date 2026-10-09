@@ -4,7 +4,7 @@ title: Vision Provider Abstraction
 description: One VisionProvider interface with swappable Gemini/OpenAI/Custom backends behind a registry and a VisionService seam.
 tags: [import, llm, architecture]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T09:30:31Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-09T21:21:30Z }
 ---
 
 # Overview
@@ -75,7 +75,10 @@ stored setting overrides them.
 # Item JSON schema
 
 The shared `VISION_INSTRUCTION_PROMPT` asks for a JSON **object** with an
-`items` array and an advisory `count_visible` — never a bare count. The
+`items` array and an advisory `count_visible` — never a bare count. It also
+instructs the model to read the platform off the physical box, disc, cartridge,
+or media banner and to report its canonical name, and never to infer the
+platform from the game title or cover art. The
 canonical strict JSON Schema (`VISION_RECOGNITION_SCHEMA`, which wraps
 `VISION_RESPONSE_SCHEMA` as its `items`) is:
 
@@ -108,6 +111,12 @@ canonical strict JSON Schema (`VISION_RECOGNITION_SCHEMA`, which wraps
 `items.length`. The parser (`parseAdvisoryCount`) never throws on a missing,
 non-numeric, negative or non-finite value — it becomes `null` — so a bad count
 can never abort recognition.
+
+Obvious "no platform" sentinel strings — `N/A`, `NA`, `unknown`, `none`,
+`null`, `not visible`, `unreadable`, `unclear` and the like, compared after the
+same case/diacritic/punctuation/whitespace normalization as platform matching —
+are normalized to `null` at parse time, so a sentinel can never become an
+authoritative import platform. Real platform strings are preserved unchanged.
 
 Each provider adapts it to its API:
 

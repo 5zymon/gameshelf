@@ -4,7 +4,7 @@ title: Platforms API
 description: Platform CRUD (GET/POST/PATCH/DELETE /platforms) with per-platform game counts and the canonical IGDB platform list reconciled locally by an operator sync command.
 tags: [api, platforms, catalog]
 status: stable
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-07T14:45:00Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-09T21:05:43Z }
 ---
 
 # Overview
@@ -281,13 +281,35 @@ matcher shared by the sync command and the per-game import:
   `and`.
 - Aliases (old names from a rename, merged-away names) are extra keys on the
   owning platform.
-- The first input whose key is known wins (candidate order is respected).
+- `findPlatformMatch` itself is **pure**: both index keys and input keys are the
+  plain normalized form. `platforms:sync` uses it directly, so an IGDB
+  canonical name matches its own row by exact name — a row named
+  `PC (Microsoft Windows)` with no abbreviation is reused, never recreated.
+- PC media-banner notations (`PC DVD ROM`, `PC-DVD-ROM`, `PC (Windows)`,
+  `Microsoft Windows`) are handled by `expandPlatformInputs`, an explicit
+  ordered **input expansion** used only where the photo platform is matched: it
+  yields the canonical equivalents (`PC`, then `PC (Microsoft Windows)`) first,
+  then the literal input, so the canonical row wins. It is not fuzzy — a value
+  is expanded only on an exact normalized key hit, so `PC Engine` still never
+  force-matches `PC` — and because it never touches the index, two distinct
+  local rows (e.g. a legacy `Windows` row and `PC (Microsoft Windows)`) can
+  never collapse onto one key.
+- Per-game import resolves the **raw platform read off the photo first** — the
+  physical item is authoritative — then the candidate's name/abbreviation only
+  when the raw platform is blank, then the candidate's canonical IGDB id (the
+  **first candidate in catalog order**, never an arbitrary lowest-local-id
+  pick).
 - A key shared by two distinct platform ids is treated as **ambiguous** and
   never matched; blank keys are skipped.
 - An unknown platform is created by the sync. A per-game import also creates
   one now, flagged `addedByImport` (see
   [Import-created platforms](#import-created-platforms)); it returns `null`
   only when the item has no usable platform name at all.
+- **Residual limitation**: when the canonical PC row is absent, the banner
+  spellings in the expansion table are not collapsed against each other, so
+  `PC DVD ROM` and `PC CD ROM` can each create a distinct flagged
+  `addedByImport` row in the same import. Review/merge reconciles them; a
+  pre-seeded canonical `PC` row avoids the split.
 
 Because the list is stored locally, per-game imports make **zero**
 platform-list calls: `resolvePlatformId` reads the local `platforms` table (in

@@ -4,7 +4,7 @@ title: Import Jobs API
 description: GET/PATCH/POST /import-jobs — persisted import runs with live status/counts, batch progress, retry, flagged-item review, dismissal, and the retention policy.
 tags: [api, import]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T13:30:00Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-09T20:32:19Z }
 ---
 
 # Overview
@@ -184,9 +184,11 @@ the game is imported (spec §4.2.3/§4.6.6; see
 platform name", not "the platform was not synced". There is **no** separate
 `unreadable` status, enum, or column, and no placeholder row is ever written.
 The recognition prompt (`VISION_INSTRUCTION_PROMPT`) instructs the model to
-identify an item from its cover art when the printed text cannot be read, so a
-returned item always carries a title and resolves to `imported` or
-`unrecognized`. The two residual cases are not silent successes:
+identify an item from its cover art when the printed text cannot be read, to
+read the platform off the physical box/media banner, to return its canonical
+name (a `PC DVD ROM` banner means `PC`), and never to infer the platform from
+the title or cover art, so a returned item always carries a title and resolves
+to `imported` or `unrecognized`. The two residual cases are not silent successes:
 
 - A response containing an item with a missing/empty title is rejected
   **whole** by `parseRecognizedItems` as a non-retryable `bad_response`, so the

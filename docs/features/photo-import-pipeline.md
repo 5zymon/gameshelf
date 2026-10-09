@@ -4,7 +4,7 @@ title: Photo Import Pipeline
 description: The BullMQ worker's per-photo pipeline — one vision call, external validation, per-batch MySQL transactions, retry-only-unresolved, and photo deletion after completion.
 tags: [import, worker, bullmq, igdb, vision]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T14:49:32Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-09T21:05:43Z }
 ---
 
 # Overview
@@ -220,23 +220,38 @@ fallback and the queue pause happens immediately. Once every source has returned
 label, e.g.
 `No game matched the title in any source — IGDB: No IGDB game matched the title`.
 
-A matched candidate is mapped to a local `Platform` row: the candidate's IGDB
-id first, then an anchored, equality-only match over the candidate's
-name/abbreviation and the raw platform string against every platform's
-name/abbreviation/alternative name **and aliases** (case-, diacritic-,
-punctuation-, and whitespace-insensitive, so `PS5` and `PlayStation 5` resolve
-to the same row; aliases carry old/merged-away names; near-misses never match).
-Matching makes **no** IGDB platform-list call — the list is refreshed out of
-band with `npm run platforms:sync` ([Platforms API](/platforms-api.md)). When
-no platform matches, the import **creates** one for the first usable of the
-raw platform name, the candidate name, or the candidate abbreviation, flagged
-`addedByImport` for review (spec §4.2.3/§4.6.6). The normalized name is
-deduplicated against reference, custom, and previously import-created
-platforms and their aliases, and the queue is sequential, so two items with the
-same unknown name in one import share exactly one new platform. The item is
-flagged **unrecognized** with the stable reason token `platform_not_in_catalog`
-(exported as `PLATFORM_NOT_IN_CATALOG_REASON`) only when there is no usable
-platform name at all.
+A matched candidate is mapped to a local `Platform` row with the platform read
+off the physical item (`rawPlatform`) **authoritative**. The raw platform string
+is expanded by `expandPlatformInputs` into its canonical equivalents first — PC
+media-banner notations (`PC DVD ROM`, `PC-DVD-ROM`, `PC (Windows)`,
+`Microsoft Windows`) expand to `PC` then `PC (Microsoft Windows)`, with the
+literal input last — and that ordered list is matched first, so the canonical
+row wins. `findPlatformMatch` stays **pure** and equality-only (both index and
+input keys are the plain normalizer), so the synonym set can never rewrite or
+collide the table and `platforms:sync`, which does not use the expansion, is
+unaffected. Because the raw platform is authoritative, the external catalog can
+never substitute a different platform. Only when the raw platform is null/blank
+does resolution fall to the candidate's own name/abbreviation, then to the
+candidate's canonical IGDB id: the **first candidate in catalog order** that
+maps to a seeded platform, never an arbitrary lowest-local-id pick. All matching
+is over the platform's name/abbreviation/alternative name **and aliases**
+(case-, diacritic-, punctuation-, and whitespace-insensitive, so `PS5` and
+`PlayStation 5` resolve to the same row; aliases carry old/merged-away names;
+near-misses never match). Matching makes **no** IGDB platform-list call — the
+list is refreshed out of band with `npm run platforms:sync`
+([Platforms API](/platforms-api.md)). When the photo names a platform the local
+list does not know, the import **creates** one from the raw photo string (then
+the first candidate name, then the candidate abbreviation), flagged
+`addedByImport` for review (spec §4.2.3/§4.6.6), rather than silently falling
+back to a candidate platform. The normalized name is deduplicated against
+reference, custom, and previously import-created platforms and their aliases,
+and the queue is sequential, so two items with the same unknown name in one
+import share exactly one new platform. The item is flagged **unrecognized**
+with the stable reason token `platform_not_in_catalog` (exported as
+`PLATFORM_NOT_IN_CATALOG_REASON`) only when there is no usable platform name at
+all. Residual limitation: if the canonical PC row is absent, different banner
+spellings (`PC DVD ROM` vs `PC CD ROM`) are not collapsed against each other and
+can each create a flagged `addedByImport` row, reconciled later by review/merge.
 
 Trade-off: an import-created platform is committed immediately during
 resolution, outside the batch transaction, so a batch that later fails can

@@ -4,7 +4,7 @@ title: MobyGames Fallback
 description: A rate-limited MobyGames v2 client that validates titles IGDB missed, maps them onto the shared CatalogCandidate shape, records MobyGames provenance, and degrades to IGDB-only when no key is configured.
 tags: [import, validation, mobygames, rate-limit, catalog]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-07T08:05:26Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-09T20:32:19Z }
 ---
 
 # Overview
@@ -79,10 +79,11 @@ row, with `source: 'MobyGames'`:
 Each field degrades independently to `null` when the nested data is absent, so a
 missing `include` field can never produce an invented value. `igdbId` is
 deliberately `null`: Moby platform ids are **not** IGDB ids, so
-`ImportJobsService.resolvePlatformId` skips the IGDB-id path and matches the
-candidate's platform name (and the vision raw platform string) against the local
-`platforms` table; a Moby-only name that matches nothing becomes
-`platform_not_in_catalog` (`unrecognized`).
+`ImportJobsService.resolvePlatformId` matches the vision raw platform string
+first, then the candidate's platform name, against the local `platforms` table,
+and skips the IGDB-id path for Moby candidates. A name that matches nothing is
+created as an import platform (`addedByImport`), and only a candidate with no
+usable platform name at all becomes `platform_not_in_catalog` (`unrecognized`).
 
 Acceptance reuses the shared `selectConfidentMatch` (normalized equality,
 Levenshtein/containment ratio ≥ 0.8, and the version-token guard), so a sequel
