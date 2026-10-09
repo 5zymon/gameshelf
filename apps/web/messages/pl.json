@@ -271,10 +271,12 @@
     "usesTitle": "Używa bieżącego tytułu „{title}”.",
     "apply": "Zastosuj metadane",
     "cancel": "Anuluj",
+    "chooseCandidate": "Wybierz dopasowanie",
     "players": "{count, plural, one {# gracz} few {# gracze} many {# graczy} other {# graczy}}",
     "source": "Źródło: {source}",
     "outcome": {
       "found": "Znaleziono dopasowanie.",
+      "foundMany": "{count, plural, one {Znaleziono dopasowanie. Wybierz właściwe.} few {Znaleziono # dopasowania. Wybierz właściwe.} many {Znaleziono # dopasowań. Wybierz właściwe.} other {Znaleziono # dopasowań. Wybierz właściwe.}}",
       "noMatch": "Nie znaleziono dopasowania dla „{title}”. Nic nie zmieniono.",
       "noMatchReason": "Nie znaleziono dopasowania dla „{title}”. {reason} Nic nie zmieniono.",
       "applied": "Zastosowano świeże metadane.",

@@ -260,7 +260,7 @@ export async function GameDetailView({
             </dl>
           </section>
 
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-start gap-3">
             <GameEditForm game={game} platforms={platforms} />
             <ReEnrichControl gameId={game.id} title={game.title} />
             <div className="ml-auto">

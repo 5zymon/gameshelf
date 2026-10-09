@@ -1,20 +1,27 @@
 ---
 type: Feature
 title: Game Re-enrichment
-description: POST /games/:id/enrich re-runs the IGDB → MobyGames → unresolved chain against a game's current title, returns the candidate, and applies fresh metadata in place without duplicating the record or overwriting protected/hand-edited fields.
+description: POST /games/:id/enrich searches the catalog through the IGDB-first search seam (ranked list, best first, up to 10; MobyGames only when IGDB returns no candidates) against a game's current title, and applies any picked candidate's fresh metadata in place without duplicating the record or overwriting protected/hand-edited fields.
 tags: [api, enrichment, catalog, covers, provenance]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-07T11:50:00Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-10T12:00:00Z }
 ---
 
 # Overview
 
 A user can fix a game's title (or platform) after an import and then ask the
-backend to look the game up again. `POST /games/:id/enrich` re-runs the same
-[anti-hallucination chain](/anti-hallucination-validation.md) used by the import
-pipeline — IGDB → MobyGames → unresolved — against the game's **current**
-(corrected) title, returns the candidate, and on a second call with a picked
-candidate applies fresh metadata to the **existing** row.
+backend to look the game up again. `POST /games/:id/enrich` searches the catalog
+through the **search seam** (`GameCatalogResolver.search`, the same ranked list
+`GET /games/search` uses) against the game's **current** (corrected) title and
+returns the **ranked candidate list** (best match first, up to
+`CATALOG_SEARCH_MAX_RESULTS` = 10). The seam is **IGDB-first**: IGDB's candidates
+are returned first and [MobyGames](/mobygames-fallback.md) is consulted **only
+when IGDB returns no candidates at all**. On a second call with a picked
+candidate it applies that candidate's fresh metadata to the **existing** row.
+
+Unlike re-enrichment, the [import pipeline](/anti-hallucination-validation.md)
+keeps its stricter single-candidate `resolve()` rule (`selectConfidentMatch`,
+score ≥ 0.8): it never offers a list and rejects a weak match.
 
 It reuses the one candidate→`Game` mapping introduced by
 [Game Metadata Enrichment](/game-metadata-enrichment.md)
@@ -29,16 +36,23 @@ top — it never creates a duplicate and never wipes data.
 The body is optional and has two forms:
 
 ```jsonc
-// 1. search — re-resolve and return the candidate(s); mutates nothing
+// 1. search — return the ranked candidate list; mutates nothing
 {}
 
-// 2. apply / pick — re-resolve, verify the pick, and merge fresh metadata
+// 2. apply / pick — re-run the search, verify the pick, and merge fresh metadata
 { "candidate": { "source": "IGDB", "externalId": 1036 } }
 ```
 
-`candidates` is an array (length 0 or 1 today — the resolver returns at most one
-confident candidate), so the contract stays forward-compatible if the chain
-later returns several.
+The search step delegates to the catalog search seam (`GameCatalogResolver.search`,
+the same ranked list `GET /games/search` uses), which returns every candidate
+with a positive match score, best first, capped at
+`CATALOG_SEARCH_MAX_RESULTS` (10). `candidates` is therefore a **ranked list**
+(possibly empty); the user picks any entry to disambiguate a weak or ambiguous
+title. A search that returns **no candidates at all** reports `unrecognized`
+(with a `reason`) — this is not a score threshold: any positive-score IGDB hit
+is shown as a selectable candidate. The import pipeline keeps its stricter
+single-candidate rule (`selectConfidentMatch`, score ≥ 0.8) — only re-enrichment
+is list-based.
 
 Response (`EnrichGameResponseModel`):
 
@@ -72,21 +86,24 @@ the browser.
 
 # Status / error matrix
 
-| Situation                                     | HTTP | Body / behaviour                                                      |
-| --------------------------------------------- | ---- | --------------------------------------------------------------------- |
-| search, matched                               | 200  | `status:"matched"`, `applied:false`, candidate returned, no write     |
-| apply, matched (change written)               | 200  | `status:"matched"`, `applied:true`, game updated in place             |
-| apply, matched (no change)                    | 200  | `status:"matched"`, `applied:false`, no write (idempotent)            |
-| search/apply, unrecognized                    | 200  | `status:"unrecognized"`, `reason`, `candidates:[]`, no write          |
-| apply, picked ≠ re-resolved candidate         | 409  | `The selected candidate is no longer available; run the search again` |
-| transient                                     | 503  | `ServiceUnavailableException(reason)`, no write                       |
-| config_error                                  | 503  | `ServiceUnavailableException(reason)`, no queue pause                 |
-| unknown id                                    | 404  | `NotFoundException`                                                   |
-| malformed body (unknown field, bad source, …) | 400  | global `ValidationPipe` (`whitelist` + `forbidNonWhitelisted`)        |
+| Situation                                                  | HTTP | Body / behaviour                                                              |
+| ---------------------------------------------------------- | ---- | ----------------------------------------------------------------------------- |
+| search, matched                                            | 200  | `status:"matched"`, `applied:false`, ranked candidate list returned, no write |
+| apply, matched (change written)                            | 200  | `status:"matched"`, `applied:true`, game updated in place                     |
+| apply, matched (no change)                                 | 200  | `status:"matched"`, `applied:false`, no write (idempotent)                    |
+| search/apply, no candidates at all                         | 200  | `status:"unrecognized"`, `reason`, `candidates:[]`, no write                  |
+| apply, picked candidate absent from a non-empty fresh list | 409  | `The selected candidate is no longer available; run the search again`         |
+| transient                                                  | 503  | `ServiceUnavailableException(reason)`, no write                               |
+| config_error                                               | 503  | `ServiceUnavailableException(reason)`, no queue pause                         |
+| unknown id                                                 | 404  | `NotFoundException`                                                           |
+| malformed body (unknown field, bad source, …)              | 400  | global `ValidationPipe` (`whitelist` + `forbidNonWhitelisted`)                |
 
-The pick is verified against a **fresh** re-resolution on the apply call, so a
-stale pick (the chain now returns a different row) is a `409` rather than a
-mis-applied write.
+The pick is verified against a **fresh** search on the apply call, so a stale
+pick is a `409` rather than a mis-applied write. This applies only when the
+fresh list is **non-empty**; when the fresh search returns **no candidates at
+all** the apply reports `200 unrecognized` (nothing is available to apply).
+**Any** candidate in a non-empty fresh list is applicable, not only the
+top-ranked one.
 
 # Merge policy (never wipe, never touch identity)
 
@@ -161,13 +178,18 @@ import create-path now writes it too (additive). `rawMetadata` remains archival.
   overwrites the cover; sets `source`+`externalId`; clears `platformUnverified`;
   appends `rawMetadata`+`enrichedAt` only on a change; parse/serialize/merge
   round-trips and tolerates `null`/garbage.
-- `games.service.spec.ts` (unit): the `enrich` describe covers search-matched,
-  apply-matched, unrecognized, transient/config_error → 503, stale pick → 409,
-  idempotent no-op, hand-edited preservation, and 404; plus the create/update
-  provenance and `platformUnverified` behavior.
-- `game-reenrichment.e2e-spec.ts` (e2e): re-resolve a corrected title and apply
-  fresh metadata with no duplicate and protected fields unchanged; the candidate
-  cover is a same-origin preview with no external host; `sourceCoverUrl` is
+- `games.service.spec.ts` (unit): the `enrich` describe covers search-matched
+  (single **and** the full ranked multi-candidate list, order preserved),
+  apply-matched (first **and** a non-first candidate), unrecognized,
+  transient/config_error → 503, stale pick → 409, idempotent no-op, hand-edited
+  preservation, and 404; plus the create/update provenance and
+  `platformUnverified` behavior.
+- `game-reenrichment.e2e-spec.ts` (e2e): a search returns the ranked candidate
+  list (multiple, best first, each cover a same-origin preview, no `raw`); a
+  non-first candidate applies without touching identity fields; re-resolve a
+  corrected title and apply fresh metadata with no duplicate and protected
+  fields unchanged; the candidate cover is a same-origin preview with no
+  external host; `sourceCoverUrl` is
   persisted; still-unresolved leaves metadata intact; hand-edited publisher
   survives; a changed cover replaces the cached one and the replaced file is
   unlinked; a failed re-enrichment download does not clobber the existing cover;
@@ -179,7 +201,8 @@ import create-path now writes it too (additive). `rawMetadata` remains archival.
 
 - Setting `platformUnverified = true` (only the clearing behavior is added).
 - Clearing provenance (`userEditedFields` is only ever unioned).
-- Frontend UI for the search/pick flow.
+- Frontend presentation of the search/pick flow lives in the
+  [Game Detail View](/game-detail.md) doc (`ReEnrichControl`).
 
 Cover thumbnails, background retry, the re-download CLI, and ref-counted orphan
 cleanup are specified in [Local Cover Cache](/local-cover-cache.md).

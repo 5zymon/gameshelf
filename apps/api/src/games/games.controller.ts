@@ -138,6 +138,8 @@ export class GamesController {
   @HttpCode(200)
   @ApiOperation({
     summary: 'Re-enrich a game from its current (corrected) title',
+    description:
+      'Search (empty body) returns a ranked candidate list, best first, up to 10. Apply ({candidate:{source,externalId}}) re-runs the search and merges any listed candidate in place.',
   })
   @ApiParam({ name: 'id', type: Number })
   @ApiOkResponse({ type: EnrichGameResponseModel })

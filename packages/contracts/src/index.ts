@@ -125,6 +125,7 @@ export interface EnrichGameResponse {
   status: 'matched' | 'unrecognized' | 'transient' | 'config_error';
   reason: string | null;
   applied: boolean;
+  /** Ranked candidates, best first, up to 10; empty when nothing matched. */
   candidates: EnrichCandidate[];
   game: GameDetail;
 }

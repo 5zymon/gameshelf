@@ -56,6 +56,9 @@ interface CoverWrite {
   sourceCoverUrl: string | null;
 }
 
+/** Reason reported when the re-enrich search finds no candidate in any source. */
+const REENRICH_NO_MATCH_REASON = 'No game matched the title in any source';
+
 @Injectable()
 export class GamesService {
   constructor(
@@ -356,51 +359,54 @@ export class GamesService {
     }
     const game = toGameDetail(raw);
 
-    const resolution = await this.catalog.resolve({
-      title: raw.title,
-      edition: raw.edition,
-      platform: raw.platform.name,
-      confidence: 1,
-    });
+    const search = await this.catalog.search(raw.title);
 
-    if (resolution.kind === 'transient' || resolution.kind === 'config_error') {
-      throw new ServiceUnavailableException(resolution.reason);
+    if (search.kind === 'transient' || search.kind === 'config_error') {
+      throw new ServiceUnavailableException(search.reason);
     }
-    if (resolution.kind === 'unrecognized') {
+
+    // Ranked list (IGDB returns ≤ CATALOG_SEARCH_MAX_RESULTS = 10, best first).
+    // Each candidate's external cover is proxied through a signed same-origin
+    // preview URL — the external host never reaches the browser.
+    const candidates = search.candidates;
+    const candidateModels = candidates.map((candidate) =>
+      toEnrichCandidateModel(
+        candidate,
+        this.preview.previewUrl(candidate.coverUrl),
+      ),
+    );
+
+    // No candidate to offer or apply: the title is still unresolved. A stale
+    // pick therefore reports unrecognized (nothing is available), not 409.
+    if (candidates.length === 0) {
       return {
         status: 'unrecognized',
-        reason: resolution.reason,
+        reason: REENRICH_NO_MATCH_REASON,
         applied: false,
         candidates: [],
         game,
       };
     }
 
-    const candidate = resolution.candidate;
-    // The candidate has no stored file yet, so its cover is proxied through a
-    // signed same-origin URL — the external host never reaches the browser.
-    const candidateModel = toEnrichCandidateModel(
-      candidate,
-      this.preview.previewUrl(candidate.coverUrl),
-    );
-
-    // Search step: report the candidate, mutate nothing.
+    // Search step: report the ranked list, mutate nothing.
     if (dto.candidate === undefined) {
       return {
         status: 'matched',
         reason: null,
         applied: false,
-        candidates: [candidateModel],
+        candidates: candidateModels,
         game,
       };
     }
 
-    // The pick must match what re-resolution just returned (the search is
-    // re-run on apply, so a stale pick is rejected rather than mis-applied).
-    if (
-      dto.candidate.source !== candidate.source ||
-      dto.candidate.externalId !== candidate.externalId
-    ) {
+    // Apply step: the pick must appear in the fresh list (the search is re-run
+    // on apply, so a stale pick is rejected rather than mis-applied). Any
+    // candidate in the list is applicable, not only the top-ranked one.
+    const picked = dto.candidate;
+    const candidate = candidates.find(
+      (c) => c.source === picked.source && c.externalId === picked.externalId,
+    );
+    if (candidate === undefined) {
       throw new ConflictException(
         'The selected candidate is no longer available; run the search again',
       );
@@ -478,7 +484,7 @@ export class GamesService {
       status: 'matched',
       reason: null,
       applied: updateData !== null,
-      candidates: [candidateModel],
+      candidates: candidateModels,
       game: updated,
     };
   }

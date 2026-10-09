@@ -271,10 +271,12 @@
     "usesTitle": "Uses the current title “{title}”.",
     "apply": "Apply metadata",
     "cancel": "Cancel",
+    "chooseCandidate": "Choose a match",
     "players": "{count, plural, one {# player} other {# players}}",
     "source": "Source: {source}",
     "outcome": {
       "found": "Found a match.",
+      "foundMany": "{count, plural, one {Found a match. Pick the right one.} other {Found # matches. Pick the right one.}}",
       "noMatch": "No match found for “{title}”. Nothing changed.",
       "noMatchReason": "No match found for “{title}”. {reason} Nothing changed.",
       "applied": "Fresh metadata applied.",

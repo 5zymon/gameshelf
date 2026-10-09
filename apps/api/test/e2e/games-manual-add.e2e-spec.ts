@@ -5,7 +5,6 @@ import { resolve } from 'node:path';
 import {
   GameCatalogResolver,
   type CatalogCandidate,
-  type CatalogResolution,
   type CatalogSearchResult,
 } from '../../src/game-catalog/game-catalog.resolver';
 import { CoverCacheService } from '../../src/covers/cover-cache.service';
@@ -101,10 +100,6 @@ function candidate(
   };
 }
 
-function matched(overrides: Partial<CatalogCandidate> = {}): CatalogResolution {
-  return { kind: 'matched', candidate: candidate(overrides) };
-}
-
 function searchMatches(
   overrides: Partial<CatalogCandidate> = {},
 ): CatalogSearchResult {
@@ -119,11 +114,11 @@ describe('Manual add (e2e)', () => {
   let test: TestApp;
   let app: INestApplication;
   let coversDir: string;
-  let resolver: { resolve: jest.Mock; search: jest.Mock };
+  let resolver: { search: jest.Mock };
   let coverHttp: { get: jest.Mock<Promise<CoverHttpResponse>, [string]> };
 
   beforeAll(async () => {
-    resolver = { resolve: jest.fn(), search: jest.fn() };
+    resolver = { search: jest.fn() };
     coverHttp = { get: jest.fn<Promise<CoverHttpResponse>, [string]>() };
     test = await createTestApp([
       { provide: GameCatalogResolver, useValue: resolver },
@@ -136,7 +131,6 @@ describe('Manual add (e2e)', () => {
   beforeEach(async () => {
     await resetDatabase(test.prisma);
     clearCoversDir(coversDir);
-    resolver.resolve.mockReset();
     resolver.search.mockReset();
     coverHttp.get.mockReset();
     await test.login();
@@ -410,14 +404,14 @@ describe('Manual add (e2e)', () => {
     });
   });
 
-  // The `matched()`/`resolve` seam is only used by re-enrichment; kept so the
-  // override satisfies the full resolver contract.
-  it('still supports the resolve path for re-enrichment', async () => {
+  // Re-enrichment now uses the `search` seam; the resolver override satisfies
+  // the full contract.
+  it('still supports the search path for re-enrichment', async () => {
     const platformId = await seedPlatformRow();
     const game = await test.prisma.game.create({
       data: { title: 'Halo', platformId },
     });
-    resolver.resolve.mockResolvedValue(matched());
+    resolver.search.mockResolvedValue(searchMatches());
 
     const res = await test.request
       .post(`/games/${String(game.id)}/enrich`)
