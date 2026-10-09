@@ -84,7 +84,11 @@ export class EnrichGameResponseModel {
   @ApiProperty({ example: false })
   applied!: boolean;
 
-  @ApiProperty({ type: [EnrichCandidateModel] })
+  @ApiProperty({
+    type: [EnrichCandidateModel],
+    description:
+      'Ranked candidates, best first, up to CATALOG_SEARCH_MAX_RESULTS (10); empty when nothing matched. On apply, only the picked candidate is written.',
+  })
   candidates!: EnrichCandidateModel[];
 
   @ApiProperty({ type: GameDetailModel })

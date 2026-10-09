@@ -43,7 +43,7 @@ interface GamesPrismaMock {
 interface GamesServiceHarness {
   service: GamesService;
   mock: GamesPrismaMock;
-  catalog: { resolve: jest.Mock };
+  catalog: { search: jest.Mock };
   catalogSearch: { search: jest.Mock };
   identity: { findExisting: jest.Mock };
   enrichment: { enrichCandidate: jest.Mock };
@@ -69,7 +69,7 @@ function createService(): GamesServiceHarness {
       findUnique: jest.fn(),
     },
   };
-  const catalog = { resolve: jest.fn() };
+  const catalog = { search: jest.fn() };
   const catalogSearch = {
     search: jest.fn(() =>
       Promise.resolve({
@@ -84,7 +84,12 @@ function createService(): GamesServiceHarness {
     cacheFromUrl: jest.fn(() => Promise.resolve(null as string | null)),
     fileFromServedUrl: jest.fn(() => null as string | null),
   };
-  const preview = { previewUrl: jest.fn(() => PREVIEW_URL as string | null) };
+  const preview = {
+    // Mirror CoverPreviewService: a null cover yields a null preview URL.
+    previewUrl: jest.fn((url: string | null) =>
+      url === null ? null : PREVIEW_URL,
+    ),
+  };
   const maintenance = {
     removeIfUnreferenced: jest.fn(() => Promise.resolve()),
   };
@@ -113,7 +118,7 @@ function createService(): GamesServiceHarness {
 describe('GamesService (unit)', () => {
   let service: GamesService;
   let mock: GamesPrismaMock;
-  let catalog: { resolve: jest.Mock };
+  let catalog: { search: jest.Mock };
   let catalogSearch: { search: jest.Mock };
   let identity: { findExisting: jest.Mock };
   let enrichment: { enrichCandidate: jest.Mock };
@@ -1108,16 +1113,14 @@ describe('GamesService (unit)', () => {
     it('search (no body) returns the candidate and writes nothing', async () => {
       const row = gameRow();
       mock.game.findUnique.mockResolvedValue(row);
-      catalog.resolve.mockResolvedValue({ kind: 'matched', candidate });
+      catalog.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [candidate],
+      });
 
       const result = await service.enrich(5, {});
 
-      expect(catalog.resolve).toHaveBeenCalledWith({
-        title: 'Halo: Combat Evolved',
-        edition: null,
-        platform: 'Xbox',
-        confidence: 1,
-      });
+      expect(catalog.search).toHaveBeenCalledWith('Halo: Combat Evolved');
       expect(result.status).toBe('matched');
       expect(result.applied).toBe(false);
       expect(result.reason).toBeNull();
@@ -1147,10 +1150,87 @@ describe('GamesService (unit)', () => {
       expect(mock.game.update).not.toHaveBeenCalled();
     });
 
+    it('returns the full ranked list (multiple candidates)', async () => {
+      mock.game.findUnique.mockResolvedValue(gameRow());
+      const second = { ...candidate, externalId: 2222, title: 'Halo 2' };
+      catalog.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [candidate, second],
+      });
+
+      const result = await service.enrich(5, {});
+
+      expect(result.status).toBe('matched');
+      expect(result.candidates).toHaveLength(2);
+      // Order is preserved, best match first.
+      expect(result.candidates.map((c) => c.externalId)).toEqual([1036, 2222]);
+      expect(result.candidates[1]?.title).toBe('Halo 2');
+      expect(enrichment.enrichCandidate).not.toHaveBeenCalled();
+      expect(mock.game.update).not.toHaveBeenCalled();
+    });
+
+    it('maps a candidate with no cover to a null cover in a multi-item list', async () => {
+      mock.game.findUnique.mockResolvedValue(gameRow());
+      const noCover = {
+        ...candidate,
+        externalId: 2222,
+        title: 'Halo 2',
+        coverUrl: null,
+      };
+      catalog.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [candidate, noCover],
+      });
+
+      const result = await service.enrich(5, {});
+
+      expect(result.status).toBe('matched');
+      expect(result.candidates[0]?.coverUrl).toBe(PREVIEW_URL);
+      // previewUrl(null) → null; the response never throws or carries a
+      // malformed preview URL.
+      expect(result.candidates[1]?.coverUrl).toBeNull();
+      expect(preview.previewUrl).toHaveBeenCalledWith(null);
+      expect(mock.game.update).not.toHaveBeenCalled();
+    });
+
+    it('applies a non-first candidate from the list', async () => {
+      const row = gameRow();
+      mock.game.findUnique.mockResolvedValue(row);
+      const second = { ...candidate, externalId: 2222, title: 'Halo 2' };
+      catalog.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [candidate, second],
+      });
+      enrichment.enrichCandidate.mockResolvedValue({
+        ...enriched,
+        externalId: 2222,
+      });
+      mock.game.update.mockResolvedValue({
+        ...row,
+        releaseYear: 2001,
+        publisher: 'Bungie',
+        genre: 'Shooter',
+        playerCount: 16,
+        source: 'IGDB',
+        externalId: 2222,
+      });
+
+      const result = await service.enrich(5, {
+        candidate: { source: 'IGDB', externalId: 2222 },
+      });
+
+      expect(enrichment.enrichCandidate).toHaveBeenCalledWith(second, 3, null);
+      expect(result.applied).toBe(true);
+      expect(result.game.externalId).toBe(2222);
+    });
+
     it('apply (pick) updates the existing game in place', async () => {
       const row = gameRow();
       mock.game.findUnique.mockResolvedValue(row);
-      catalog.resolve.mockResolvedValue({ kind: 'matched', candidate });
+      catalog.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [candidate],
+      });
       enrichment.enrichCandidate.mockResolvedValue(enriched);
       mock.game.update.mockResolvedValue({
         ...row,
@@ -1207,7 +1287,10 @@ describe('GamesService (unit)', () => {
       const oldImage = `/api/covers/${'a'.repeat(32)}.jpg`;
       const row = gameRow({ images: [{ url: oldImage }] });
       mock.game.findUnique.mockResolvedValue(row);
-      catalog.resolve.mockResolvedValue({ kind: 'matched', candidate });
+      catalog.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [candidate],
+      });
       const galleryEnriched = {
         ...enriched,
         images: [
@@ -1264,10 +1347,7 @@ describe('GamesService (unit)', () => {
     it('reports unrecognized without writing', async () => {
       const row = gameRow();
       mock.game.findUnique.mockResolvedValue(row);
-      catalog.resolve.mockResolvedValue({
-        kind: 'unrecognized',
-        reason: 'No game matched the title in any source',
-      });
+      catalog.search.mockResolvedValue({ kind: 'matches', candidates: [] });
 
       const result = await service.enrich(5, {});
 
@@ -1284,9 +1364,25 @@ describe('GamesService (unit)', () => {
       expect(mock.game.update).not.toHaveBeenCalled();
     });
 
+    it('reports unrecognized for an apply when the fresh list is empty', async () => {
+      mock.game.findUnique.mockResolvedValue(gameRow());
+      catalog.search.mockResolvedValue({ kind: 'matches', candidates: [] });
+
+      const result = await service.enrich(5, {
+        candidate: { source: 'IGDB', externalId: 1036 },
+      });
+
+      expect(result.status).toBe('unrecognized');
+      expect(result.reason).toBe('No game matched the title in any source');
+      expect(result.candidates).toEqual([]);
+      expect(result.applied).toBe(false);
+      expect(enrichment.enrichCandidate).not.toHaveBeenCalled();
+      expect(mock.game.update).not.toHaveBeenCalled();
+    });
+
     it('maps a transient resolution to 503', async () => {
       mock.game.findUnique.mockResolvedValue(gameRow());
-      catalog.resolve.mockResolvedValue({
+      catalog.search.mockResolvedValue({
         kind: 'transient',
         reason: 'IGDB rate-limited the request',
       });
@@ -1299,7 +1395,7 @@ describe('GamesService (unit)', () => {
 
     it('maps a config_error resolution to 503', async () => {
       mock.game.findUnique.mockResolvedValue(gameRow());
-      catalog.resolve.mockResolvedValue({
+      catalog.search.mockResolvedValue({
         kind: 'config_error',
         source: 'igdb',
         reason: 'IGDB credentials rejected',
@@ -1313,7 +1409,10 @@ describe('GamesService (unit)', () => {
 
     it('rejects a stale pick with 409', async () => {
       mock.game.findUnique.mockResolvedValue(gameRow());
-      catalog.resolve.mockResolvedValue({ kind: 'matched', candidate });
+      catalog.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [candidate],
+      });
 
       await expect(
         service.enrich(5, { candidate: { source: 'IGDB', externalId: 999 } }),
@@ -1340,7 +1439,10 @@ describe('GamesService (unit)', () => {
         externalId: 1036,
       });
       mock.game.findUnique.mockResolvedValue(row);
-      catalog.resolve.mockResolvedValue({ kind: 'matched', candidate });
+      catalog.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [candidate],
+      });
       enrichment.enrichCandidate.mockResolvedValue(enriched);
 
       const result = await service.enrich(5, {
@@ -1355,7 +1457,10 @@ describe('GamesService (unit)', () => {
     it('never overwrites a hand-edited field', async () => {
       const row = gameRow({ userEditedFields: '["publisher"]' });
       mock.game.findUnique.mockResolvedValue(row);
-      catalog.resolve.mockResolvedValue({ kind: 'matched', candidate });
+      catalog.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [candidate],
+      });
       enrichment.enrichCandidate.mockResolvedValue(enriched);
       mock.game.update.mockResolvedValue({
         ...row,
@@ -1399,7 +1504,10 @@ describe('GamesService (unit)', () => {
         userEditedFields: '["coverUrl"]',
       });
       mock.game.findUnique.mockResolvedValue(row);
-      catalog.resolve.mockResolvedValue({ kind: 'matched', candidate });
+      catalog.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [candidate],
+      });
       enrichment.enrichCandidate.mockResolvedValue(enriched);
       mock.game.update.mockResolvedValue({
         ...row,
@@ -1448,7 +1556,7 @@ describe('GamesService (unit)', () => {
       await expect(service.enrich(7, {})).rejects.toThrow(
         new NotFoundException('Game with id 7 not found'),
       );
-      expect(catalog.resolve).not.toHaveBeenCalled();
+      expect(catalog.search).not.toHaveBeenCalled();
     });
   });
 

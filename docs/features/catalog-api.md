@@ -4,7 +4,7 @@ title: Catalog API
 description: GET /games — paginated, filterable, searchable, sortable game listing with available filter values.
 tags: [api, catalog]
 status: stable
-generated: { by: opencode/home-model, at: 2026-10-05T13:02:05Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-10T00:00:00Z }
 ---
 
 # Overview
@@ -144,10 +144,12 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
 
 # Game re-enrichment
 
-`POST /games/:id/enrich` re-runs the external catalog chain (IGDB → MobyGames →
-unresolved) against a game's current title and can apply fresh metadata **in
-place** without duplicating the row or changing `title`/`platformId`/`edition`.
-Search with no body returns the candidate; a `candidate` body picks it. See
+`POST /games/:id/enrich` searches the external catalog through the **search
+seam** (IGDB-first ranked list, best first, up to 10; MobyGames only when IGDB
+returns no candidates) against a game's current title and can apply fresh
+metadata **in place** without duplicating the row or changing
+`title`/`platformId`/`edition`. Search with no body returns the ranked candidate
+list; a `candidate` body picks any listed one. See
 [Game Re-enrichment](/game-reenrichment.md) for the full contract and merge
 policy.
 
