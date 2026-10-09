@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { sameOriginPath } from '@/lib/image-url';
 
 type LoadState = 'loading' | 'loaded' | 'error';
 
@@ -28,13 +29,6 @@ function coverTone(title: string): string {
     hash = (hash * 31 + (char.codePointAt(0) ?? 0)) >>> 0;
   }
   return COVER_TONES[hash % COVER_TONES.length] ?? 'cover-tone-1';
-}
-
-/** Same-origin only: a cover must be a root-relative path, never an external URL. CSP sets img-src 'self'. */
-function sameOriginPath(url: string | null): string | null {
-  return url !== null && url.startsWith('/') && !url.startsWith('//')
-    ? url
-    : null;
 }
 
 interface GameCoverProps {

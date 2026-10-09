@@ -16,6 +16,8 @@ import {
 } from './igdb.client';
 import { rankTitleMatches, selectConfidentMatch } from './title-match';
 import { CATALOG_SEARCH_MAX_RESULTS } from './catalog-search.options';
+import { igdbImageUrl } from './igdb-image-url';
+import { IGDB_GALLERY_MAX_IMAGES, IGDB_IMAGE_SIZE } from './igdb.options';
 
 // Kept as this module's public surface for existing importers/tests; the actual
 // implementation lives with the rest of the title-matching logic.
@@ -133,11 +135,33 @@ function toCandidate(game: IgdbGame): CatalogCandidate {
     publisher: game.involved_companies?.[0]?.company?.name ?? null,
     genre: game.genres?.[0]?.name ?? null,
     playerCount: playerCount(game.multiplayer_modes),
-    coverUrl: normalizeCoverUrl(game.cover?.url ?? null),
+    coverUrl: igdbImageUrl(game.cover?.url, IGDB_IMAGE_SIZE),
+    images: galleryImages(game),
     platforms: (game.platforms ?? []).map(toPlatform),
     source: 'IGDB',
     raw: game,
   };
+}
+
+/**
+ * Ordered, deduped gallery URLs for a candidate: IGDB artworks first (key art),
+ * then screenshots (gameplay), each in IGDB order, capped at
+ * `IGDB_GALLERY_MAX_IMAGES`. Every URL is normalized to `IGDB_IMAGE_SIZE`.
+ */
+function galleryImages(game: IgdbGame): string[] {
+  const urls: string[] = [];
+  const seen = new Set<string>();
+  for (const source of [game.artworks, game.screenshots]) {
+    for (const image of source ?? []) {
+      const url = igdbImageUrl(image.url, IGDB_IMAGE_SIZE);
+      if (url !== null && !seen.has(url)) {
+        seen.add(url);
+        urls.push(url);
+        if (urls.length >= IGDB_GALLERY_MAX_IMAGES) return urls;
+      }
+    }
+  }
+  return urls;
 }
 
 /**
@@ -179,12 +203,4 @@ function releaseYear(timestamp: number | undefined): number | null {
     return null;
   }
   return new Date(timestamp * 1000).getUTCFullYear();
-}
-
-/** IGDB returns protocol-relative cover URLs; make them absolute. */
-function normalizeCoverUrl(url: string | null): string | null {
-  if (url === null || url === '') {
-    return null;
-  }
-  return url.startsWith('//') ? `https:${url}` : url;
 }

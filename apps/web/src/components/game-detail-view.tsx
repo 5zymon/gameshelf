@@ -4,6 +4,7 @@ import type { TranslatorFor } from '@/i18n/translate';
 import type { GameDetail, GamePlatform } from '@/lib/api';
 import { DeleteGameButton } from './delete-game-button';
 import { GameCover } from './game-cover';
+import { GameGallery } from './game-gallery';
 import { GameEditForm } from './game-edit-form';
 import { ReEnrichControl } from './re-enrich-control';
 
@@ -277,6 +278,8 @@ export async function GameDetailView({
           </details>
         </div>
       </div>
+
+      <GameGallery title={game.title} images={game.images} />
     </article>
   );
 }

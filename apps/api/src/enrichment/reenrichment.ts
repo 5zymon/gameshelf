@@ -93,6 +93,7 @@ export interface ReenrichmentExisting {
   externalId: number | null;
   platformUnverified: boolean;
   userEditedFields: unknown;
+  images: { url: string }[];
 }
 
 export interface BuildReenrichmentUpdateInput {
@@ -172,6 +173,23 @@ export function buildReenrichmentUpdate(
     data.platformUnverified = false;
   }
 
+  // Gallery: source-derived only (no manual gallery editing exists), so it is
+  // replaced when the candidate supplies a non-empty, different gallery and is
+  // never wiped when the candidate supplies none. Identical order writes nothing.
+  if (
+    enriched.images.length > 0 &&
+    !sameOrderedUrls(existing.images, enriched.images)
+  ) {
+    data.images = {
+      deleteMany: {},
+      create: enriched.images.map((image, index) => ({
+        position: index,
+        url: image.url,
+        sourceUrl: image.sourceUrl,
+      })),
+    };
+  }
+
   if (Object.keys(data).length === 0) {
     return null;
   }
@@ -180,4 +198,14 @@ export function buildReenrichmentUpdate(
   data.rawMetadata = enriched.rawMetadata;
   data.enrichedAt = enriched.enrichedAt;
   return data;
+}
+
+/** True when two galleries have the same length and URL at every position. */
+function sameOrderedUrls(
+  a: readonly { url: string }[],
+  b: readonly { url: string }[],
+): boolean {
+  return (
+    a.length === b.length && a.every((entry, i) => entry.url === b[i]?.url)
+  );
 }

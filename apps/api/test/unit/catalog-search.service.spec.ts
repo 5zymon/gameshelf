@@ -18,6 +18,7 @@ function candidate(title: string): CatalogCandidate {
     genre: null,
     playerCount: null,
     coverUrl: null,
+    images: [],
     platforms: [],
     source: 'IGDB',
     raw: {},

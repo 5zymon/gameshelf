@@ -93,6 +93,7 @@ function candidate(
     genre: 'Shooter',
     playerCount: 16,
     coverUrl: COVER_URL_A,
+    images: [],
     platforms: [{ igdbId: 11, name: 'Xbox', abbreviation: 'XBOX' }],
     source: 'IGDB',
     raw: { id: 1036 },

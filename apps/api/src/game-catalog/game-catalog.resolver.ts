@@ -21,6 +21,8 @@ export interface CatalogCandidate {
   /** Max supported players, when the source exposes it; never invented. */
   playerCount: number | null;
   coverUrl: string | null;
+  /** Normalized external gallery image URLs (screenshots + artworks). */
+  images: string[];
   platforms: CatalogPlatform[];
   source: CatalogSource;
   /** Raw upstream payload, archived into `Game.rawMetadata`. */

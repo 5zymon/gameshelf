@@ -64,6 +64,7 @@ function candidate(title: string): CatalogCandidate {
     genre: 'Action',
     playerCount: null,
     coverUrl: null,
+    images: [],
     platforms: [
       { igdbId: PLATFORM_IGDB_ID, name: 'PlayStation 5', abbreviation: 'PS5' },
     ],

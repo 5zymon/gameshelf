@@ -40,6 +40,19 @@ export class GameListItemModel {
   platform!: GamePlatformModel;
 }
 
+/** One locally cached gallery image, served same-origin. */
+export class GameImageModel {
+  @ApiProperty({ example: '/api/covers/0123456789abcdef0123456789abcdef.jpg' })
+  url!: string;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Locally generated thumbnail (same origin, WebP)',
+    example: '/api/covers/thumbs/0123456789abcdef0123456789abcdef.jpg',
+  })
+  thumbUrl!: string | null;
+}
+
 /** Full record (D4): all Game fields incl. rawMetadata + platform. */
 export class GameDetailModel {
   @ApiProperty({ example: 1 })
@@ -85,6 +98,9 @@ export class GameDetailModel {
     example: '/api/covers/thumbs/0123456789abcdef0123456789abcdef.jpg',
   })
   coverThumbUrl!: string | null;
+
+  @ApiProperty({ type: [GameImageModel] })
+  images!: GameImageModel[];
 
   @ApiPropertyOptional({
     nullable: true,
