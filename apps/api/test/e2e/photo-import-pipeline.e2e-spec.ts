@@ -526,6 +526,7 @@ describe('Photo import pipeline (e2e)', () => {
           {
             recognizedItemId: item.id,
             platformId: platform.id,
+            platformUnverified: false,
             edition: null,
             candidate: candidate('A'),
           },
@@ -580,12 +581,14 @@ describe('Photo import pipeline (e2e)', () => {
           {
             recognizedItemId: first.id,
             platformId: platform.id,
+            platformUnverified: false,
             edition: null,
             candidate: candidate('A'),
           },
           {
             recognizedItemId: second.id,
             platformId: platform.id,
+            platformUnverified: false,
             edition: null,
             candidate: { ...candidate('B'), externalId: sharedExternalId },
           },

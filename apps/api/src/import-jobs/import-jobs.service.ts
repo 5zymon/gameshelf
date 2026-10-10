@@ -95,9 +95,25 @@ export interface RecognitionItemInput {
 export interface ResolvedImport {
   recognizedItemId: number;
   platformId: number;
+  /** True when the platform was inferred from the catalog (the photo gave no
+   *  usable platform); false when it came from the photo. Written to
+   *  `Game.platformUnverified` on the create path. */
+  platformUnverified: boolean;
   /** Vision-read edition — the catalog's first-class attribute. */
   edition: string | null;
   candidate: CatalogCandidate;
+}
+
+/** Where a resolved platform came from. */
+export type PlatformProvenance = 'photo' | 'catalog';
+
+/** The outcome of resolving one candidate's platform. */
+export interface ResolvedPlatform {
+  platformId: number;
+  /** 'photo' = read off the physical item (matched or created from the photo
+   *  string); 'catalog' = inferred from the candidate's own platform list
+   *  (name/abbreviation, IGDB id, or created from a candidate name). */
+  provenance: PlatformProvenance;
 }
 
 /** A title that will never match; it becomes an UnrecognizedItem row. */
@@ -814,7 +830,10 @@ export class ImportJobsService {
    * 4. Finally, create from the first usable candidate name, then abbreviation.
    *
    * One platform query per call, plus a create when a new platform is needed,
-   * and **zero** IGDB platform-list requests. Returns
+   * and **zero** IGDB platform-list requests. Returns a
+   * `{ platformId, provenance }` pair, where `provenance` is `'photo'` for the
+   * raw-photo path (steps 1a/1b — matched, or created from the photo string)
+   * and `'catalog'` for the candidate-fallback path (steps 2/3/4). Returns
    * `null` only when neither the photo nor any candidate yields a usable
    * platform name, so the caller flags the item rather than creating a blank
    * platform. The new row is flagged `addedByImport` (see
@@ -823,7 +842,7 @@ export class ImportJobsService {
   async resolvePlatformId(
     candidatePlatforms: CatalogPlatform[],
     rawPlatform: string | null,
-  ): Promise<number | null> {
+  ): Promise<ResolvedPlatform | null> {
     const rows = await this.prisma.platform.findMany({
       orderBy: { id: 'asc' },
       select: {
@@ -849,11 +868,14 @@ export class ImportJobsService {
         expandPlatformInputs(rawPlatform),
       );
       if (rawMatch) {
-        return rawMatch.id;
+        return { platformId: rawMatch.id, provenance: 'photo' };
       }
       // The photo named a platform the catalog does not know: create it for
       // review instead of silently substituting a candidate platform.
-      return this.platforms.createFromImport(rawPlatform);
+      return {
+        platformId: await this.platforms.createFromImport(rawPlatform),
+        provenance: 'photo',
+      };
     }
 
     // 2. No usable photo platform: candidate name/abbreviation, in catalog
@@ -866,7 +888,7 @@ export class ImportJobsService {
       ]),
     );
     if (byName) {
-      return byName.id;
+      return { platformId: byName.id, provenance: 'catalog' };
     }
 
     // 3. Last resort before creating: the candidate's canonical IGDB id, first
@@ -879,7 +901,7 @@ export class ImportJobsService {
         (platform) => platform.igdbId === candidate.igdbId,
       );
       if (byIgdbId) {
-        return byIgdbId.id;
+        return { platformId: byIgdbId.id, provenance: 'catalog' };
       }
     }
 
@@ -894,7 +916,10 @@ export class ImportJobsService {
     if (creationName === undefined) {
       return null;
     }
-    return this.platforms.createFromImport(creationName);
+    return {
+      platformId: await this.platforms.createFromImport(creationName),
+      provenance: 'catalog',
+    };
   }
 
   /**
@@ -937,6 +962,7 @@ export class ImportJobsService {
     const resolved = await Promise.all(
       outcome.resolved.map(async (item) => ({
         recognizedItemId: item.recognizedItemId,
+        platformUnverified: item.platformUnverified,
         data: await this.enrichment.enrichCandidate(
           item.candidate,
           item.platformId,
@@ -978,8 +1004,14 @@ export class ImportJobsService {
           duplicateAssets.push(item.data.coverUrl);
           for (const image of item.data.images) duplicateAssets.push(image.url);
         } else {
-          gameId = (await tx.game.create({ data: toGameCreateData(item.data) }))
-            .id;
+          gameId = (
+            await tx.game.create({
+              data: {
+                ...toGameCreateData(item.data),
+                platformUnverified: item.platformUnverified,
+              },
+            })
+          ).id;
         }
         const claim = await tx.recognizedItem.updateMany({
           where: {

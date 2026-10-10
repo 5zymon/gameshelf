@@ -1,4 +1,7 @@
-import { ImportJobsService } from '../../src/import-jobs/import-jobs.service';
+import {
+  ImportJobsService,
+  type ResolvedPlatform,
+} from '../../src/import-jobs/import-jobs.service';
 import { findPlatformMatch } from '../../src/platforms/platform-match';
 import { PlatformsService } from '../../src/platforms/platforms.service';
 import { createTestApp, type TestApp } from '../helpers/test-app';
@@ -6,11 +9,11 @@ import { resetDatabase } from '../helpers/reset';
 import { seedPlatform } from '../helpers/seed';
 
 /** Narrows a resolved platform id for the test's DB assertions. */
-function mustId(id: number | null): number {
-  if (id === null) {
-    throw new Error('expected a platform id');
+function mustId(resolved: ResolvedPlatform | null): number {
+  if (resolved === null) {
+    throw new Error('expected a resolved platform');
   }
-  return id;
+  return resolved.platformId;
 }
 
 /**
@@ -57,7 +60,7 @@ describe('Platform import creation (e2e)', () => {
     const first = await importJobs.resolvePlatformId([], 'PlayStaton 5');
     const second = await importJobs.resolvePlatformId([], 'PlayStaton 5');
 
-    expect(second).toBe(first);
+    expect(second?.platformId).toBe(first?.platformId);
     await expect(
       test.prisma.platform.count({ where: { name: 'PlayStaton 5' } }),
     ).resolves.toBe(1);
@@ -81,7 +84,7 @@ describe('Platform import creation (e2e)', () => {
     // A later import reading the misread name must land on the target.
     await expect(
       importJobs.resolvePlatformId([], 'PlayStaton 5'),
-    ).resolves.toBe(target.id);
+    ).resolves.toEqual({ platformId: target.id, provenance: 'photo' });
   });
 
   it('keeps matching the old name after a rename', async () => {
@@ -94,7 +97,7 @@ describe('Platform import creation (e2e)', () => {
 
     await expect(
       importJobs.resolvePlatformId([], 'PlayStation 5'),
-    ).resolves.toBe(p.id);
+    ).resolves.toEqual({ platformId: p.id, provenance: 'photo' });
     const candidates = await platforms.listMatchCandidates();
     expect(findPlatformMatch(candidates, ['PlayStation 5'])?.id).toBe(p.id);
   });
@@ -134,7 +137,7 @@ describe('Platform import creation (e2e)', () => {
         ],
         'PC DVD ROM',
       ),
-    ).resolves.toBe(pc.id);
+    ).resolves.toEqual({ platformId: pc.id, provenance: 'photo' });
     await expect(test.prisma.platform.count()).resolves.toBe(2); // no junk row
   });
 });
