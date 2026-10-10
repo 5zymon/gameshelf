@@ -77,3 +77,21 @@ test('skips file items whose getAsFile() returns null', () => {
   );
   assert.deepEqual(result, [ok]);
 });
+
+test('accepts an image file with an empty MIME via its extension', () => {
+  const heic = imageFile('photo.heic', '');
+  const result = extractImageFiles(dataTransfer({ files: [heic] }));
+  assert.deepEqual(result, [heic]);
+});
+
+test('falls back to items when files holds only a non-image', () => {
+  const text = imageFile('notes.txt', 'text/plain');
+  const png = imageFile('shot.png');
+  const result = extractImageFiles(
+    dataTransfer({
+      files: [text],
+      items: [fileItem(png, 'image/png')],
+    }),
+  );
+  assert.deepEqual(result, [png]);
+});

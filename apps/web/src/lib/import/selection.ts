@@ -60,22 +60,36 @@ export function normalizeRasterMime(file: File): File {
 }
 
 /**
+ * Whether a clipboard file is an image candidate: an `image/` MIME, or —
+ * because an iPhone photo can arrive with an empty `File.type`, the same way
+ * `classifyFile` decides — an accepted image extension (`.jpg`, `.jpeg`,
+ * `.png`, `.webp`, `.heic`, `.heif`).
+ */
+function isImageCandidate(file: File): boolean {
+  const ext = fileExtension(file.name);
+  return (
+    file.type.startsWith('image/') || RASTER_EXT.has(ext) || HEIC_EXT.has(ext)
+  );
+}
+
+/**
  * Extracts the image files from a paste event's clipboard so a pasted
  * screenshot flows through the same intake as a dropped file. `files` is the
  * primary source; `items` + `getAsFile()` is the fallback for browsers that
- * only populate the item list. Returns `[]` when the clipboard holds no
- * image, so the caller can let a plain-text paste through untouched.
+ * only populate the item list. A file counts as an image when its MIME starts
+ * with `image/` **or** its extension is an accepted image extension, so a
+ * pasted photo with an empty `File.type` is not silently dropped. Returns `[]`
+ * when the clipboard holds no image, so the caller can let a plain-text paste
+ * through untouched.
  */
 export function extractImageFiles(clipboardData: DataTransfer): File[] {
-  const files = Array.from(clipboardData.files).filter((file) =>
-    file.type.startsWith('image/'),
-  );
+  const files = Array.from(clipboardData.files).filter(isImageCandidate);
   if (files.length > 0) return files;
   const fromItems: File[] = [];
   for (const item of Array.from(clipboardData.items)) {
-    if (item.kind !== 'file' || !item.type.startsWith('image/')) continue;
+    if (item.kind !== 'file') continue;
     const file = item.getAsFile();
-    if (file !== null) fromItems.push(file);
+    if (file !== null && isImageCandidate(file)) fromItems.push(file);
   }
   return fromItems;
 }

@@ -4,7 +4,7 @@ title: Photo Import Upload UI
 description: The authenticated /import screen — a drag-and-drop, browse, or paste multi-photo picker with thumbnails, optional per-photo game counts, client-side validation, in-browser HEIC→JPEG conversion, an LLM-readiness gate, and an upload that navigates to the batch progress view.
 tags: [web, import, ui, heic]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T02:01:27Z }
+generated: { by: opencode/home-model, at: 2026-10-10T21:00:25Z }
 ---
 
 # Overview
