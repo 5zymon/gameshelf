@@ -143,6 +143,16 @@ export async function GameDetailView({
           <Chip>
             {t('field.source')}: {sourceLabel(game.source, t)}
           </Chip>
+          {game.igdbUrl !== null && (
+            <a
+              href={game.igdbUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-full hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              <Chip>{t('viewOnIgdb')}</Chip>
+            </a>
+          )}
           <Chip tone="muted">
             {game.enrichedAt === null
               ? t('neverEnriched')

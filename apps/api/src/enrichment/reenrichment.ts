@@ -91,6 +91,7 @@ export interface ReenrichmentExisting {
   rawMetadata: string | null;
   source: string;
   externalId: number | null;
+  igdbSlug: string | null;
   platformUnverified: boolean;
   userEditedFields: unknown;
   images: { url: string }[];
@@ -168,6 +169,9 @@ export function buildReenrichmentUpdate(
   }
   if (enriched.externalId !== existing.externalId) {
     data.externalId = enriched.externalId;
+  }
+  if (enriched.igdbSlug !== existing.igdbSlug) {
+    data.igdbSlug = enriched.igdbSlug;
   }
   if (existing.platformUnverified) {
     data.platformUnverified = false;

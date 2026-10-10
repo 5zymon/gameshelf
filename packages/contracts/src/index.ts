@@ -50,6 +50,7 @@ export interface GameDetail {
   enrichedAt: string | null;
   source: GameSource;
   externalId: number | null;
+  igdbUrl: string | null;
   platformUnverified: boolean;
   userEditedFields: string[];
   createdAt: string;

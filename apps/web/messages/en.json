@@ -198,6 +198,7 @@
     "lastEnriched": "Last enriched: {date}",
     "platformUnverified": "Platform unverified",
     "notLinked": "Not linked",
+    "viewOnIgdb": "View on IGDB",
     "field": {
       "platform": "Platform",
       "edition": "Edition",

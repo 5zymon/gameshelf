@@ -25,6 +25,8 @@ export interface CatalogCandidate {
   images: string[];
   platforms: CatalogPlatform[];
   source: CatalogSource;
+  /** IGDB URL slug; absent or `null` for sources without one. Persisted as `Game.igdbSlug`. */
+  slug?: string | null;
   /** Raw upstream payload, archived into `Game.rawMetadata`. */
   raw: unknown;
 }

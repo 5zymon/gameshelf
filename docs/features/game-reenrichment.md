@@ -123,7 +123,13 @@ candidate into a `Prisma.GameUpdateInput`, or `null` when nothing changes:
 4. `source` and `externalId` are written when they differ — this is what turns
    an unlinked `MANUAL` game into a linked one.
 5. `platformUnverified` is set to `false` when it was `true`.
-6. When nothing above changes → `null` (no write at all). `rawMetadata` and
+6. `igdbSlug` is written when it differs from the candidate's IGDB `slug`
+   (`Game.igdbSlug`, nullable). It is internal: it never appears in a response
+   body, and the API derives `igdbUrl` from it (`igdbUrlFor` in
+   `apps/api/src/games/game-detail.mapper.ts`); the detail view only renders the
+   returned `igdbUrl`. Games enriched before
+   the slug was stored keep `igdbSlug = NULL` (no backfill) until re-enriched.
+7. When nothing above changes → `null` (no write at all). `rawMetadata` and
    `enrichedAt` accompany a real change only, which makes a second identical
    apply byte-identical (record idempotency: `updatedAt`/`enrichedAt`/cover all
    unchanged).

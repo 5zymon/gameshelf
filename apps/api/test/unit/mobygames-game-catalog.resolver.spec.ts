@@ -90,6 +90,7 @@ describe('MobygamesGameCatalogResolver (unit)', () => {
         images: [],
         platforms: [{ igdbId: null, name: 'Xbox', abbreviation: null }],
         source: 'MobyGames',
+        slug: null,
         raw: expect.anything() as unknown,
       },
     });
@@ -119,6 +120,7 @@ describe('MobygamesGameCatalogResolver (unit)', () => {
         images: [],
         platforms: [{ igdbId: null, name: 'Xbox', abbreviation: null }],
         source: 'MobyGames',
+        slug: null,
         raw: expect.anything() as unknown,
       },
     });
@@ -215,6 +217,7 @@ describe('MobygamesGameCatalogResolver (unit)', () => {
         images: [],
         platforms: [{ igdbId: null, name: 'Xbox', abbreviation: null }],
         source: 'MobyGames',
+        slug: null,
         raw: expect.anything() as unknown,
       },
     });

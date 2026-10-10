@@ -41,7 +41,7 @@ const IGDB_PLATFORMS_QUERY =
  * Deliberately no `*` and no `alternative_names`.
  */
 const IGDB_GAME_FIELDS =
-  'name,first_release_date,cover.url,involved_companies.company.name,' +
+  'name,slug,first_release_date,cover.url,involved_companies.company.name,' +
   'genres.name,platforms.id,platforms.name,platforms.abbreviation,' +
   'summary,version_parent,multiplayer_modes.offlinemax,multiplayer_modes.onlinemax,' +
   'multiplayer_modes.offlinecoopmax,multiplayer_modes.onlinecoopmax,' +
@@ -59,6 +59,8 @@ export interface IgdbMultiplayerMode {
 export interface IgdbGame {
   id: number;
   name: string;
+  /** IGDB URL slug; the canonical page is `https://www.igdb.com/games/<slug>`. */
+  slug?: string;
   first_release_date?: number;
   cover?: { url?: string };
   involved_companies?: { company?: { name?: string } }[];

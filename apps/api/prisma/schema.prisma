@@ -125,6 +125,9 @@ model Game {
   // External catalog link: `source`+`externalId` identify the upstream row
   // (IGDB/MobyGames). Null for a MANUAL/manually-created game until re-enriched.
   externalId        Int?     @map("external_id")
+  // IGDB URL slug (`https://www.igdb.com/games/<slug>`). Null until an IGDB
+  // enrichment stores it; never serialized as-is (the API returns `igdbUrl`).
+  igdbSlug          String?  @map("igdb_slug") @db.VarChar(255)
   // Set when a game's platform could not be confidently confirmed; cleared when
   // the user fixes the platform or a re-enrichment confirms one.
   platformUnverified Boolean @default(false) @map("platform_unverified")

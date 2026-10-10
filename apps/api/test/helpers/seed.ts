@@ -55,6 +55,7 @@ export function seedGame(
     enrichedAt?: Date | null;
     rawMetadata?: string | null;
     externalId?: number | null;
+    igdbSlug?: string | null;
     platformUnverified?: boolean;
     userEditedFields?: string | null;
   },

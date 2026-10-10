@@ -139,6 +139,7 @@ function toCandidate(game: IgdbGame): CatalogCandidate {
     images: galleryImages(game),
     platforms: (game.platforms ?? []).map(toPlatform),
     source: 'IGDB',
+    slug: game.slug ?? null,
     raw: game,
   };
 }

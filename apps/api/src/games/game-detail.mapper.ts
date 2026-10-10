@@ -34,17 +34,36 @@ export type GameListRow = Prisma.GameGetPayload<{
   select: typeof GAME_LIST_SELECT;
 }>;
 
+const IGDB_GAME_URL = 'https://www.igdb.com/games/';
+
+/**
+ * Canonical IGDB page for a game, or `null` unless the game came from IGDB,
+ * carries its external id, and has a stored slug (games enriched before the
+ * slug was stored get no link until re-enriched).
+ */
+export function igdbUrlFor(game: {
+  source: string;
+  externalId: number | null;
+  igdbSlug: string | null;
+}): string | null {
+  if (game.source !== 'IGDB' || game.externalId === null || !game.igdbSlug) {
+    return null;
+  }
+  return `${IGDB_GAME_URL}${encodeURIComponent(game.igdbSlug)}`;
+}
+
 /**
  * Maps a persisted `Game` row onto the full response model, decoding the JSON
  * provenance column into an array, deriving the same-origin thumbnail URL, and
  * exposing the ordered gallery as same-origin `url` + `thumbUrl` pairs. The
- * internal `sourceCoverUrl` is stripped so an external host can never reach a
- * response body.
+ * internal `sourceCoverUrl` and `igdbSlug` are stripped so an external host can
+ * never reach a response body; the IGDB page is exposed only as `igdbUrl`.
  */
 export function toGameDetail(game: GameDetailRow): GameDetailModel {
-  const { sourceCoverUrl: _sourceCoverUrl, images, ...rest } = game;
+  const { sourceCoverUrl: _sourceCoverUrl, igdbSlug, images, ...rest } = game;
   return {
     ...rest,
+    igdbUrl: igdbUrlFor({ ...rest, igdbSlug }),
     coverThumbUrl: coverThumbUrlFor(rest.coverUrl),
     userEditedFields: parseEditedFields(rest.userEditedFields),
     images: images.map((image) => ({
