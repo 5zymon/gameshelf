@@ -23,6 +23,7 @@ function existing(
     rawMetadata: null,
     source: 'MANUAL',
     externalId: null,
+    igdbSlug: null,
     platformUnverified: false,
     userEditedFields: null,
     images: [],
@@ -46,6 +47,7 @@ function enriched(overrides: Partial<EnrichedGameData> = {}): EnrichedGameData {
     enrichedAt: new Date('2026-10-07T00:00:00.000Z'),
     source: 'IGDB',
     externalId: 1036,
+    igdbSlug: 'halo-combat-evolved',
     images: [],
     ...overrides,
   };
@@ -111,6 +113,7 @@ describe('buildReenrichmentUpdate', () => {
           'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
         source: 'IGDB',
         externalId: 1036,
+        igdbSlug: 'halo-combat-evolved',
       }),
       enriched: enriched(),
     });
@@ -134,6 +137,7 @@ describe('buildReenrichmentUpdate', () => {
         'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
       source: 'IGDB',
       externalId: 1036,
+      igdbSlug: 'halo-combat-evolved',
       rawMetadata: JSON.stringify({ id: 1036 }),
       enrichedAt: new Date('2026-10-07T00:00:00.000Z'),
     });
@@ -162,9 +166,10 @@ describe('buildReenrichmentUpdate', () => {
       }),
     });
 
-    // Only the source changed; every candidate-null field is left untouched.
+    // Only the source and its slug changed; every candidate-null field is left untouched.
     expect(data).toEqual({
       source: 'IGDB',
+      igdbSlug: 'halo-combat-evolved',
       rawMetadata: JSON.stringify({ id: 1036 }),
       enrichedAt: new Date('2026-10-07T00:00:00.000Z'),
     });
@@ -184,6 +189,15 @@ describe('buildReenrichmentUpdate', () => {
     expect(data).not.toHaveProperty('title');
     expect(data).not.toHaveProperty('platformId');
     expect(data).not.toHaveProperty('edition');
+  });
+
+  it('stores the IGDB slug on re-enrichment of a game enriched before slugs existed', () => {
+    const data = buildReenrichmentUpdate({
+      existing: existing({ source: 'IGDB', externalId: 1036, igdbSlug: null }),
+      enriched: enriched(),
+    });
+
+    expect(data).toMatchObject({ igdbSlug: 'halo-combat-evolved' });
   });
 
   it('never overwrites a hand-edited field', () => {
@@ -259,6 +273,7 @@ describe('buildReenrichmentUpdate', () => {
           'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
         source: 'IGDB',
         externalId: 1036,
+        igdbSlug: 'halo-combat-evolved',
         platformUnverified: true,
       }),
       enriched: enriched(),
@@ -283,6 +298,7 @@ describe('buildReenrichmentUpdate', () => {
           'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
         source: 'IGDB',
         externalId: 1036,
+        igdbSlug: 'halo-combat-evolved',
       }),
       enriched: enriched(),
     });
@@ -344,6 +360,7 @@ describe('buildReenrichmentUpdate', () => {
           'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
         source: 'IGDB',
         externalId: 1036,
+        igdbSlug: 'halo-combat-evolved',
         images: gallery,
       }),
       enriched: enriched({

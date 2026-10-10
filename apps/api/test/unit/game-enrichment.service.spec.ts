@@ -93,6 +93,7 @@ describe('GameEnrichmentService (unit)', () => {
       enrichedAt: expect.any(Date) as Date,
       source: 'IGDB',
       externalId: 1036,
+      igdbSlug: 'halo-combat-evolved',
     });
     expect(data.enrichedAt).toBeInstanceOf(Date);
     // The raw upstream payload is archived verbatim into the archival column.
@@ -125,6 +126,7 @@ describe('GameEnrichmentService (unit)', () => {
       enrichedAt: expect.any(Date) as Date,
       source: 'IGDB',
       externalId: 5,
+      igdbSlug: null,
     });
   });
 

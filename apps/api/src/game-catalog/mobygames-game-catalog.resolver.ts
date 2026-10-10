@@ -161,6 +161,7 @@ function toCandidate(game: MobygameGame): CatalogCandidate {
     images: [],
     platforms: objects(game.platforms).map(toPlatform),
     source: 'MobyGames',
+    slug: null,
     raw: game,
   };
 }

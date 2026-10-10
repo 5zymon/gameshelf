@@ -267,7 +267,7 @@ describe('IgdbClient (unit)', () => {
       (request) => request.url === GAMES_URL,
     );
     expect(gamesRequest?.body).toBe(
-      'search "Halo"; fields name,first_release_date,cover.url,' +
+      'search "Halo"; fields name,slug,first_release_date,cover.url,' +
         'involved_companies.company.name,genres.name,platforms.id,' +
         'platforms.name,platforms.abbreviation,summary,version_parent,' +
         'multiplayer_modes.offlinemax,multiplayer_modes.onlinemax,' +
@@ -905,7 +905,7 @@ describe('IgdbClient.multiqueryGames (unit)', () => {
     const gamesBody =
       http.requests.find((r) => r.url === GAMES_URL)?.body ?? '';
     expect(gamesBody).toBe(
-      'fields name,first_release_date,cover.url,' +
+      'fields name,slug,first_release_date,cover.url,' +
         'involved_companies.company.name,genres.name,platforms.id,' +
         'platforms.name,platforms.abbreviation,summary,version_parent,' +
         'multiplayer_modes.offlinemax,multiplayer_modes.onlinemax,' +

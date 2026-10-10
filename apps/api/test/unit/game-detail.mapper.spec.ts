@@ -1,4 +1,4 @@
-import { toGameDetail } from '../../src/games/game-detail.mapper';
+import { igdbUrlFor, toGameDetail } from '../../src/games/game-detail.mapper';
 import type { GameDetailRow } from '../../src/games/game-detail.mapper';
 
 function row(overrides: Partial<GameDetailRow> = {}): GameDetailRow {
@@ -19,6 +19,7 @@ function row(overrides: Partial<GameDetailRow> = {}): GameDetailRow {
     enrichedAt: null,
     source: 'IGDB',
     externalId: 1036,
+    igdbSlug: 'halo-combat-evolved',
     platformUnverified: false,
     userEditedFields: null,
     createdAt: new Date('2026-10-01T00:00:00.000Z'),
@@ -45,5 +46,31 @@ describe('toGameDetail (unit)', () => {
     const detail = toGameDetail(row({ images: [] }));
 
     expect(detail.images).toEqual([]);
+  });
+
+  it('exposes igdbUrl for an IGDB game with a stored slug and never the slug itself', () => {
+    const detail = toGameDetail(row());
+
+    expect(detail.igdbUrl).toBe(
+      'https://www.igdb.com/games/halo-combat-evolved',
+    );
+    expect(detail).not.toHaveProperty('igdbSlug');
+  });
+
+  it('exposes a null igdbUrl for every game that is not IGDB-linked with a slug', () => {
+    expect(toGameDetail(row({ source: 'MobyGames' })).igdbUrl).toBeNull();
+    expect(
+      toGameDetail(row({ source: 'MANUAL', externalId: null })).igdbUrl,
+    ).toBeNull();
+    expect(toGameDetail(row({ externalId: null })).igdbUrl).toBeNull();
+    expect(toGameDetail(row({ igdbSlug: null })).igdbUrl).toBeNull();
+  });
+});
+
+describe('igdbUrlFor (unit)', () => {
+  it('encodes the slug into the canonical IGDB game path', () => {
+    expect(
+      igdbUrlFor({ source: 'IGDB', externalId: 1, igdbSlug: 'a b/c' }),
+    ).toBe('https://www.igdb.com/games/a%20b%2Fc');
   });
 });

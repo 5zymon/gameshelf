@@ -66,6 +66,7 @@ interface GameDetailBody {
   enrichedAt: string | null;
   source: string;
   externalId: number | null;
+  igdbUrl: string | null;
   platformUnverified: boolean;
   userEditedFields: string[];
   images: { url: string; thumbUrl: string | null }[];
@@ -112,6 +113,7 @@ function candidate(
     images: [],
     platforms: [{ igdbId: 11, name: 'Xbox', abbreviation: 'XBOX' }],
     source: 'IGDB',
+    slug: 'halo-combat-evolved',
     raw: { id: 1036 },
     ...overrides,
   };
@@ -138,6 +140,7 @@ interface SeedOverrides {
   enrichedAt?: Date | null;
   rawMetadata?: string | null;
   externalId?: number | null;
+  igdbSlug?: string | null;
   platformUnverified?: boolean;
   userEditedFields?: string | null;
 }
@@ -217,8 +220,9 @@ describe('Game re-enrichment (e2e)', () => {
       /^\/api\/covers\/preview\?u=/,
     );
     expect(searchBody.candidates[0]?.coverUrl).not.toContain('images.igdb.com');
-    // The archival raw payload is never exposed.
+    // The archival raw payload and the internal IGDB slug are never exposed.
     expect(searchBody.candidates[0]?.raw).toBeUndefined();
+    expect(searchBody.candidates[0]).not.toHaveProperty('slug');
 
     // Search against the current (corrected) title, no mutation.
     expect(resolver.search).toHaveBeenCalledWith('Halo');
@@ -284,11 +288,13 @@ describe('Game re-enrichment (e2e)', () => {
     expect(body.candidates.map((c) => c.externalId)).toEqual([1036, 2002]);
     expect(body.candidates[1]?.title).toBe('Halo 2');
     // Each candidate's cover is a same-origin signed preview, never the
-    // external host, and the archival raw payload is never exposed.
+    // external host, and the archival raw payload and internal IGDB slug are
+    // never exposed.
     for (const entry of body.candidates) {
       expect(entry.coverUrl).toMatch(/^\/api\/covers\/preview\?u=/);
       expect(entry.coverUrl).not.toContain('images.igdb.com');
       expect(entry.raw).toBeUndefined();
+      expect(entry).not.toHaveProperty('slug');
     }
     // Search mutates nothing.
     expect(
@@ -545,6 +551,45 @@ describe('Game re-enrichment (e2e)', () => {
     const detailBody = detail.body as GameDetailBody;
     expect(detailBody.externalId).toBe(1036);
     expect(detailBody.source).toBe('IGDB');
+  });
+
+  it('stores the IGDB slug on apply and exposes the IGDB page without the slug', async () => {
+    const { gameId } = await seedGameWith({
+      source: 'MANUAL',
+      externalId: null,
+    });
+    resolver.search.mockResolvedValue(searchMatches(candidate()));
+    coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
+
+    const res = await test.request
+      .post(`/games/${String(gameId)}/enrich`)
+      .send({ candidate: { source: 'IGDB', externalId: 1036 } });
+    expect(res.status).toBe(200);
+
+    const game = await test.prisma.game.findUniqueOrThrow({
+      where: { id: gameId },
+    });
+    expect(game.igdbSlug).toBe('halo-combat-evolved');
+
+    const detail = await test.request.get(`/games/${String(gameId)}`);
+    const detailBody = detail.body as GameDetailBody;
+    expect(detailBody.igdbUrl).toBe(
+      'https://www.igdb.com/games/halo-combat-evolved',
+    );
+    expect(detailBody).not.toHaveProperty('igdbSlug');
+  });
+
+  it('shows no IGDB link for a game enriched before slugs were stored, until re-enriched', async () => {
+    const { gameId } = await seedGameWith({
+      source: 'IGDB',
+      externalId: 1036,
+      igdbSlug: null,
+    });
+
+    const detail = await test.request.get(`/games/${String(gameId)}`);
+    expect((detail.body as GameDetailBody).igdbUrl).toBeNull();
+    // Viewing the page never reaches out to IGDB to backfill a slug.
+    expect(resolver.search).not.toHaveBeenCalled();
   });
 
   it('is idempotent: applying the same candidate twice writes once', async () => {

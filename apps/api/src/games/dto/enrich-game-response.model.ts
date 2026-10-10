@@ -53,15 +53,16 @@ export class EnrichCandidateModel {
 }
 
 /**
- * Drops the archival `raw` payload — never exposed in a response body — and
- * replaces the candidate's external `coverUrl` with a same-origin signed preview
- * URL (the external host never reaches the browser).
+ * Drops the archival `raw` payload and the internal IGDB `slug` — neither is
+ * exposed in a response body — and replaces the candidate's external `coverUrl`
+ * with a same-origin signed preview URL (the external host never reaches the
+ * browser).
  */
 export function toEnrichCandidateModel(
   candidate: CatalogCandidate,
   coverUrl: string | null,
 ): EnrichCandidateModel {
-  const { raw: _raw, images: _images, ...rest } = candidate;
+  const { raw: _raw, images: _images, slug: _slug, ...rest } = candidate;
   return { ...rest, coverUrl };
 }
 

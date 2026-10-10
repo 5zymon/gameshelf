@@ -198,6 +198,7 @@
     "lastEnriched": "Ostatnie wzbogacenie: {date}",
     "platformUnverified": "Platforma niezweryfikowana",
     "notLinked": "Niespowiązana",
+    "viewOnIgdb": "Zobacz w IGDB",
     "field": {
       "platform": "Platforma",
       "edition": "Edycja",

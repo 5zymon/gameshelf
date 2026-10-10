@@ -365,6 +365,7 @@ describe('GamesService (unit)', () => {
       expect(result).toEqual({
         ...game,
         coverThumbUrl: null,
+        igdbUrl: null,
         userEditedFields: [],
       });
     });
@@ -407,6 +408,7 @@ describe('GamesService (unit)', () => {
       expect(result).toEqual({
         ...created,
         coverThumbUrl: null,
+        igdbUrl: null,
         userEditedFields: [],
       });
     });
@@ -875,6 +877,7 @@ describe('GamesService (unit)', () => {
       expect(result).toEqual({
         ...updated,
         coverThumbUrl: null,
+        igdbUrl: null,
         userEditedFields: [],
       });
     });
@@ -1144,6 +1147,7 @@ describe('GamesService (unit)', () => {
       expect(result.game).toEqual({
         ...gameResponse,
         coverThumbUrl: null,
+        igdbUrl: null,
         userEditedFields: [],
       });
       expect(enrichment.enrichCandidate).not.toHaveBeenCalled();
@@ -1359,6 +1363,7 @@ describe('GamesService (unit)', () => {
       expect(result.game).toEqual({
         ...gameResponse,
         coverThumbUrl: null,
+        igdbUrl: null,
         userEditedFields: [],
       });
       expect(mock.game.update).not.toHaveBeenCalled();

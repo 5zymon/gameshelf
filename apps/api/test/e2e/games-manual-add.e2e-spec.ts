@@ -55,6 +55,7 @@ interface GameDetailBody {
   coverUrl: string | null;
   source: string;
   externalId: number | null;
+  igdbUrl: string | null;
   platform: { id: number; name: string; slug: string };
 }
 
@@ -95,6 +96,7 @@ function candidate(
     images: [],
     platforms: [{ igdbId: 11, name: 'Xbox', abbreviation: 'XBOX' }],
     source: 'IGDB',
+    slug: 'halo-combat-evolved',
     raw: { id: 1036 },
     ...overrides,
   };
@@ -172,8 +174,9 @@ describe('Manual add (e2e)', () => {
         /^\/api\/covers\/preview\?u=/,
       );
       expect(body.candidates[0]?.coverUrl).not.toContain('images.igdb.com');
-      // The archival raw payload is never exposed.
+      // The archival raw payload and the internal IGDB slug are never exposed.
       expect(body.candidates[0]?.raw).toBeUndefined();
+      expect(body.candidates[0]).not.toHaveProperty('slug');
       expect(resolver.search).toHaveBeenCalledTimes(1);
       expect(resolver.search).toHaveBeenCalledWith('halo');
     });
@@ -236,7 +239,14 @@ describe('Manual add (e2e)', () => {
       const body = res.body as GameDetailBody;
       expect(body.source).toBe('IGDB');
       expect(body.externalId).toBe(1036);
+      expect(body.igdbUrl).toBe(
+        'https://www.igdb.com/games/halo-combat-evolved',
+      );
       expect(body.copyCount).toBe(1);
+      expect(
+        (await test.prisma.game.findUniqueOrThrow({ where: { id: body.id } }))
+          .igdbSlug,
+      ).toBe('halo-combat-evolved');
       expect(coverHttp.get).toHaveBeenCalledWith(COVER_URL_A);
       expect(body.coverUrl).toBe(servedCover(COVER_URL_A));
       expect(body).not.toHaveProperty('sourceCoverUrl');
@@ -294,6 +304,11 @@ describe('Manual add (e2e)', () => {
       const body = res.body as GameDetailBody;
       expect(body.source).toBe('MANUAL');
       expect(body.externalId).toBeNull();
+      expect(body.igdbUrl).toBeNull();
+      expect(
+        (await test.prisma.game.findUniqueOrThrow({ where: { id: body.id } }))
+          .igdbSlug,
+      ).toBeNull();
       expect(body.copyCount).toBe(1);
       expect(body.releaseYear).toBe(2008);
       expect(body).not.toHaveProperty('sourceCoverUrl');

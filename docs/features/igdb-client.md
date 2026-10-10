@@ -204,12 +204,18 @@ first-seen order) are hydrated with the full catalog field set in
 `POST /v4/games` requests of at most `IGDB_HYDRATION_MAX_IDS = 500` ids:
 
 ```
-fields name,first_release_date,cover.url,involved_companies.company.name,
+fields name,slug,first_release_date,cover.url,involved_companies.company.name,
 genres.name,platforms.id,platforms.name,platforms.abbreviation,summary,
 version_parent,multiplayer_modes.offlinemax,multiplayer_modes.onlinemax,
 multiplayer_modes.offlinecoopmax,multiplayer_modes.onlinecoopmax;
 where id = (1,2,…); limit 500;
 ```
+
+`slug` (the IGDB URL slug, `https://www.igdb.com/games/<slug>`) feeds
+`CatalogCandidate.slug`, which is persisted as `Game.igdbSlug` on create (manual
+add and photo import, via the shared create-data mapping) and on re-enrich apply,
+and is never returned by the API as a field of its own (the API derives `igdbUrl`
+from it; see [Game Detail View](/game-detail.md)).
 
 The response rows are indexed `id → game`, and each title's candidates are
 rebuilt from its phase-1 id order, so `multiqueryGames` still returns one

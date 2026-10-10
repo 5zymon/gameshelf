@@ -117,6 +117,15 @@ export class GameDetailModel {
   @ApiPropertyOptional({ nullable: true, example: 1036 })
   externalId!: number | null;
 
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'Canonical IGDB page (https://www.igdb.com/games/<slug>). Null unless the game came from IGDB with a stored slug.',
+    example: 'https://www.igdb.com/games/halo-combat-evolved',
+  })
+  igdbUrl!: string | null;
+
   @ApiProperty({ example: false })
   platformUnverified!: boolean;
 

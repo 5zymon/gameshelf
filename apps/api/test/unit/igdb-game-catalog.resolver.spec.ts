@@ -170,6 +170,20 @@ describe('IgdbGameCatalogResolver (unit)', () => {
     });
   });
 
+  it('carries the IGDB slug onto the candidate', async () => {
+    const search = jest
+      .fn<Promise<IgdbGame[]>, [string]>()
+      .mockResolvedValue([game({ name: 'Halo', slug: 'halo-combat-evolved' })]);
+    const resolver = createResolver(search);
+
+    const result = await resolver.search('Halo');
+
+    expect(result).toMatchObject({
+      kind: 'matches',
+      candidates: [{ slug: 'halo-combat-evolved' }],
+    });
+  });
+
   it('normalizes cover URLs and maps the first company/genre/platform', async () => {
     const search = jest.fn<Promise<IgdbGame[]>, [string]>().mockResolvedValue([
       game({
@@ -198,6 +212,7 @@ describe('IgdbGameCatalogResolver (unit)', () => {
         images: [],
         platforms: [{ igdbId: 11, name: 'Xbox', abbreviation: 'XBOX' }],
         source: 'IGDB',
+        slug: null,
         raw: expect.anything() as unknown,
       },
     });

@@ -29,6 +29,8 @@ export interface EnrichedGameData {
   enrichedAt: Date;
   source: CatalogCandidate['source'];
   externalId: number;
+  /** IGDB URL slug (internal; the API derives `igdbUrl` from it). */
+  igdbSlug: string | null;
 }
 
 /** Inputs to the pure candidate→`Game` mapping. */
@@ -68,6 +70,7 @@ export function mapCandidateToGameData(
     enrichedAt: input.fetchedAt ?? new Date(),
     source: candidate.source,
     externalId: candidate.externalId,
+    igdbSlug: candidate.slug ?? null,
   };
 }
 
