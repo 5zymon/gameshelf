@@ -59,6 +59,27 @@ export function normalizeRasterMime(file: File): File {
   });
 }
 
+/**
+ * Extracts the image files from a paste event's clipboard so a pasted
+ * screenshot flows through the same intake as a dropped file. `files` is the
+ * primary source; `items` + `getAsFile()` is the fallback for browsers that
+ * only populate the item list. Returns `[]` when the clipboard holds no
+ * image, so the caller can let a plain-text paste through untouched.
+ */
+export function extractImageFiles(clipboardData: DataTransfer): File[] {
+  const files = Array.from(clipboardData.files).filter((file) =>
+    file.type.startsWith('image/'),
+  );
+  if (files.length > 0) return files;
+  const fromItems: File[] = [];
+  for (const item of Array.from(clipboardData.items)) {
+    if (item.kind !== 'file' || !item.type.startsWith('image/')) continue;
+    const file = item.getAsFile();
+    if (file !== null) fromItems.push(file);
+  }
+  return fromItems;
+}
+
 export interface IntakeResult {
   accepted: { file: File; kind: PhotoKind }[];
   rejections: { name: string; reason: string }[];

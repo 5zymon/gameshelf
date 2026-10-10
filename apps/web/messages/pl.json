@@ -351,7 +351,7 @@
     "addByHand": "Dodaj grę ręcznie",
     "openSettings": "Otwórz ustawienia",
     "providerNotice": "Zdjęcia są wysyłane do Twojego skonfigurowanego LLM ({provider}).",
-    "dropzone": "Upuść zdjęcia półki tutaj albo wybierz pliki.",
+    "dropzone": "Upuść zdjęcia półki tutaj, wybierz pliki albo wklej (⌘V).",
     "dropzoneHint": "JPEG, PNG, WebP lub HEIC. Do 20 MB każde, do 50 zdjęć.",
     "rejections": {
       "title": "Część zdjęć nie została dodana.",
