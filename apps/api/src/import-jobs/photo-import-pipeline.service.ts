@@ -284,11 +284,11 @@ export class PhotoImportPipelineService {
         });
         continue;
       }
-      const platformId = await this.jobs.resolvePlatformId(
+      const resolvedPlatform = await this.jobs.resolvePlatformId(
         resolution.candidate.platforms,
         item.rawPlatform,
       );
-      if (platformId === null) {
+      if (resolvedPlatform === null) {
         outcome.unrecognized.push({
           recognizedItemId: item.id,
           rawTitle: item.rawTitle,
@@ -299,7 +299,8 @@ export class PhotoImportPipelineService {
       }
       outcome.resolved.push({
         recognizedItemId: item.id,
-        platformId,
+        platformId: resolvedPlatform.platformId,
+        platformUnverified: resolvedPlatform.provenance === 'catalog',
         edition: item.rawEdition,
         candidate: resolution.candidate,
       });

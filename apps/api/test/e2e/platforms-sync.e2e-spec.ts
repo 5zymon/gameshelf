@@ -203,9 +203,9 @@ describe('Platforms sync (e2e)', () => {
     await syncService.sync();
     fetchPlatforms.mockClear();
 
-    const platformId = await importJobs.resolvePlatformId([], 'PS5');
-
-    expect(platformId).toEqual(expect.any(Number));
+    const resolved = await importJobs.resolvePlatformId([], 'PS5');
+    expect(resolved).not.toBeNull();
+    expect(resolved?.platformId).toEqual(expect.any(Number));
     expect(fetchPlatforms).not.toHaveBeenCalled();
   });
 

@@ -185,7 +185,9 @@ function createHarness(): Harness {
         return Promise.resolve();
       },
     ),
-    resolvePlatformId: jest.fn(() => Promise.resolve(10)),
+    resolvePlatformId: jest.fn(() =>
+      Promise.resolve({ platformId: 10, provenance: 'photo' }),
+    ),
     markCompleted: jest.fn((_jobId: number, result: JobCompletionResult) => {
       state.recognizedCount = result.recognizedCount;
       state.importedCount = result.importedCount;
@@ -385,6 +387,58 @@ describe('PhotoImportPipelineService (unit)', () => {
       },
     ]);
     expect(result.unrecognizedCount).toBe(1);
+  });
+
+  it('flags a resolved item platformUnverified when the platform came from the catalog fallback', async () => {
+    const h = createHarness();
+    h.vision.recognize.mockResolvedValue({
+      items: [recognized('A')],
+      countVisible: 1,
+    });
+    h.resolver.resolve.mockResolvedValue({
+      kind: 'matched',
+      candidate: candidate('A'),
+    });
+    h.jobs.resolvePlatformId.mockResolvedValue({
+      platformId: 10,
+      provenance: 'catalog',
+    });
+
+    await h.pipeline.run(makeJob());
+
+    const outcome = (
+      h.jobs.commitImportBatch.mock.calls[0] as [number, ImportBatchOutcome]
+    )[1];
+    expect(outcome.resolved[0]).toMatchObject({
+      platformId: 10,
+      platformUnverified: true,
+    });
+  });
+
+  it('keeps a resolved item platformUnverified false when the platform came from the photo', async () => {
+    const h = createHarness();
+    h.vision.recognize.mockResolvedValue({
+      items: [recognized('A')],
+      countVisible: 1,
+    });
+    h.resolver.resolve.mockResolvedValue({
+      kind: 'matched',
+      candidate: candidate('A'),
+    });
+    h.jobs.resolvePlatformId.mockResolvedValue({
+      platformId: 10,
+      provenance: 'photo',
+    });
+
+    await h.pipeline.run(makeJob());
+
+    const outcome = (
+      h.jobs.commitImportBatch.mock.calls[0] as [number, ImportBatchOutcome]
+    )[1];
+    expect(outcome.resolved[0]).toMatchObject({
+      platformId: 10,
+      platformUnverified: false,
+    });
   });
 
   it('marks the job failed on a non-retryable vision error and keeps the photo', async () => {

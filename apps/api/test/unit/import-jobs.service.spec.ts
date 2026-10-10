@@ -1198,7 +1198,7 @@ describe('ImportJobsService (unit)', () => {
           [{ igdbId: 130, name: 'Nintendo Switch', abbreviation: 'NS' }],
           'Xbox',
         ),
-      ).resolves.toBe(5);
+      ).resolves.toEqual({ platformId: 5, provenance: 'photo' });
       expect(mock.platform.findMany).toHaveBeenCalledTimes(1);
       expect(mock.platform.findMany).toHaveBeenCalledWith({
         orderBy: { id: 'asc' },
@@ -1238,7 +1238,7 @@ describe('ImportJobsService (unit)', () => {
           ],
           'PC DVD ROM',
         ),
-      ).resolves.toBe(9);
+      ).resolves.toEqual({ platformId: 9, provenance: 'photo' });
       expect(platforms.createFromImport).not.toHaveBeenCalled();
     });
 
@@ -1258,7 +1258,7 @@ describe('ImportJobsService (unit)', () => {
           [{ igdbId: 130, name: 'Nintendo Switch', abbreviation: 'NS' }],
           'Sega Saturn',
         ),
-      ).resolves.toBe(77);
+      ).resolves.toEqual({ platformId: 77, provenance: 'photo' });
       expect(platforms.createFromImport).toHaveBeenCalledWith('Sega Saturn');
     });
 
@@ -1272,7 +1272,7 @@ describe('ImportJobsService (unit)', () => {
           [{ igdbId: 130, name: 'Nintendo Switch', abbreviation: 'NS' }],
           null,
         ),
-      ).resolves.toBe(9);
+      ).resolves.toEqual({ platformId: 9, provenance: 'catalog' });
       expect(platforms.createFromImport).not.toHaveBeenCalled();
     });
 
@@ -1300,7 +1300,7 @@ describe('ImportJobsService (unit)', () => {
           ],
           null,
         ),
-      ).resolves.toBe(9);
+      ).resolves.toEqual({ platformId: 9, provenance: 'catalog' });
       expect(platforms.createFromImport).not.toHaveBeenCalled();
     });
 
@@ -1309,7 +1309,10 @@ describe('ImportJobsService (unit)', () => {
         row({ id: 9, name: 'PlayStation 5', abbreviation: 'PS5' }),
       ]);
 
-      await expect(service.resolvePlatformId([], 'PS5')).resolves.toBe(9);
+      await expect(service.resolvePlatformId([], 'PS5')).resolves.toEqual({
+        platformId: 9,
+        provenance: 'photo',
+      });
       expect(mock.platform.findMany).toHaveBeenCalledTimes(1);
     });
 
@@ -1323,7 +1326,7 @@ describe('ImportJobsService (unit)', () => {
           [{ igdbId: 99, name: 'Sony PlayStation 5', abbreviation: 'PS5' }],
           null,
         ),
-      ).resolves.toBe(9);
+      ).resolves.toEqual({ platformId: 9, provenance: 'catalog' });
     });
 
     it('matches through an alias', async () => {
@@ -1336,9 +1339,9 @@ describe('ImportJobsService (unit)', () => {
         }),
       ]);
 
-      await expect(service.resolvePlatformId([], 'PlayStaton 5')).resolves.toBe(
-        9,
-      );
+      await expect(
+        service.resolvePlatformId([], 'PlayStaton 5'),
+      ).resolves.toEqual({ platformId: 9, provenance: 'photo' });
       expect(platforms.createFromImport).not.toHaveBeenCalled();
     });
 
@@ -1349,16 +1352,16 @@ describe('ImportJobsService (unit)', () => {
 
       await expect(
         service.resolvePlatformId([], 'playstation-5'),
-      ).resolves.toBe(9);
+      ).resolves.toEqual({ platformId: 9, provenance: 'photo' });
     });
 
     it('creates an import platform for an unknown named platform', async () => {
       mock.platform.findMany.mockResolvedValue([row({ id: 1, name: 'PC' })]);
       platforms.createFromImport.mockResolvedValue(77);
 
-      await expect(service.resolvePlatformId([], 'Atari Jaguar')).resolves.toBe(
-        77,
-      );
+      await expect(
+        service.resolvePlatformId([], 'Atari Jaguar'),
+      ).resolves.toEqual({ platformId: 77, provenance: 'photo' });
       expect(platforms.createFromImport).toHaveBeenCalledWith('Atari Jaguar');
     });
 
@@ -1371,7 +1374,7 @@ describe('ImportJobsService (unit)', () => {
           [{ igdbId: 99, name: 'Atari Jaguar', abbreviation: 'JAG' }],
           '   ',
         ),
-      ).resolves.toBe(88);
+      ).resolves.toEqual({ platformId: 88, provenance: 'catalog' });
       expect(platforms.createFromImport).toHaveBeenCalledWith('Atari Jaguar');
     });
 
@@ -1398,8 +1401,26 @@ describe('ImportJobsService (unit)', () => {
           [{ igdbId: 99, name: 'PlayStation 4', abbreviation: 'PS4' }],
           'PS4',
         ),
-      ).resolves.toBe(66);
+      ).resolves.toEqual({ platformId: 66, provenance: 'photo' });
       expect(platforms.createFromImport).toHaveBeenCalledWith('PS4');
+    });
+
+    it('reports provenance photo when read from the photo and catalog when inferred', async () => {
+      mock.platform.findMany.mockResolvedValue([
+        row({ id: 9, name: 'PlayStation 5', abbreviation: 'PS5', igdbId: 99 }),
+      ]);
+      expect(
+        await service.resolvePlatformId(
+          [{ igdbId: 99, name: 'PlayStation 5', abbreviation: 'PS5' }],
+          'PS5',
+        ),
+      ).toEqual({ platformId: 9, provenance: 'photo' });
+      expect(
+        await service.resolvePlatformId(
+          [{ igdbId: 99, name: 'PlayStation 5', abbreviation: 'PS5' }],
+          null,
+        ),
+      ).toEqual({ platformId: 9, provenance: 'catalog' });
     });
   });
 
@@ -1443,7 +1464,13 @@ describe('ImportJobsService (unit)', () => {
 
       await service.commitImportBatch(5, {
         resolved: [
-          { recognizedItemId: 1, platformId: 3, edition: 'GOTY', candidate },
+          {
+            recognizedItemId: 1,
+            platformId: 3,
+            platformUnverified: false,
+            edition: 'GOTY',
+            candidate,
+          },
         ],
         unrecognized: [],
         transient: [],
@@ -1458,7 +1485,11 @@ describe('ImportJobsService (unit)', () => {
       );
       expect(mock.$transaction).toHaveBeenCalledTimes(1);
       expect(mock.game.create).toHaveBeenCalledWith({
-        data: { ...enriched, images: { create: [] } },
+        data: {
+          ...enriched,
+          platformUnverified: false,
+          images: { create: [] },
+        },
       });
       expect(mock.recognizedItem.updateMany).toHaveBeenCalledWith({
         where: { id: 1, importJobId: 5, status: 'pending' },
@@ -1483,6 +1514,7 @@ describe('ImportJobsService (unit)', () => {
           {
             recognizedItemId: 1,
             platformId: 3,
+            platformUnverified: false,
             edition: null,
             candidate: mobyCandidate,
           },
@@ -1508,7 +1540,13 @@ describe('ImportJobsService (unit)', () => {
 
       await service.commitImportBatch(5, {
         resolved: [
-          { recognizedItemId: 1, platformId: 3, edition: 'GOTY', candidate },
+          {
+            recognizedItemId: 1,
+            platformId: 3,
+            platformUnverified: false,
+            edition: 'GOTY',
+            candidate,
+          },
         ],
         unrecognized: [],
         transient: [],
@@ -1554,7 +1592,13 @@ describe('ImportJobsService (unit)', () => {
 
       await service.commitImportBatch(5, {
         resolved: [
-          { recognizedItemId: 1, platformId: 3, edition: 'GOTY', candidate },
+          {
+            recognizedItemId: 1,
+            platformId: 3,
+            platformUnverified: false,
+            edition: 'GOTY',
+            candidate,
+          },
         ],
         unrecognized: [],
         transient: [],
@@ -1563,6 +1607,7 @@ describe('ImportJobsService (unit)', () => {
       expect(mock.game.create).toHaveBeenCalledWith({
         data: {
           ...galleryEnriched,
+          platformUnverified: false,
           images: {
             create: [
               {
@@ -1591,7 +1636,13 @@ describe('ImportJobsService (unit)', () => {
 
       await service.commitImportBatch(5, {
         resolved: [
-          { recognizedItemId: 1, platformId: 3, edition: 'GOTY', candidate },
+          {
+            recognizedItemId: 1,
+            platformId: 3,
+            platformUnverified: false,
+            edition: 'GOTY',
+            candidate,
+          },
         ],
         unrecognized: [],
         transient: [],
@@ -1617,7 +1668,13 @@ describe('ImportJobsService (unit)', () => {
       await expect(
         service.commitImportBatch(5, {
           resolved: [
-            { recognizedItemId: 1, platformId: 3, edition: null, candidate },
+            {
+              recognizedItemId: 1,
+              platformId: 3,
+              platformUnverified: false,
+              edition: null,
+              candidate,
+            },
           ],
           unrecognized: [],
           transient: [],
@@ -1631,7 +1688,13 @@ describe('ImportJobsService (unit)', () => {
       await expect(
         service.commitImportBatch(5, {
           resolved: [
-            { recognizedItemId: 1, platformId: 3, edition: null, candidate },
+            {
+              recognizedItemId: 1,
+              platformId: 3,
+              platformUnverified: false,
+              edition: null,
+              candidate,
+            },
           ],
           unrecognized: [],
           transient: [],
@@ -1695,6 +1758,58 @@ describe('ImportJobsService (unit)', () => {
       ).rejects.toThrow('already resolved');
 
       expect(mock.unrecognizedItem.create).not.toHaveBeenCalled();
+    });
+
+    it('sets platformUnverified true on a created game when the platform came from the catalog fallback', async () => {
+      enrichment.enrichCandidate.mockResolvedValue(enriched);
+      mock.game.create.mockResolvedValue({ id: 42 });
+      mock.recognizedItem.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.commitImportBatch(5, {
+        resolved: [
+          {
+            recognizedItemId: 1,
+            platformId: 3,
+            platformUnverified: true,
+            edition: 'GOTY',
+            candidate,
+          },
+        ],
+        unrecognized: [],
+        transient: [],
+      });
+
+      expect(mock.game.create).toHaveBeenCalledWith({
+        data: { ...enriched, platformUnverified: true, images: { create: [] } },
+      });
+    });
+
+    it('keeps platformUnverified false on a created game when the platform came from the photo', async () => {
+      enrichment.enrichCandidate.mockResolvedValue(enriched);
+      mock.game.create.mockResolvedValue({ id: 42 });
+      mock.recognizedItem.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.commitImportBatch(5, {
+        resolved: [
+          {
+            recognizedItemId: 1,
+            platformId: 3,
+            platformUnverified: false,
+            edition: 'GOTY',
+            candidate,
+          },
+        ],
+        unrecognized: [],
+        transient: [],
+      });
+
+      expect(mock.game.create).toHaveBeenCalledWith({
+        data: {
+          ...enriched,
+          platformUnverified: false,
+          images: { create: [] },
+        },
+      });
     });
   });
 

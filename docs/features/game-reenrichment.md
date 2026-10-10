@@ -4,7 +4,7 @@ title: Game Re-enrichment
 description: POST /games/:id/enrich searches the catalog through the IGDB-first search seam (ranked list, best first, up to 10; MobyGames only when IGDB returns no candidates) against a game's current title, and applies any picked candidate's fresh metadata in place without duplicating the record or overwriting protected/hand-edited fields.
 tags: [api, enrichment, catalog, covers, provenance]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-10T12:00:00Z }
+generated: { by: opencode/home-model, at: 2026-10-10T19:55:01Z }
 ---
 
 # Overview
@@ -152,9 +152,13 @@ re-enrichment never touches them.
 `Game.platformUnverified` (boolean, default `false`) marks a game whose platform
 could not be confidently confirmed. This ticket adds the column and its
 **clearing** behavior (a `PATCH` that sets `platformId`, and a successful
-re-enrichment). Nothing in the current codebase ever sets it `true`: the import
-pipeline rejects an unresolvable platform and creates no `Game`. Setting it is
-out of scope.
+re-enrichment). The photo-import **create path** now sets it `true` when the
+platform was chosen by the catalog fallback (`resolvePlatformId` provenance
+`'catalog'` — the photo gave no usable platform) and `false` when it came from
+the photo (provenance `'photo'`). The import pipeline still rejects a title with
+_no usable platform name at all_ (`platform_not_in_catalog`) and creates no
+`Game` in that case. This doc's clearing behavior (a `PATCH` that sets
+`platformId`, and a successful re-enrichment) is unchanged.
 
 # Data model
 
@@ -199,7 +203,6 @@ import create-path now writes it too (additive). `rawMetadata` remains archival.
 
 # Out of scope
 
-- Setting `platformUnverified = true` (only the clearing behavior is added).
 - Clearing provenance (`userEditedFields` is only ever unioned).
 - Frontend presentation of the search/pick flow lives in the
   [Game Detail View](/game-detail.md) doc (`ReEnrichControl`).

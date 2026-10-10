@@ -4,7 +4,7 @@ title: Photo Import Pipeline
 description: The BullMQ worker's per-photo pipeline — one vision call, external validation, per-batch MySQL transactions, retry-only-unresolved, and photo deletion after completion.
 tags: [import, worker, bullmq, igdb, vision]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-09T21:05:43Z }
+generated: { by: opencode/home-model, at: 2026-10-10T19:55:01Z }
 ---
 
 # Overview
@@ -252,6 +252,8 @@ with the stable reason token `platform_not_in_catalog` (exported as
 all. Residual limitation: if the canonical PC row is absent, different banner
 spellings (`PC DVD ROM` vs `PC CD ROM`) are not collapsed against each other and
 can each create a flagged `addedByImport` row, reconciled later by review/merge.
+
+`resolvePlatformId` now returns `{ platformId, provenance }` instead of a bare id, where `provenance` is `'photo'` when the platform was read off the physical item (matched, or created from the photo string) and `'catalog'` when it was inferred from the candidate's own platform list because the photo gave no usable platform. The commit path writes `Game.platformUnverified = true` exactly for the `'catalog'` case and `false` for `'photo'`, so a platform that was a silent guess from the external catalog (e.g. a game whose `raw_platform` was NULL and whose first IGDB platform is PlayStation 4) is surfaced by the existing danger chip on the game detail page rather than appearing confirmed. The `platform_not_in_catalog` unrecognized path (no usable name at all) still creates no `Game`, and the flag is still cleared by a `PATCH` that sets `platformId` and by a successful re-enrichment (see [Game Re-enrichment](/game-reenrichment.md)).
 
 Trade-off: an import-created platform is committed immediately during
 resolution, outside the batch transaction, so a batch that later fails can
