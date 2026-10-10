@@ -10,6 +10,7 @@ import {
   ACCEPT_ATTR,
   buildDeclaredCounts,
   declaredCountError,
+  extractImageFiles,
   formatBytes,
   MAX_PHOTO_BYTES,
   normalizeRasterMime,
@@ -103,6 +104,7 @@ export function PhotoImportForm({
   const urlsRef = useRef<Set<string>>(new Set());
   const removedRef = useRef<Set<string>>(new Set());
   const mountedRef = useRef(true);
+  const pasteRef = useRef<(event: ClipboardEvent) => void>(() => undefined);
 
   // Revoke every object URL when the screen unmounts.
   useEffect(() => {
@@ -123,6 +125,20 @@ export function PhotoImportForm({
     } catch {
       // Storage can be unavailable (private mode); the link just stays hidden.
     }
+  }, []);
+
+  // Paste support: one document-level listener for the page's lifetime, so a
+  // pasted image is accepted anywhere on the page, not just over the dropzone.
+  // It dispatches through `pasteRef` so it always sees the current `enabled`,
+  // `submitting` and `addFiles` without re-subscribing on every render.
+  useEffect(() => {
+    const handlePaste = (event: ClipboardEvent): void => {
+      pasteRef.current(event);
+    };
+    document.addEventListener('paste', handlePaste);
+    return () => {
+      document.removeEventListener('paste', handlePaste);
+    };
   }, []);
 
   const enabled = readiness.state === 'enabled';
@@ -245,6 +261,18 @@ export function PhotoImportForm({
       });
     }
   }
+
+  // Latest closure for the document-level paste listener. Image-only: a
+  // clipboard without image files (plain text) is left to the focused input.
+  pasteRef.current = (event: ClipboardEvent) => {
+    if (!enabled || submitting) return;
+    const clipboardData = event.clipboardData;
+    if (clipboardData === null) return;
+    const files = extractImageFiles(clipboardData);
+    if (files.length === 0) return;
+    event.preventDefault();
+    addFiles(files);
+  };
 
   function removePhoto(id: string): void {
     removedRef.current.add(id);

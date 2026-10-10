@@ -1,16 +1,16 @@
 ---
 type: Feature
 title: Photo Import Upload UI
-description: The authenticated /import screen — a drag-and-drop multi-photo picker with thumbnails, optional per-photo game counts, client-side validation, in-browser HEIC→JPEG conversion, an LLM-readiness gate, and an upload that navigates to the batch progress view.
+description: The authenticated /import screen — a drag-and-drop, browse, or paste multi-photo picker with thumbnails, optional per-photo game counts, client-side validation, in-browser HEIC→JPEG conversion, an LLM-readiness gate, and an upload that navigates to the batch progress view.
 tags: [web, import, ui, heic]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T02:01:27Z }
+generated: { by: opencode/home-model, at: 2026-10-10T21:00:25Z }
 ---
 
 # Overview
 
 `/import` is the entry point for turning photos of a physical shelf into catalog
-rows. One screen collects many photos (drag & drop or browse), previews each one
+rows. One screen collects many photos (drag & drop, browse, or paste), previews each one
 locally before anything leaves the browser, lets the user optionally declare how
 many games a photo contains, converts iPhone HEIC files to JPEG in the browser,
 enforces the same limits the API enforces, and submits the batch to
@@ -40,6 +40,12 @@ a future test runner can cover them).
   **or** MIME, never MIME alone — an iPhone photo can arrive with an empty
   `File.type`, so `.heic`/`.heif` decides. `ACCEPT_ATTR` lists both MIME types
   and extensions.
+- **Paste.** A `document`-level `paste` listener (registered once in
+  `PhotoImportForm`) extracts image files from the event's `clipboardData`
+  via `extractImageFiles` (pure helper in `selection.ts`) and feeds them to
+  the same `addFiles` intake as drop and browse, so validation, HEIC
+  conversion, previews and limits all apply. A clipboard without image files
+  is ignored, so pasting text into the count fields is unaffected.
 - **Count.** At most **50** photos per batch (`MAX_PHOTOS`).
 - **Size.** At most **20 MB** per photo (`MAX_PHOTO_BYTES`).
 - **No silent drops.** Over-limit or unsupported files are removed from the
@@ -144,6 +150,12 @@ npm run dev               # API :3001, web :3000
    optional count field.
 5. **Drag & drop.** Drop the same set onto the dropzone. Expect the same
    thumbnails; the highlight appears on `dragover`.
+   5b. **Paste.** Copy a screenshot (or an image file in Finder/Explorer) and
+   press ⌘V / Ctrl+V anywhere on the page — including with a count field
+   focused. Expect the photo to appear with a thumbnail, exactly like a
+   drop. Paste plain text into a count field — expect normal text pasting
+   and no photo added. With the gate disabled, pasting an image adds
+   nothing.
 6. **Remove.** Remove one photo. Expect it to disappear and the ready count to
    drop; its object URL is revoked.
 7. **Optional count.** Leave all counts blank and upload — expect `202` and
@@ -181,4 +193,4 @@ npm run dev               # API :3001, web :3000
 - A privacy statement distinguishing a local vs remote LLM endpoint.
 - Server-side HEIC decoding, image downscaling, and raster EXIF-orientation
   normalization.
-- A frontend unit/integration test runner (the pure helpers are ready for one).
+- A browser-level (Playwright/Cypress) test runner — pure helpers are covered by `node --test` (`apps/web/test/`).

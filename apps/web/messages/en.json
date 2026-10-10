@@ -351,7 +351,7 @@
     "addByHand": "Add a game by hand",
     "openSettings": "Open settings",
     "providerNotice": "Photos are sent to your configured LLM ({provider}).",
-    "dropzone": "Drop shelf photos here, or browse.",
+    "dropzone": "Drop shelf photos here, browse, or paste (⌘V).",
     "dropzoneHint": "JPEG, PNG, WebP or HEIC. Up to 20 MB each, up to 50 photos.",
     "rejections": {
       "title": "Some photos were not added.",
