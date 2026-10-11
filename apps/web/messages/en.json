@@ -216,6 +216,11 @@
       "recordId": "Record ID"
     },
     "summary": "Description",
+    "tabs": {
+      "label": "Game sections",
+      "about": "About",
+      "media": "Media"
+    },
     "notSet": "Not set",
     "handEdited": "hand-edited",
     "never": "Never",

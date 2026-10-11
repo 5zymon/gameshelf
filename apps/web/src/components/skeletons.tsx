@@ -100,6 +100,17 @@ export async function GameDetailSkeleton(): Promise<React.ReactElement> {
           </div>
 
           <div className="min-w-0 space-y-6">
+            <div className="flex flex-wrap items-center gap-3">
+              <SkeletonBlock className="h-9 w-32 rounded-control border border-edge" />
+              <SkeletonBlock className="h-9 w-40 rounded-control border border-edge" />
+              <SkeletonBlock className="ml-auto h-9 w-32 rounded-control border border-edge" />
+            </div>
+
+            <div className="flex gap-6 border-b border-edge pb-2.5">
+              <SkeletonBlock className="h-4 w-14" />
+              <SkeletonBlock className="h-4 w-14" />
+            </div>
+
             <dl className="grid gap-x-8 sm:grid-cols-2">
               {Array.from({ length: 6 }, (_, i) => (
                 <div
@@ -111,12 +122,6 @@ export async function GameDetailSkeleton(): Promise<React.ReactElement> {
                 </div>
               ))}
             </dl>
-
-            <div className="flex flex-wrap items-center gap-3">
-              <SkeletonBlock className="h-9 w-32 rounded-control border border-edge" />
-              <SkeletonBlock className="h-9 w-40 rounded-control border border-edge" />
-              <SkeletonBlock className="ml-auto h-9 w-32 rounded-control border border-edge" />
-            </div>
           </div>
         </div>
       </article>
