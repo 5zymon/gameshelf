@@ -49,6 +49,7 @@ registerHooks({
 
 const {
   isYoutubeVideoId,
+  isYoutubePlaceholder,
   youtubeEmbedUrl,
   youtubeThumbnailUrl,
   playableVideos,
@@ -115,4 +116,19 @@ test('playableVideos: keeps valid ids in order and drops the rest', () => {
     { videoId: 'dQw4w9WgXcQ', name: 'Trailer' },
     { videoId: 'M7lc1UVf-VE', name: 'Gameplay' },
   ]);
+});
+
+test('isYoutubePlaceholder: flags the 120x90 "no thumbnail" image', () => {
+  // A missing maxresdefault is served as a 404 whose body is a 120x90 JPEG.
+  assert.equal(isYoutubePlaceholder(120, 90), true);
+  // Defensive: anything at or below that size is treated as the placeholder.
+  assert.equal(isYoutubePlaceholder(0, 0), true);
+  assert.equal(isYoutubePlaceholder(100, 75), true);
+});
+
+test('isYoutubePlaceholder: leaves real thumbnails alone', () => {
+  // Real hqdefault is 480x360; real maxresdefault is ~1280x720.
+  assert.equal(isYoutubePlaceholder(480, 360), false);
+  assert.equal(isYoutubePlaceholder(1280, 720), false);
+  assert.equal(isYoutubePlaceholder(320, 180), false);
 });

@@ -21,9 +21,24 @@ export function youtubeEmbedUrl(
 }
 
 /**
+ * True when an image's intrinsic size is YouTube's "no thumbnail" placeholder.
+ *
+ * When a video has no `maxresdefault.jpg`, `i.ytimg.com` answers the request
+ * with HTTP 404 **and a decodable 120×90 JPEG body**, so the `<img>` fires
+ * `load` (not `error`) and a naive error-only fallback never runs. The
+ * placeholder is exactly 120×90; the real images we request are `hqdefault`
+ * (480×360) and `maxresdefault` (~1280×720), so `<= 120 × 90` cleanly separates
+ * the placeholder from any real poster with no false positives.
+ */
+export function isYoutubePlaceholder(width: number, height: number): boolean {
+  return width <= 120 && height <= 90;
+}
+
+/**
  * `https://i.ytimg.com/vi/<id>/maxresdefault.jpg` (`hqdefault.jpg` for the `hq`
  * quality); `null` for an invalid id. `maxresdefault` does not exist for every
- * video, so callers should fall back to `hq` on an image load error.
+ * video, so callers should fall back to `hq` on an image load error — or when
+ * the loaded image is the placeholder (see {@link isYoutubePlaceholder}).
  */
 export function youtubeThumbnailUrl(
   videoId: string,

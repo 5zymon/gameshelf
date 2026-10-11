@@ -4,6 +4,7 @@ import { useTranslations } from 'next-intl';
 import { useId, useState } from 'react';
 import type { GameVideo } from '@/lib/api';
 import {
+  isYoutubePlaceholder,
   playableVideos,
   youtubeEmbedUrl,
   youtubeThumbnailUrl,
@@ -119,12 +120,17 @@ interface VideoFacadeProps {
 
 /**
  * Click-to-play facade over the video's YouTube thumbnail. `maxresdefault.jpg`
- * is absent for some videos, so a failed load falls back once to `hqdefault.jpg`
- * (guarded so a second failure hides the `<img>` instead of looping); the
- * frame's surface background then shows through. A dark scrim darkens the
- * whole frame, and the glyph and label each carry their own guaranteed dark
- * backing (a disc and a pill) so they stay legible over any thumbnail — or over
- * the near-white surface when the thumbnail is hidden — in both themes.
+ * is absent for some videos, and `i.ytimg.com` answers that absence with a 404
+ * **plus a decodable 120×90 placeholder JPEG** — so the `<img>` fires `load`,
+ * not `error`, and an error-only fallback would leave the grey placeholder
+ * stretched over the frame. The facade therefore falls back once to
+ * `hqdefault.jpg` when the image either errors *or* loads at the placeholder's
+ * intrinsic size (`isYoutubePlaceholder`); a second error/placeholder hides the
+ * `<img>` instead of looping, and the frame's surface background shows through.
+ * A dark scrim darkens the whole frame, and the glyph and label each carry
+ * their own guaranteed dark backing (a disc and a pill) so they stay legible
+ * over any thumbnail — or over the near-white surface when the thumbnail is
+ * hidden — in both themes.
  */
 function VideoFacade({
   videoId,
@@ -134,6 +140,12 @@ function VideoFacade({
   const [quality, setQuality] = useState<'max' | 'hq'>('max');
   const [failed, setFailed] = useState(false);
   const src = youtubeThumbnailUrl(videoId, quality);
+
+  // One-shot fallback: maxresdefault -> hqdefault -> hidden.
+  const fallback = (): void => {
+    if (quality === 'max') setQuality('hq');
+    else setFailed(true);
+  };
 
   return (
     <button
@@ -149,10 +161,13 @@ function VideoFacade({
           aria-hidden="true"
           decoding="async"
           referrerPolicy="no-referrer"
-          onError={() => {
-            if (quality === 'max') setQuality('hq');
-            else setFailed(true);
+          onLoad={(event) => {
+            // A missing maxres is served as a 404 *with* a 120×90 body, so it
+            // loads successfully; detect it by intrinsic size, not by error.
+            const { naturalWidth, naturalHeight } = event.currentTarget;
+            if (isYoutubePlaceholder(naturalWidth, naturalHeight)) fallback();
           }}
+          onError={fallback}
           className="absolute inset-0 h-full w-full object-cover"
         />
       )}
