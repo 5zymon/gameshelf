@@ -112,10 +112,10 @@ never fired and then retried on 429. The limiter cancels its pending wake-up on
 `OnModuleDestroy`.
 
 Consequence: a fallback-heavy import that must wait for the hourly budget can
-exceed the per-job timeout (`IMPORT_JOB_TIMEOUT_MS = 300 s`). With
+exceed the per-job timeout (`IMPORT_JOB_TIMEOUT_MS = 420 s`). With
 `IMPORT_MAX_ATTEMPTS = 3` and the BullMQ exponential backoff (base
-`IMPORT_RETRY_BACKOFF_MS = 5 s`), the total retry horizon is only ~15 minutes
-(≈ 3 × 300 s job time plus the 5 s/10 s backoffs), while a saturated 720 req/h
+`IMPORT_RETRY_BACKOFF_MS = 5 s`), the total retry horizon is only ~21 minutes
+(≈ 3 × 420 s job time plus the 5 s/10 s backoffs), while a saturated 720 req/h
 budget can make the limiter wait up to ~1 hour for a slot. Under sustained
 saturation a job can therefore exhaust all attempts and terminate as a
 **permanently `failed`** job — not merely "retried later". The budget itself is

@@ -32,31 +32,31 @@ export const IMPORT_QUEUE_STATE_TIMEOUT_MS = 2_000;
 
 /**
  * Hard ceiling on one photo-import job (ticket 3.7): one vision call
- * (`VISION_REQUEST_TIMEOUT_MS = 30 s`) plus the per-title IGDB lookups. Since
+ * (`VISION_REQUEST_TIMEOUT_MS = 120 s`) plus the per-title IGDB lookups. Since
  * ticket 4.1 those lookups go through one central rate limiter (4 req/s, 8
  * concurrent), which paces requests beyond the window (≈250 ms each in the
  * worst case), and each request has an `IGDB_REQUEST_TIMEOUT_MS` (5 s) ceiling. IGDB 429s are retried
  * internally up to `IGDB_MAX_ATTEMPTS = 3` with exponential backoff (base
  * 500 ms, cap 5 s), while timeouts/5xx/network failures remain BullMQ's
  * responsibility. A realistic shelf (≤ ~50 titles) worst-cases at
- * ~30 s + 50 × (5 s + 250 ms limiter pacing) ≈ 295 s; 300 s bounds it with
+ * ~120 s + 50 × (5 s + 250 ms limiter pacing) ≈ 383 s; 420 s bounds it with
  * headroom. A job that exceeds this is treated as transient and retried.
  */
-export const IMPORT_JOB_TIMEOUT_MS = 300_000;
+export const IMPORT_JOB_TIMEOUT_MS = 420_000;
 
 /**
  * BullMQ lock lifetime for one photo-import job (ticket 3.7). MUST exceed
  * `IMPORT_JOB_TIMEOUT_MS`: a lock shorter than the job would let a second
  * worker pick the job up while the first still runs (duplicate processing).
- * 360 s > the 300 s timeout.
+ * 480 s > the 420 s timeout.
  */
-export const IMPORT_JOB_LOCK_DURATION_MS = 360_000;
+export const IMPORT_JOB_LOCK_DURATION_MS = 480_000;
 
 /**
  * How often the live worker renews its lock. Default is half the lock
- * duration; kept explicit (180 s) and asserted `< lockDuration`.
+ * duration; kept explicit (240 s) and asserted `< lockDuration`.
  */
-export const IMPORT_JOB_LOCK_RENEW_TIME_MS = 180_000;
+export const IMPORT_JOB_LOCK_RENEW_TIME_MS = 240_000;
 
 /** How often the worker checks for stalled (lock-expired) jobs. */
 export const IMPORT_JOB_STALLED_INTERVAL_MS = 30_000;

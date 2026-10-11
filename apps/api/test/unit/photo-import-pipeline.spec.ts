@@ -816,6 +816,47 @@ describe('PhotoImportPipelineService (unit)', () => {
       maxAttempts: 3,
     });
     expect(entry?.durationMs).toEqual(expect.any(Number));
+    expect(entry?.visionDurationMs).toEqual(expect.any(Number));
+    log.mockRestore();
+  });
+
+  it('logs the vision call duration even when the vision call throws', async () => {
+    const h = createHarness();
+    h.vision.recognize.mockRejectedValue(new VisionProviderError('timeout'));
+    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+
+    await expect(h.pipeline.run(makeJob(2, 3))).rejects.toThrow(
+      VisionProviderError,
+    );
+
+    const entry = warn.mock.calls
+      .map((call) => parseOutcomeLine(call[0]))
+      .find((parsed) => parsed !== undefined);
+    expect(entry).toMatchObject({
+      event: 'photo_import_job',
+      outcome: 'failed',
+    });
+    expect(entry?.visionDurationMs).toEqual(expect.any(Number));
+    warn.mockRestore();
+  });
+
+  it('omits the vision duration when the attempt made no vision call', async () => {
+    const h = createHarness();
+    // The marker is already set (a retry), so no vision call runs this attempt.
+    h.state.visionCompletedAt = new Date();
+    const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
+
+    await h.pipeline.run(makeJob());
+
+    const entry = log.mock.calls
+      .map((call) => parseOutcomeLine(call[0]))
+      .find((parsed) => parsed !== undefined);
+    expect(entry).toMatchObject({
+      event: 'photo_import_job',
+      outcome: 'needs_attention',
+    });
+    expect(entry).not.toHaveProperty('visionDurationMs');
+    expect(h.vision.recognize).not.toHaveBeenCalled();
     log.mockRestore();
   });
 

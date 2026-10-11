@@ -77,7 +77,7 @@ catch error:
 finally:
   log one JSON line: formatImportJobOutcome(
       { jobId, importJobId, photoRef, outcome, ...counts,
-        durationMs, attempt, maxAttempts [, error] })
+        durationMs, visionDurationMs, attempt, maxAttempts [, error] })
 ```
 
 Key properties:
@@ -92,7 +92,7 @@ Key properties:
   `/api/covers/<file>` path. A failed download leaves `coverUrl` null without
   failing the item. See [Game Metadata Enrichment](/game-metadata-enrichment.md).
 - **Per-job timeout + cancellation.** The whole unit of work (`processJob`)
-  runs under `withJobTimeout` (`IMPORT_JOB_TIMEOUT_MS = 300 s`). A job that
+  runs under `withJobTimeout` (`IMPORT_JOB_TIMEOUT_MS = 420 s`). A job that
   exceeds it rejects with `RetryableImportError`, so it fails cleanly and is
   retried, and the last attempt marks it `failed`. The timeout also **aborts**
   an `AbortController` threaded through `processJob` → `processBatches` →
@@ -104,13 +104,13 @@ Key properties:
   `markFailed` or collide with the retry. The terminal transitions
   (`markCompleted`/`markFailed`) only update a row that is still `queued` or
   `processing`, so a late writer can never clobber a newer terminal status.
-- **Timeout headroom (title ceiling).** The 300 s budget is sized for a shelf
-  of up to ~50 titles: one vision call (`VISION_REQUEST_TIMEOUT_MS = 30 s`)
+- **Timeout headroom (title ceiling).** The 420 s budget is sized for a shelf
+  of up to ~50 titles: one vision call (`VISION_REQUEST_TIMEOUT_MS = 120 s`)
   plus ~50 sequential IGDB lookups paced by the central rate limiter
   ([IGDB Client & Rate Limiter](/igdb-client.md), 4 req/s, 8 concurrent, so a
   single sequential path waits ~250 ms per request) with up to
   `IGDB_REQUEST_TIMEOUT_MS = 5 s` each, worst-casing at
-  ≈ 30 s + 50 × 5.25 s ≈ 295 s. (Upstream `429`s are retried inside the client,
+  ≈ 120 s + 50 × 5.25 s ≈ 383 s. (Upstream `429`s are retried inside the client,
   bounded and small relative to the budget.) A photo recognized with
   substantially more than ~50 titles can exceed the timeout; it is retried, and
   on the last attempt marked `failed` with the partial counters.
@@ -286,9 +286,9 @@ Job defaults come from the registered queue's `defaultJobOptions`
 | Concurrency            | 1 (ADR-002)           | `PHOTO_IMPORT_CONCURRENCY`       |
 | Attempts               | 3 total               | `IMPORT_MAX_ATTEMPTS`            |
 | Backoff                | exponential, base 5 s | `IMPORT_RETRY_BACKOFF_MS`        |
-| Per-job timeout        | 300 s                 | `IMPORT_JOB_TIMEOUT_MS`          |
-| Lock duration          | 360 s (> timeout)     | `IMPORT_JOB_LOCK_DURATION_MS`    |
-| Lock renew time        | 180 s                 | `IMPORT_JOB_LOCK_RENEW_TIME_MS`  |
+| Per-job timeout        | 420 s                 | `IMPORT_JOB_TIMEOUT_MS`          |
+| Lock duration          | 480 s (> timeout)     | `IMPORT_JOB_LOCK_DURATION_MS`    |
+| Lock renew time        | 240 s                 | `IMPORT_JOB_LOCK_RENEW_TIME_MS`  |
 | Stalled-check interval | 30 s                  | `IMPORT_JOB_STALLED_INTERVAL_MS` |
 | Max stalled recoveries | 2                     | `IMPORT_JOB_MAX_STALLED_COUNT`   |
 
@@ -338,6 +338,7 @@ for `failed` / `retry_scheduled`), produced by the pure
   "importedCount": 12,
   "unrecognizedCount": 0,
   "durationMs": 8421,
+  "visionDurationMs": 7980,
   "attempt": 1,
   "maxAttempts": 3
 }
@@ -345,9 +346,12 @@ for `failed` / `retry_scheduled`), produced by the pure
 
 Fields: `jobId`, `importJobId`, `photoRef`, `outcome`
 (`done` | `needs_attention` | `already_terminal` | `retry_scheduled` | `failed`),
-the three counts, `durationMs`, `attempt`, `maxAttempts`, and `error` on a
-failure/retry. The worker's own `onFailed` handler still logs the error stack for
-a failed job.
+the three counts, `durationMs` (whole attempt), `visionDurationMs` (wall time of
+the single vision call this attempt made — present even when the call threw, so a
+`timeout` shows how long the provider actually ran; omitted when the attempt made
+no vision call because the `vision_completed_at` marker already existed),
+`attempt`, `maxAttempts`, and `error` on a failure/retry. The worker's own
+`onFailed` handler still logs the error stack for a failed job.
 
 # Out of scope
 

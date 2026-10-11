@@ -15,8 +15,12 @@ export type VisionProviderId = (typeof SUPPORTED_PROVIDER_IDS)[number];
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
 export const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
 
-/** Hard ceiling on one provider HTTP call. */
-export const VISION_REQUEST_TIMEOUT_MS = 30_000;
+/**
+ * Hard ceiling on one provider HTTP call. 120 s (was 30 s) leaves room for a
+ * self-hosted gateway (e.g. LiteLLM) that can take longer than 30 s on a
+ * vision request; `IMPORT_JOB_TIMEOUT_MS` is sized to leave room for it.
+ */
+export const VISION_REQUEST_TIMEOUT_MS = 120_000;
 
 /**
  * The env var a provider reads its key from when no encrypted DB key is set.

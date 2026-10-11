@@ -58,9 +58,24 @@ export interface PhotoImportOutcomeLog {
   importedCount: number;
   unrecognizedCount: number;
   durationMs: number;
+  /**
+   * Wall time of the single vision call this attempt made, recorded even when
+   * the call throws (e.g. its own `timeout`). Omitted when no vision call ran
+   * in this attempt (a retry that reuses `visionCompletedAt`).
+   */
+  visionDurationMs?: number;
   attempt: number;
   maxAttempts: number;
   error?: string;
+}
+
+/**
+ * Per-attempt timings collected while the job runs, so the terminal log line
+ * can separate the vision call from the whole job. `visionDurationMs` stays
+ * unset when the attempt made no vision call (the marker already existed).
+ */
+interface PipelineTimings {
+  visionDurationMs?: number;
 }
 
 /** Serializes the per-job outcome to one JSON log line (pure; unit-tested). */
@@ -117,6 +132,7 @@ export class PhotoImportPipelineService {
     let outcome: PhotoImportOutcome = 'failed';
     let counts: JobCompletionResult = EMPTY_COUNTS;
     let errorMessage: string | undefined;
+    const timings: PipelineTimings = {};
     try {
       const jobId =
         importJobId ?? (await this.jobs.findJobIdByPhotoRef(job.data.photoRef));
@@ -138,7 +154,7 @@ export class PhotoImportPipelineService {
       const controller = new AbortController();
       try {
         const completed = await this.withJobTimeout(controller, () =>
-          this.processJob(jobId, state, controller.signal),
+          this.processJob(jobId, state, controller.signal, timings),
         );
         counts = completed.result;
         outcome = completed.status === 'done' ? 'done' : 'needs_attention';
@@ -185,6 +201,7 @@ export class PhotoImportPipelineService {
         outcome,
         ...counts,
         durationMs: Date.now() - startedAt,
+        visionDurationMs: timings.visionDurationMs,
         attempt: job.attemptsMade + 1,
         maxAttempts: job.opts.attempts ?? 1,
         error: errorMessage,
@@ -196,15 +213,23 @@ export class PhotoImportPipelineService {
   private async recognizeOnce(
     jobId: number,
     state: PipelineJobState,
+    timings: PipelineTimings,
   ): Promise<void> {
     if (state.photoRef === null) {
       throw new RetryableImportError('Import job has no photo to process');
     }
     const { buffer, mimeType } = await this.storage.read(state.photoRef);
-    const recognition = await this.vision.recognize({
-      image: buffer,
-      mimeType,
-    });
+    const visionStartedAt = Date.now();
+    // `.finally` records the wall time whether the provider answers or throws
+    // (its own timeout/network error), which is exactly the case worth seeing.
+    const recognition = await this.vision
+      .recognize({
+        image: buffer,
+        mimeType,
+      })
+      .finally(() => {
+        timings.visionDurationMs = Date.now() - visionStartedAt;
+      });
     const items = recognition.items.filter(
       (item) => item.confidence >= IMPORT_MIN_CONFIDENCE,
     );
@@ -313,10 +338,11 @@ export class PhotoImportPipelineService {
     jobId: number,
     state: PipelineJobState,
     signal: AbortSignal,
+    timings: PipelineTimings,
   ): Promise<{ result: PhotoImportJobResult; status: string }> {
     this.throwIfAborted(signal);
     if (state.visionCompletedAt === null) {
-      await this.recognizeOnce(jobId, state);
+      await this.recognizeOnce(jobId, state, timings);
     }
     const transient = await this.processBatches(jobId, signal);
     if (transient) {
