@@ -112,24 +112,34 @@ candidate into a `Prisma.GameUpdateInput`, or `null` when nothing changes:
 
 1. `title`, `platformId`, and `edition` are **never emitted**. Re-enrichment
    cannot rename a game or move it to another platform/edition.
-2. `releaseYear`, `publisher`, `genre`, `playerCount`: written only when the
-   candidate provides a **non-null** value, the value differs, and the field is
-   not hand-edited. A null candidate field leaves the existing value intact.
-3. `coverUrl`: same rule (`/api/covers/<file>` via the shared cover cache). A
-   candidate without a cover never clears an existing one. `sourceCoverUrl`
-   (the external link, internal) is written when it differs too — even when the
-   download failed — so the background sweep / `covers:redownload` can retry it
-   ([Local Cover Cache](/local-cover-cache.md)).
-4. `source` and `externalId` are written when they differ — this is what turns
+2. `releaseYear`, `publisher`, `genre`, `playerCount`, `summary`: written only
+   when the candidate provides a **non-null** value, the value differs, and the
+   field is not hand-edited. A null candidate field leaves the existing value
+   intact. (`summary` is the new hand-editable, provenance-tracked description;
+   see [Game Summary, Rating & YouTube Videos](/game-summary-rating-videos.md).)
+3. `rating` and `ratingCount`: written when the candidate provides a non-null
+   value that differs. They are **source-derived only** (not hand-editable), so
+   they are refreshed even for a hand-edited summary, and an unrated candidate
+   never wipes a stored rating.
+4. `videos`: replaced (`deleteMany` + ordered `create`) only when the candidate
+   supplies a **non-empty** list whose ordered `videoId`+`name` pairs differ
+   (`sameOrderedVideos`). An empty candidate list never wipes the stored videos,
+   and an identical list writes nothing.
+5. `coverUrl`: same rule as item 2 (`/api/covers/<file>` via the shared cover
+   cache). A candidate without a cover never clears an existing one.
+   `sourceCoverUrl` (the external link, internal) is written when it differs too
+   — even when the download failed — so the background sweep /
+   `covers:redownload` can retry it ([Local Cover Cache](/local-cover-cache.md)).
+6. `source` and `externalId` are written when they differ — this is what turns
    an unlinked `MANUAL` game into a linked one.
-5. `platformUnverified` is set to `false` when it was `true`.
-6. `igdbSlug` is written when it differs from the candidate's IGDB `slug`
+7. `platformUnverified` is set to `false` when it was `true`.
+8. `igdbSlug` is written when it differs from the candidate's IGDB `slug`
    (`Game.igdbSlug`, nullable). It is internal: it never appears in a response
    body, and the API derives `igdbUrl` from it (`igdbUrlFor` in
    `apps/api/src/games/game-detail.mapper.ts`); the detail view only renders the
    returned `igdbUrl`. Games enriched before
    the slug was stored keep `igdbSlug = NULL` (no backfill) until re-enriched.
-7. When nothing above changes → `null` (no write at all). `rawMetadata` and
+9. When nothing above changes → `null` (no write at all). `rawMetadata` and
    `enrichedAt` accompany a real change only, which makes a second identical
    apply byte-identical (record idempotency: `updatedAt`/`enrichedAt`/cover all
    unchanged).
@@ -141,9 +151,10 @@ Unlike the import create-path — where a missing source field is correctly
 
 `Game.userEditedFields` is a JSON array of hand-edited tracked metadata field
 names (never queried, stored as text in `VarChar(255)`). The tracked set is
-`releaseYear`, `publisher`, `genre`, `playerCount`, `coverUrl`
+`releaseYear`, `publisher`, `genre`, `playerCount`, `coverUrl`, `summary`
 (`TRACKED_METADATA_FIELDS`); `title`/`platformId`/`edition` need no marker because
-re-enrichment never touches them.
+re-enrichment never touches them, and `rating`/`ratingCount`/`videos` are
+source-derived only.
 
 - `POST /games` and `PATCH /games/:id` mark every tracked field present in the
   request (explicit `null` counts as an edit) via `mergeEditedFields` /
@@ -184,10 +195,12 @@ import create-path now writes it too (additive). `rawMetadata` remains archival.
 
 - `reenrichment.spec.ts` (unit): `buildReenrichmentUpdate` returns `null` when
   nothing changes; fills nulls but never nulls existing; respects hand-edited
-  fields; never emits `title`/`platformId`/`edition`; replaces/keeps/never
-  overwrites the cover; sets `source`+`externalId`; clears `platformUnverified`;
-  appends `rawMetadata`+`enrichedAt` only on a change; parse/serialize/merge
-  round-trips and tolerates `null`/garbage.
+  fields (including a hand-edited `summary`, while still refreshing the rating);
+  never emits `title`/`platformId`/`edition`; replaces/keeps/never overwrites the
+  cover; sets `source`+`externalId`; clears `platformUnverified`; refreshes
+  `rating`/`ratingCount` but never wipes them with `null`; replaces videos only
+  when the ordered id+name list differs; appends `rawMetadata`+`enrichedAt` only
+  on a change; parse/serialize/merge round-trips and tolerates `null`/garbage.
 - `games.service.spec.ts` (unit): the `enrich` describe covers search-matched
   (single **and** the full ranked multi-candidate list, order preserved),
   apply-matched (first **and** a non-first candidate), unrecognized,
@@ -203,7 +216,9 @@ import create-path now writes it too (additive). `rawMetadata` remains archival.
   persisted; still-unresolved leaves metadata intact; hand-edited publisher
   survives; a changed cover replaces the cached one and the replaced file is
   unlinked; a failed re-enrichment download does not clobber the existing cover;
-  `PATCH` and re-enrichment clear `platformUnverified`; an unlinked `MANUAL` game
+  applies the candidate's summary/rating/ratingCount/videos (videos in IGDB
+  order); keeps a hand-edited summary while refreshing the rating; `PATCH` and
+  re-enrichment clear `platformUnverified`; an unlinked `MANUAL` game
   becomes linked; a second identical apply writes nothing; and the
   404/400/503/409 error matrix.
 

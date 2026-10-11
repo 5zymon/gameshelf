@@ -2,10 +2,12 @@ import { Fragment } from 'react';
 import { getFormatter, getTranslations } from 'next-intl/server';
 import type { TranslatorFor } from '@/i18n/translate';
 import type { GameDetail, GamePlatform } from '@/lib/api';
+import { formatRating } from '@/lib/rating';
 import { DeleteGameButton } from './delete-game-button';
 import { GameCover } from './game-cover';
 import { GameGallery } from './game-gallery';
 import { GameEditForm } from './game-edit-form';
+import { GameVideos } from './game-videos';
 import { ReEnrichControl } from './re-enrich-control';
 
 function sourceLabel(
@@ -13,17 +15,6 @@ function sourceLabel(
   t: TranslatorFor<'gameDetail'>,
 ): string {
   return source === 'MANUAL' ? t('source.manual') : source;
-}
-
-/** Pretty-prints the archival `rawMetadata`; falls back to the raw text. */
-function prettyRaw(raw: string | null, t: TranslatorFor<'gameDetail'>): string {
-  if (raw === null) return t('noRawMetadata');
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return JSON.stringify(parsed, null, 2);
-  } catch {
-    return raw;
-  }
 }
 
 function Chip({
@@ -226,6 +217,12 @@ export async function GameDetailView({
                 handEdited={handEdited}
               />
               <DataRow
+                label={t('field.rating')}
+                value={formatRating(game.rating)}
+                notSet={notSet}
+                handEdited={handEdited}
+              />
+              <DataRow
                 label={t('field.copies')}
                 value={game.copyCount}
                 notSet={notSet}
@@ -270,6 +267,25 @@ export async function GameDetailView({
             </dl>
           </section>
 
+          {game.summary !== null && game.summary.trim() !== '' && (
+            <section aria-labelledby="summary-heading" className="space-y-2">
+              <h2
+                id="summary-heading"
+                className="text-lg font-semibold text-ink"
+              >
+                {t('summary')}
+                {edited.has('summary') && (
+                  <span className="ml-2 text-xs font-normal text-muted">
+                    {handEdited}
+                  </span>
+                )}
+              </h2>
+              <p className="max-w-prose text-sm leading-relaxed whitespace-pre-line text-ink">
+                {game.summary}
+              </p>
+            </section>
+          )}
+
           <div className="flex flex-wrap items-start gap-3">
             <GameEditForm game={game} platforms={platforms} />
             <ReEnrichControl gameId={game.id} title={game.title} />
@@ -277,18 +293,10 @@ export async function GameDetailView({
               <DeleteGameButton gameId={game.id} title={game.title} />
             </div>
           </div>
-
-          <details className="rounded-card border border-edge bg-surface">
-            <summary className="cursor-pointer px-4 py-3 text-sm text-muted select-none">
-              {t('rawMetadata')}
-            </summary>
-            <pre className="max-h-96 overflow-auto border-t border-edge px-4 py-3 font-mono text-xs break-words whitespace-pre-wrap text-muted">
-              {prettyRaw(game.rawMetadata, t)}
-            </pre>
-          </details>
         </div>
       </div>
 
+      <GameVideos title={game.title} videos={game.videos} />
       <GameGallery title={game.title} images={game.images} />
     </article>
   );

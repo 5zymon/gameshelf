@@ -213,6 +213,10 @@ describe('IgdbGameCatalogResolver (unit)', () => {
         platforms: [{ igdbId: 11, name: 'Xbox', abbreviation: 'XBOX' }],
         source: 'IGDB',
         slug: null,
+        summary: null,
+        rating: null,
+        ratingCount: null,
+        videos: [],
         raw: expect.anything() as unknown,
       },
     });
@@ -238,7 +242,116 @@ describe('IgdbGameCatalogResolver (unit)', () => {
       playerCount: 16,
       coverUrl: 'https://images.igdb.com/igdb/image/upload/t_1080p/co61gh.jpg',
       source: 'IGDB',
+      summary: expect.stringContaining('Halo') as string,
+      rating: 78.4,
+      ratingCount: 512,
+      videos: [
+        { videoId: 'AbCdEfGhIj0', name: 'Trailer' },
+        { videoId: 'Zyx_wvu-987', name: 'Gameplay' },
+      ],
     });
+  });
+
+  it('drops invalid video ids, dedupes, and keeps IGDB order', async () => {
+    const search = jest.fn<Promise<IgdbGame[]>, [string]>().mockResolvedValue([
+      game({
+        id: 3,
+        name: 'Halo',
+        videos: [
+          { id: 1, name: 'Bad', video_id: 'bad' },
+          { id: 2, name: 'Url', video_id: 'http://x/aaaaaaaaaaa' },
+          { id: 3, name: 'Missing' },
+          { id: 4, name: 'First', video_id: 'aaaaaaaaaaa' },
+          { id: 5, name: 'Dup', video_id: 'aaaaaaaaaaa' },
+          { id: 6, name: 'Second', video_id: 'bbbbbbbbbbb' },
+        ],
+      }),
+    ]);
+    const resolver = createResolver(search);
+
+    const result = await resolver.resolve(item('Halo'));
+
+    expect(result.kind).toBe('matched');
+    if (result.kind !== 'matched') return;
+    expect(result.candidate.videos).toEqual([
+      { videoId: 'aaaaaaaaaaa', name: 'First' },
+      { videoId: 'bbbbbbbbbbb', name: 'Second' },
+    ]);
+  });
+
+  it('leaves a missing or blank video name as null', async () => {
+    const search = jest.fn<Promise<IgdbGame[]>, [string]>().mockResolvedValue([
+      game({
+        id: 4,
+        name: 'Halo',
+        videos: [
+          { id: 1, video_id: 'aaaaaaaaaaa' },
+          { id: 2, name: '   ', video_id: 'bbbbbbbbbbb' },
+        ],
+      }),
+    ]);
+    const resolver = createResolver(search);
+
+    const result = await resolver.resolve(item('Halo'));
+
+    expect(result.kind).toBe('matched');
+    if (result.kind !== 'matched') return;
+    expect(result.candidate.videos).toEqual([
+      { videoId: 'aaaaaaaaaaa', name: null },
+      { videoId: 'bbbbbbbbbbb', name: null },
+    ]);
+  });
+
+  it('normalizes rating to null unless it is a finite 0–100 number', async () => {
+    const cases: [unknown, number | null][] = [
+      [101, null],
+      [-1, null],
+      [Number.NaN, null],
+      [undefined, null],
+      ['78', null],
+      [0, 0],
+      [100, 100],
+      [78.4, 78.4],
+    ];
+    for (const [rating, expected] of cases) {
+      const search = jest
+        .fn<Promise<IgdbGame[]>, [string]>()
+        .mockResolvedValue([
+          game({ id: 5, name: 'Halo', rating: rating as IgdbGame['rating'] }),
+        ]);
+      const resolver = createResolver(search);
+      const result = await resolver.resolve(item('Halo'));
+      expect(result.kind).toBe('matched');
+      if (result.kind !== 'matched') return;
+      expect(result.candidate.rating).toBe(expected);
+    }
+  });
+
+  it('turns a blank summary into null', async () => {
+    const search = jest
+      .fn<Promise<IgdbGame[]>, [string]>()
+      .mockResolvedValue([game({ id: 6, name: 'Halo', summary: '   ' })]);
+    const resolver = createResolver(search);
+
+    const result = await resolver.resolve(item('Halo'));
+
+    expect(result.kind).toBe('matched');
+    if (result.kind !== 'matched') return;
+    expect(result.candidate.summary).toBeNull();
+  });
+
+  it('caps an over-long summary at 16000 characters', async () => {
+    const long = 'a'.repeat(20000);
+    const search = jest
+      .fn<Promise<IgdbGame[]>, [string]>()
+      .mockResolvedValue([game({ id: 7, name: 'Halo', summary: long })]);
+    const resolver = createResolver(search);
+
+    const result = await resolver.resolve(item('Halo'));
+
+    expect(result.kind).toBe('matched');
+    if (result.kind !== 'matched') return;
+    expect(result.candidate.summary).toBe(long.slice(0, 16000));
   });
 
   it('leaves playerCount null when multiplayer modes are absent', async () => {

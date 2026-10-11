@@ -206,6 +206,7 @@
       "publisher": "Wydawca",
       "genre": "Gatunek",
       "players": "Gracze",
+      "rating": "Ocena",
       "copies": "Egzemplarze",
       "platformId": "ID platformy",
       "externalId": "ID zewnętrzne",
@@ -214,10 +215,9 @@
       "updated": "Zaktualizowana",
       "recordId": "ID rekordu"
     },
+    "summary": "Opis",
     "notSet": "Nie ustawiono",
     "handEdited": "edytowane ręcznie",
-    "rawMetadata": "Surowe metadane (archiwalne)",
-    "noRawMetadata": "Nie zapisano surowych metadanych.",
     "never": "Nigdy",
     "unknown": "Nieznana",
     "coverAlt": "Okładka gry {title}",
@@ -228,6 +228,13 @@
       "close": "Zamknij",
       "previous": "Poprzedni obraz",
       "next": "Następny obraz"
+    },
+    "videos": {
+      "heading": "Filmy",
+      "play": "Odtwórz: {name}",
+      "playerTitle": "{title} — {name}",
+      "untitled": "Film {index}",
+      "choose": "Wybierz film"
     }
   },
   "gameEdit": {
@@ -240,7 +247,8 @@
       "releaseYear": "Rok wydania (1000–2100)",
       "players": "Liczba graczy (1–100)",
       "publisher": "Wydawca",
-      "genre": "Gatunek"
+      "genre": "Gatunek",
+      "summary": "Opis"
     },
     "error": {
       "titleRequired": "Tytuł jest wymagany.",

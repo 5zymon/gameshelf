@@ -1,42 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { contentSecurityPolicy } from './lib/csp';
 
 const SESSION_COOKIE_NAME = 'gameshelf_session';
 
 /** Paths that render without a session and must never be redirected. */
 const PUBLIC_PATHS = new Set(['/login', '/setup']);
-
-/**
- * Strict, self-only policy. The per-request nonce lets Next.js execute its
- * inline bootstrap/flight scripts without `'unsafe-inline'`; `'strict-dynamic'`
- * lets those nonce'd scripts load the `/_next/static` chunks. `'unsafe-eval'`
- * is dev-only (React debugging); it is absent from production.
- *
- * Deliberately NO `upgrade-insecure-requests`: it would rewrite plain-HTTP
- * subresource URLs to HTTPS and break the supported `http://localhost` setup.
- */
-function contentSecurityPolicy(nonce: string): string {
-  const isDev = process.env.NODE_ENV === 'development';
-  return [
-    "default-src 'self'",
-    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ''}`,
-    // `'unsafe-inline'` is dev-only: the Next.js Dev Tools overlay injects
-    // inline <style> tags that style-src otherwise blocks. In dev the nonce is
-    // dropped because `'unsafe-inline'` is ignored whenever a nonce is present.
-    // Never in production.
-    `style-src 'self'${isDev ? " 'unsafe-inline'" : ` 'nonce-${nonce}'`}`,
-    // `blob:` is required by the photo import screen: thumbnails are local
-    // `URL.createObjectURL` blobs and the HEIC→JPEG converter spawns a
-    // blob worker.
-    "img-src 'self' blob:",
-    "font-src 'self'",
-    "connect-src 'self'",
-    "worker-src 'self' blob:",
-    "object-src 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-    "frame-ancestors 'none'",
-  ].join('; ');
-}
 
 export function middleware(request: NextRequest): NextResponse {
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');

@@ -19,10 +19,14 @@ import type { PrismaService } from '../../src/prisma/prisma.service';
 
 const PLATFORM_SELECT = { id: true, name: true, slug: true };
 
-/** Mirrors `GAME_DETAIL_INCLUDE` in the mapper (platform + ordered gallery). */
+/** Mirrors `GAME_DETAIL_INCLUDE` in the mapper (platform + gallery + videos). */
 const GAME_DETAIL_INCLUDE = {
   platform: { select: PLATFORM_SELECT },
   images: { select: { url: true }, orderBy: { position: 'asc' } },
+  videos: {
+    select: { id: true, videoId: true, name: true },
+    orderBy: { position: 'asc' },
+  },
 };
 
 interface GamesPrismaMock {
@@ -155,6 +159,7 @@ describe('GamesService (unit)', () => {
           title: true,
           edition: true,
           coverUrl: true,
+          rating: true,
           platform: { select: PLATFORM_SELECT },
         },
         where: {},
@@ -353,6 +358,7 @@ describe('GamesService (unit)', () => {
         title: 'Hollow Knight',
         platform: { id: 1, name: 'PS5', slug: 'ps5' },
         images: [],
+        videos: [],
       };
       mock.game.findUnique.mockResolvedValue(game);
 
@@ -382,7 +388,13 @@ describe('GamesService (unit)', () => {
   describe('create', () => {
     it('creates with null defaults for omitted optional fields', async () => {
       mock.platform.findUnique.mockResolvedValue({ id: 1 });
-      const created = { id: 1, title: 'HK', platformId: 1, images: [] };
+      const created = {
+        id: 1,
+        title: 'HK',
+        platformId: 1,
+        images: [],
+        videos: [],
+      };
       mock.game.create.mockResolvedValue(created);
 
       const result = await service.create({ title: 'HK', platformId: 1 });
@@ -400,6 +412,7 @@ describe('GamesService (unit)', () => {
           publisher: null,
           genre: null,
           playerCount: null,
+          summary: null,
           coverUrl: null,
           sourceCoverUrl: null,
         },
@@ -415,7 +428,7 @@ describe('GamesService (unit)', () => {
 
     it('passes every provided field through and records provenance', async () => {
       mock.platform.findUnique.mockResolvedValue({ id: 2 });
-      const created = { id: 1, images: [] };
+      const created = { id: 1, images: [], videos: [] };
       mock.game.create.mockResolvedValue(created);
       covers.cacheFromUrl.mockResolvedValue(
         `/api/covers/${'a'.repeat(32)}.jpg`,
@@ -428,6 +441,7 @@ describe('GamesService (unit)', () => {
         publisher: 'Team Cherry',
         genre: 'Metroidvania',
         playerCount: 1,
+        summary: 'A bug.',
         coverUrl: 'https://example.com/hk.jpg',
       };
 
@@ -447,6 +461,7 @@ describe('GamesService (unit)', () => {
           publisher: 'Team Cherry',
           genre: 'Metroidvania',
           playerCount: 1,
+          summary: 'A bug.',
           coverUrl: `/api/covers/${'a'.repeat(32)}.jpg`,
           sourceCoverUrl: 'https://example.com/hk.jpg',
           userEditedFields: serializeEditedFields(TRACKED_METADATA_FIELDS),
@@ -457,7 +472,7 @@ describe('GamesService (unit)', () => {
 
     it('keeps a same-origin cover path as-is without a download', async () => {
       mock.platform.findUnique.mockResolvedValue({ id: 2 });
-      mock.game.create.mockResolvedValue({ id: 1, images: [] });
+      mock.game.create.mockResolvedValue({ id: 1, images: [], videos: [] });
       const local = `/api/covers/${'b'.repeat(32)}.png`;
 
       await service.create({ title: 'HK', platformId: 2, coverUrl: local });
@@ -475,7 +490,7 @@ describe('GamesService (unit)', () => {
 
     it('keeps a failed cover download as a placeholder with a source link', async () => {
       mock.platform.findUnique.mockResolvedValue({ id: 2 });
-      mock.game.create.mockResolvedValue({ id: 1, images: [] });
+      mock.game.create.mockResolvedValue({ id: 1, images: [], videos: [] });
       covers.cacheFromUrl.mockResolvedValue(null);
 
       await service.create({
@@ -517,6 +532,7 @@ describe('GamesService (unit)', () => {
         userEditedFields: null,
         platform: { id: 1, name: 'PS5', slug: 'ps5' },
         images: [],
+        videos: [],
       };
       mock.game.findUnique.mockResolvedValue(existingGame);
 
@@ -577,6 +593,7 @@ describe('GamesService (unit)', () => {
         coverUrl: '/api/covers/abc.jpg',
         sourceCoverUrl: linkedCandidate.coverUrl,
         images: [],
+        videos: [],
         rawMetadata: JSON.stringify({ id: 1036 }),
         enrichedAt: new Date('2026-10-07T00:00:00.000Z'),
         source: 'IGDB' as const,
@@ -606,7 +623,7 @@ describe('GamesService (unit)', () => {
         'GOTY',
       );
       expect(mock.game.create).toHaveBeenCalledWith({
-        data: { ...enriched, images: { create: [] } },
+        data: { ...enriched, images: { create: [] }, videos: { create: [] } },
         include: GAME_DETAIL_INCLUDE,
       });
       expect(result.id).toBe(42);
@@ -639,6 +656,7 @@ describe('GamesService (unit)', () => {
               'https://images.igdb.com/igdb/image/upload/t_1080p/art.jpg',
           },
         ],
+        videos: [],
         rawMetadata: JSON.stringify({ id: 1036 }),
         enrichedAt: new Date('2026-10-07T00:00:00.000Z'),
         source: 'IGDB' as const,
@@ -667,6 +685,7 @@ describe('GamesService (unit)', () => {
               },
             ],
           },
+          videos: { create: [] },
         },
         include: GAME_DETAIL_INCLUDE,
       });
@@ -709,6 +728,7 @@ describe('GamesService (unit)', () => {
         sourceCoverUrl: null,
         userEditedFields: null,
         images: [],
+        videos: [],
       });
 
       await expect(
@@ -758,6 +778,27 @@ describe('GamesService (unit)', () => {
       expect((result.candidates[0] as { raw?: unknown }).raw).toBeUndefined();
     });
 
+    it('keeps the enrichment-only keys off the candidate shape', async () => {
+      const rich: CatalogCandidate = {
+        ...candidate,
+        summary: 'Halo is…',
+        rating: 78.4,
+        ratingCount: 512,
+        videos: [{ videoId: 'AbCdEfGhIj0', name: 'Trailer' }],
+      };
+      catalogSearch.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [rich],
+      });
+
+      const result = await service.search({ q: 'halo' });
+
+      expect(result.candidates[0]).not.toHaveProperty('summary');
+      expect(result.candidates[0]).not.toHaveProperty('rating');
+      expect(result.candidates[0]).not.toHaveProperty('ratingCount');
+      expect(result.candidates[0]).not.toHaveProperty('videos');
+    });
+
     it('defaults a missing q to an empty query', async () => {
       catalogSearch.search.mockResolvedValue({
         kind: 'matches',
@@ -799,6 +840,7 @@ describe('GamesService (unit)', () => {
         userEditedFields: null,
         platform: { id: 1, name: 'PS5', slug: 'ps5' },
         images: [],
+        videos: [],
       });
 
       const result = await service.addCopy(5);
@@ -863,7 +905,7 @@ describe('GamesService (unit)', () => {
 
     it('sends only the provided fields (partial dto)', async () => {
       mock.game.findUnique.mockResolvedValue({ id: 3 });
-      const updated = { id: 3, title: 'New', images: [] };
+      const updated = { id: 3, title: 'New', images: [], videos: [] };
       mock.game.update.mockResolvedValue(updated);
 
       const result = await service.update(3, { title: 'New' });
@@ -890,6 +932,7 @@ describe('GamesService (unit)', () => {
         id: 3,
         coverUrl: local,
         images: [],
+        videos: [],
       });
 
       await service.update(3, { coverUrl: 'https://example.com/new.jpg' });
@@ -915,7 +958,12 @@ describe('GamesService (unit)', () => {
         id: 3,
         coverUrl: `/api/covers/${'e'.repeat(32)}.jpg`,
       });
-      mock.game.update.mockResolvedValue({ id: 3, coverUrl: null, images: [] });
+      mock.game.update.mockResolvedValue({
+        id: 3,
+        coverUrl: null,
+        images: [],
+        videos: [],
+      });
 
       await service.update(3, {
         coverUrl: null,
@@ -951,6 +999,7 @@ describe('GamesService (unit)', () => {
         id: 3,
         coverUrl: local,
         images: [],
+        videos: [],
       });
 
       await service.update(3, { coverUrl: local });
@@ -981,6 +1030,7 @@ describe('GamesService (unit)', () => {
         id: 3,
         coverUrl: newLocal,
         images: [],
+        videos: [],
       });
 
       await service.update(3, { coverUrl: newLocal });
@@ -1001,7 +1051,7 @@ describe('GamesService (unit)', () => {
     it('changes the platform when platformId is provided and clears the unverified flag', async () => {
       mock.game.findUnique.mockResolvedValue({ id: 3 });
       mock.platform.findUnique.mockResolvedValue({ id: 5 });
-      mock.game.update.mockResolvedValue({ id: 3, images: [] });
+      mock.game.update.mockResolvedValue({ id: 3, images: [], videos: [] });
 
       await service.update(3, { platformId: 5 });
 
@@ -1017,7 +1067,7 @@ describe('GamesService (unit)', () => {
         id: 3,
         userEditedFields: '["publisher"]',
       });
-      mock.game.update.mockResolvedValue({ id: 3, images: [] });
+      mock.game.update.mockResolvedValue({ id: 3, images: [], videos: [] });
 
       await service.update(3, { genre: 'Metroidvania' });
 
@@ -1033,7 +1083,7 @@ describe('GamesService (unit)', () => {
 
     it('clears optional fields with explicit null and records provenance', async () => {
       mock.game.findUnique.mockResolvedValue({ id: 3 });
-      mock.game.update.mockResolvedValue({ id: 3, images: [] });
+      mock.game.update.mockResolvedValue({ id: 3, images: [], videos: [] });
 
       // `null` is not in the static type (it only reaches the service at
       // runtime, where @IsOptional lets it through) — hence the cast.
@@ -1048,6 +1098,40 @@ describe('GamesService (unit)', () => {
             edition: null,
             releaseYear: null,
             userEditedFields: '["releaseYear"]',
+          },
+        }),
+      );
+    });
+
+    it('writes the summary and records it as hand-edited', async () => {
+      mock.game.findUnique.mockResolvedValue({ id: 3 });
+      mock.game.update.mockResolvedValue({ id: 3, images: [], videos: [] });
+
+      await service.update(3, { summary: 'x' });
+
+      expect(mock.game.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            summary: 'x',
+            userEditedFields: '["summary"]',
+          },
+        }),
+      );
+    });
+
+    it('clears the summary with an explicit null and marks it edited', async () => {
+      mock.game.findUnique.mockResolvedValue({ id: 3 });
+      mock.game.update.mockResolvedValue({ id: 3, images: [], videos: [] });
+
+      await service.update(3, {
+        summary: null,
+      } as unknown as UpdateGameDto);
+
+      expect(mock.game.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: {
+            summary: null,
+            userEditedFields: '["summary"]',
           },
         }),
       );
@@ -1081,6 +1165,7 @@ describe('GamesService (unit)', () => {
       sourceCoverUrl:
         'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
       images: [],
+      videos: [],
       rawMetadata: JSON.stringify({ id: 1036 }),
       enrichedAt: new Date('2026-10-07T00:00:00.000Z'),
       source: 'IGDB' as const,
@@ -1109,6 +1194,7 @@ describe('GamesService (unit)', () => {
         updatedAt: new Date('2026-10-01T00:00:00.000Z'),
         platform: { id: 3, name: 'Xbox', slug: 'xbox' },
         images: [],
+        videos: [],
         ...overrides,
       };
     }

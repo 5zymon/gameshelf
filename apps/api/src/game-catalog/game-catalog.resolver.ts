@@ -11,6 +11,13 @@ export interface CatalogPlatform {
 /** Which catalog produced a candidate; maps 1:1 onto the Prisma `GameSource` enum. */
 export type CatalogSource = 'IGDB' | 'MobyGames';
 
+/** One YouTube video from the catalog (IGDB `videos`). */
+export interface CatalogVideo {
+  /** YouTube video id (validated `[A-Za-z0-9_-]{11}`). */
+  videoId: string;
+  name: string | null;
+}
+
 /** A candidate game returned by the external database. */
 export interface CatalogCandidate {
   externalId: number;
@@ -27,6 +34,13 @@ export interface CatalogCandidate {
   source: CatalogSource;
   /** IGDB URL slug; absent or `null` for sources without one. Persisted as `Game.igdbSlug`. */
   slug?: string | null;
+  /** IGDB `summary` (English); absent/null for sources without one. */
+  summary?: string | null;
+  /** IGDB `rating` 0–100; absent/null when unrated. */
+  rating?: number | null;
+  ratingCount?: number | null;
+  /** YouTube videos in IGDB order; absent/empty when none. */
+  videos?: CatalogVideo[];
   /** Raw upstream payload, archived into `Game.rawMetadata`. */
   raw: unknown;
 }

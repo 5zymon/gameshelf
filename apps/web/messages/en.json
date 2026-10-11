@@ -206,6 +206,7 @@
       "publisher": "Publisher",
       "genre": "Genre",
       "players": "Players",
+      "rating": "Rating",
       "copies": "Copies",
       "platformId": "Platform ID",
       "externalId": "External ID",
@@ -214,10 +215,9 @@
       "updated": "Updated",
       "recordId": "Record ID"
     },
+    "summary": "Description",
     "notSet": "Not set",
     "handEdited": "hand-edited",
-    "rawMetadata": "Raw metadata (archival)",
-    "noRawMetadata": "No raw metadata stored.",
     "never": "Never",
     "unknown": "Unknown",
     "coverAlt": "{title} cover art",
@@ -228,6 +228,13 @@
       "close": "Close",
       "previous": "Previous image",
       "next": "Next image"
+    },
+    "videos": {
+      "heading": "Videos",
+      "play": "Play: {name}",
+      "playerTitle": "{title} — {name}",
+      "untitled": "Video {index}",
+      "choose": "Choose a video"
     }
   },
   "gameEdit": {
@@ -240,7 +247,8 @@
       "releaseYear": "Release year (1000–2100)",
       "players": "Players (1–100)",
       "publisher": "Publisher",
-      "genre": "Genre"
+      "genre": "Genre",
+      "summary": "Description"
     },
     "error": {
       "titleRequired": "Title is required.",

@@ -5,6 +5,7 @@ import {
   type CatalogPlatform,
   type CatalogResolution,
   type CatalogSearchResult,
+  type CatalogVideo,
   GameCatalogResolver,
   type GameCatalogSource,
 } from './game-catalog.resolver';
@@ -140,6 +141,10 @@ function toCandidate(game: IgdbGame): CatalogCandidate {
     platforms: (game.platforms ?? []).map(toPlatform),
     source: 'IGDB',
     slug: game.slug ?? null,
+    summary: nonBlank(game.summary),
+    rating: igdbRating(game.rating),
+    ratingCount: nonNegativeInt(game.rating_count),
+    videos: youtubeVideos(game.videos),
     raw: game,
   };
 }
@@ -185,6 +190,58 @@ function playerCount(modes: IgdbMultiplayerMode[] | undefined): number | null {
     }
   }
   return max;
+}
+
+/** YouTube ids are 11 chars of [A-Za-z0-9_-]; anything else is never embedded. */
+const YOUTUBE_ID = /^[A-Za-z0-9_-]{11}$/;
+
+/**
+ * The summary passes through unchanged (original, untrimmed text) when it is
+ * non-blank, else `null`. Capped at 16000 chars: the DB column is TEXT
+ * (65535 bytes under utf8mb4) and a pathological longer summary would fail
+ * the insert.
+ */
+function nonBlank(value: string | undefined): string | null {
+  if (typeof value !== 'string' || value.trim() === '') return null;
+  return value.slice(0, 16000);
+}
+
+/** IGDB `rating` when it is a finite number within 0–100; otherwise null. */
+function igdbRating(value: number | undefined): number | null {
+  return typeof value === 'number' &&
+    Number.isFinite(value) &&
+    value >= 0 &&
+    value <= 100
+    ? value
+    : null;
+}
+
+function nonNegativeInt(value: number | undefined): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+    ? value
+    : null;
+}
+
+/**
+ * IGDB videos in IGDB order, keeping only valid YouTube ids, deduped by id.
+ * The name is trimmed to the 255-char column; a missing/blank name stays null.
+ */
+function youtubeVideos(videos: IgdbGame['videos']): CatalogVideo[] {
+  const result: CatalogVideo[] = [];
+  const seen = new Set<string>();
+  for (const video of videos ?? []) {
+    if (
+      typeof video.video_id !== 'string' ||
+      !YOUTUBE_ID.test(video.video_id)
+    ) {
+      continue;
+    }
+    if (seen.has(video.video_id)) continue;
+    seen.add(video.video_id);
+    const name = nonBlank(video.name)?.slice(0, 255) ?? null;
+    result.push({ videoId: video.video_id, name });
+  }
+  return result;
 }
 
 function toPlatform(platform: {

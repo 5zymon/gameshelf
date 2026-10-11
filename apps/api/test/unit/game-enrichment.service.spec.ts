@@ -5,7 +5,11 @@ import type { CatalogCandidate } from '../../src/game-catalog/game-catalog.resol
 import { IgdbGameCatalogResolver } from '../../src/game-catalog/igdb-game-catalog.resolver';
 import { IgdbClient, type IgdbGame } from '../../src/game-catalog/igdb.client';
 import { CoverCacheService } from '../../src/covers/cover-cache.service';
-import { GameEnrichmentService } from '../../src/enrichment/game-enrichment.service';
+import {
+  GameEnrichmentService,
+  mapCandidateToGameData,
+  toGameCreateData,
+} from '../../src/enrichment/game-enrichment.service';
 
 const NORMALIZED_COVER =
   'https://images.igdb.com/igdb/image/upload/t_1080p/co61gh.jpg';
@@ -86,9 +90,17 @@ describe('GameEnrichmentService (unit)', () => {
       publisher: 'Bungie',
       genre: 'Shooter',
       playerCount: 16,
+      summary:
+        'Halo: Combat Evolved is a first-person shooter and the debut title of the Halo series.',
+      rating: 78.4,
+      ratingCount: 512,
       coverUrl: `/api/covers/${hash}.jpg`,
       sourceCoverUrl: NORMALIZED_COVER,
       images: [],
+      videos: [
+        { videoId: 'AbCdEfGhIj0', name: 'Trailer' },
+        { videoId: 'Zyx_wvu-987', name: 'Gameplay' },
+      ],
       rawMetadata: JSON.stringify(fixture),
       enrichedAt: expect.any(Date) as Date,
       source: 'IGDB',
@@ -100,6 +112,29 @@ describe('GameEnrichmentService (unit)', () => {
     expect(JSON.parse(data.rawMetadata)).toEqual(fixture);
     // The cover is resolved from the (normalized) external URL to a local path.
     expect(h.cache.cacheFromUrl).toHaveBeenCalledWith(NORMALIZED_COVER);
+  });
+
+  it('nested-creates videos and keeps them out of the top-level scalars', async () => {
+    const fixture = igdbFixture();
+    const candidate = await resolveCandidate(fixture, 'Halo: Combat Evolved');
+    const enriched = mapCandidateToGameData({
+      candidate,
+      platformId: 3,
+      edition: null,
+      coverUrl: null,
+      images: [],
+    });
+
+    const data = toGameCreateData(enriched);
+
+    expect(data.videos).toEqual({
+      create: [
+        { position: 0, videoId: 'AbCdEfGhIj0', name: 'Trailer' },
+        { position: 1, videoId: 'Zyx_wvu-987', name: 'Gameplay' },
+      ],
+    });
+    // The videos array is nested-created, not spread as a top-level scalar.
+    expect(Array.isArray(data.videos)).toBe(false);
   });
 
   it('keeps every field null when the source provides nothing (no invented values)', async () => {
@@ -119,9 +154,13 @@ describe('GameEnrichmentService (unit)', () => {
       publisher: null,
       genre: null,
       playerCount: null,
+      summary: null,
+      rating: null,
+      ratingCount: null,
       coverUrl: null,
       sourceCoverUrl: null,
       images: [],
+      videos: [],
       rawMetadata: JSON.stringify({ id: 5, name: 'Mystery' }),
       enrichedAt: expect.any(Date) as Date,
       source: 'IGDB',

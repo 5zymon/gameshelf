@@ -16,13 +16,18 @@ export const GAME_LIST_SELECT = {
   title: true,
   edition: true,
   coverUrl: true,
+  rating: true,
   platform: { select: PLATFORM_SELECT },
 } satisfies Prisma.GameSelect;
 
-/** The game detail projection: platform + ordered gallery. */
+/** The game detail projection: platform + ordered gallery + ordered videos. */
 export const GAME_DETAIL_INCLUDE = {
   platform: { select: PLATFORM_SELECT },
   images: { select: { url: true }, orderBy: { position: 'asc' } },
+  videos: {
+    select: { id: true, videoId: true, name: true },
+    orderBy: { position: 'asc' },
+  },
 } satisfies Prisma.GameInclude;
 
 export type GameDetailRow = Prisma.GameGetPayload<{
@@ -60,7 +65,13 @@ export function igdbUrlFor(game: {
  * never reach a response body; the IGDB page is exposed only as `igdbUrl`.
  */
 export function toGameDetail(game: GameDetailRow): GameDetailModel {
-  const { sourceCoverUrl: _sourceCoverUrl, igdbSlug, images, ...rest } = game;
+  const {
+    sourceCoverUrl: _sourceCoverUrl,
+    igdbSlug,
+    images,
+    videos,
+    ...rest
+  } = game;
   return {
     ...rest,
     igdbUrl: igdbUrlFor({ ...rest, igdbSlug }),
@@ -69,6 +80,11 @@ export function toGameDetail(game: GameDetailRow): GameDetailModel {
     images: images.map((image) => ({
       url: image.url,
       thumbUrl: coverThumbUrlFor(image.url),
+    })),
+    videos: videos.map((video) => ({
+      id: video.id,
+      name: video.name,
+      videoId: video.videoId,
     })),
   };
 }

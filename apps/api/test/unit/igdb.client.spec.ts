@@ -272,10 +272,12 @@ describe('IgdbClient (unit)', () => {
         'platforms.name,platforms.abbreviation,summary,version_parent,' +
         'multiplayer_modes.offlinemax,multiplayer_modes.onlinemax,' +
         'multiplayer_modes.offlinecoopmax,multiplayer_modes.onlinecoopmax,' +
-        'screenshots.url,artworks.url; limit 10;',
+        'screenshots.url,artworks.url,rating,rating_count,videos.id,' +
+        'videos.name,videos.video_id; limit 10;',
     );
     expect(gamesRequest?.body).not.toContain('fields *');
     expect(gamesRequest?.body).not.toContain('alternative_names');
+    expect(gamesRequest?.body).not.toContain('aggregated_rating');
   });
 
   it('caches the OAuth token across calls until it expires', async () => {
@@ -910,11 +912,13 @@ describe('IgdbClient.multiqueryGames (unit)', () => {
         'platforms.name,platforms.abbreviation,summary,version_parent,' +
         'multiplayer_modes.offlinemax,multiplayer_modes.onlinemax,' +
         'multiplayer_modes.offlinecoopmax,multiplayer_modes.onlinecoopmax,' +
-        'screenshots.url,artworks.url; ' +
+        'screenshots.url,artworks.url,rating,rating_count,videos.id,' +
+        'videos.name,videos.video_id; ' +
         'where id = (5); limit 500;',
     );
     expect(gamesBody).not.toContain('fields *');
     expect(gamesBody).not.toContain('alternative_names');
+    expect(gamesBody).not.toContain('aggregated_rating');
   });
 
   it('drops a phase-1 id that hydration does not return', async () => {

@@ -42,6 +42,12 @@ interface EnrichCandidateBody {
   raw?: unknown;
 }
 
+interface GameVideoBody {
+  id: number;
+  name: string | null;
+  videoId: string;
+}
+
 interface GameDetailBody {
   id: number;
   title: string;
@@ -51,8 +57,12 @@ interface GameDetailBody {
   publisher: string | null;
   genre: string | null;
   playerCount: number | null;
+  summary: string | null;
+  rating: number | null;
+  ratingCount: number | null;
   copyCount: number;
   coverUrl: string | null;
+  videos: GameVideoBody[];
   source: string;
   externalId: number | null;
   igdbUrl: string | null;
@@ -92,6 +102,10 @@ function candidate(
     publisher: 'Bungie',
     genre: 'Shooter',
     playerCount: 16,
+    summary: 'Halo is…',
+    rating: 78.4,
+    ratingCount: 512,
+    videos: [{ videoId: 'AbCdEfGhIj0', name: 'Trailer' }],
     coverUrl: COVER_URL_A,
     images: [],
     platforms: [{ igdbId: 11, name: 'Xbox', abbreviation: 'XBOX' }],
@@ -177,6 +191,11 @@ describe('Manual add (e2e)', () => {
       // The archival raw payload and the internal IGDB slug are never exposed.
       expect(body.candidates[0]?.raw).toBeUndefined();
       expect(body.candidates[0]).not.toHaveProperty('slug');
+      // The enrichment-only keys stay off the candidate shape (card 9.1).
+      expect(body.candidates[0]).not.toHaveProperty('summary');
+      expect(body.candidates[0]).not.toHaveProperty('rating');
+      expect(body.candidates[0]).not.toHaveProperty('ratingCount');
+      expect(body.candidates[0]).not.toHaveProperty('videos');
       expect(resolver.search).toHaveBeenCalledTimes(1);
       expect(resolver.search).toHaveBeenCalledWith('halo');
     });
@@ -243,6 +262,14 @@ describe('Manual add (e2e)', () => {
         'https://www.igdb.com/games/halo-combat-evolved',
       );
       expect(body.copyCount).toBe(1);
+      // Card 9.1: the picked candidate's description, rating and videos are
+      // stored on the game (videos in IGDB order).
+      expect(body.summary).toBe('Halo is…');
+      expect(body.rating).toBe(78.4);
+      expect(body.ratingCount).toBe(512);
+      expect(body.videos).toMatchObject([
+        { videoId: 'AbCdEfGhIj0', name: 'Trailer' },
+      ]);
       expect(
         (await test.prisma.game.findUniqueOrThrow({ where: { id: body.id } }))
           .igdbSlug,

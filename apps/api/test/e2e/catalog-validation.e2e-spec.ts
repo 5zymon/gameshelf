@@ -198,9 +198,19 @@ describe('Catalog validation sequence (e2e)', () => {
       publisher: 'Bungie',
       genre: 'Shooter',
       playerCount: 16,
+      summary: expect.stringContaining('Halo') as string,
+      rating: 78.4,
+      ratingCount: 512,
       platformId: platform.id,
       coverUrl: null,
     });
+    // The IGDB videos are stored in IGDB order (card 9.1).
+    expect(
+      await test.prisma.gameVideo.findMany({ orderBy: { position: 'asc' } }),
+    ).toMatchObject([
+      { videoId: 'AbCdEfGhIj0', name: 'Trailer', position: 0 },
+      { videoId: 'Zyx_wvu-987', position: 1 },
+    ]);
     // The IGDB source matched, so the fallback is never consulted.
     expect(mobySearch).not.toHaveBeenCalled();
   });

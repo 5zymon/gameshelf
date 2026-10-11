@@ -12,6 +12,7 @@ export const TRACKED_METADATA_FIELDS = [
   'genre',
   'playerCount',
   'coverUrl',
+  'summary',
 ] as const;
 
 export type TrackedMetadataField = (typeof TRACKED_METADATA_FIELDS)[number];
@@ -86,6 +87,9 @@ export interface ReenrichmentExisting {
   publisher: string | null;
   genre: string | null;
   playerCount: number | null;
+  summary: string | null;
+  rating: number | null;
+  ratingCount: number | null;
   coverUrl: string | null;
   sourceCoverUrl: string | null;
   rawMetadata: string | null;
@@ -95,6 +99,7 @@ export interface ReenrichmentExisting {
   platformUnverified: boolean;
   userEditedFields: unknown;
   images: { url: string }[];
+  videos: { videoId: string; name: string | null }[];
 }
 
 export interface BuildReenrichmentUpdateInput {
@@ -148,6 +153,26 @@ export function buildReenrichmentUpdate(
   ) {
     data.playerCount = enriched.playerCount;
   }
+  // Hand-editable and provenance tracked, like publisher/genre: written only
+  // when the candidate provides a non-null value and the user has not edited it.
+  if (
+    !edited.has('summary') &&
+    enriched.summary !== null &&
+    enriched.summary !== existing.summary
+  ) {
+    data.summary = enriched.summary;
+  }
+  // Rating is source-derived only (not hand-editable): refreshed when the
+  // candidate rates the game, never wiped by an unrated candidate.
+  if (enriched.rating !== null && enriched.rating !== existing.rating) {
+    data.rating = enriched.rating;
+  }
+  if (
+    enriched.ratingCount !== null &&
+    enriched.ratingCount !== existing.ratingCount
+  ) {
+    data.ratingCount = enriched.ratingCount;
+  }
   if (
     !edited.has('coverUrl') &&
     enriched.coverUrl !== null &&
@@ -194,6 +219,22 @@ export function buildReenrichmentUpdate(
     };
   }
 
+  // Videos: source-derived only; replaced when the candidate supplies a non-empty,
+  // different ordered list (id + name), never wiped by an empty one.
+  if (
+    enriched.videos.length > 0 &&
+    !sameOrderedVideos(existing.videos, enriched.videos)
+  ) {
+    data.videos = {
+      deleteMany: {},
+      create: enriched.videos.map((video, index) => ({
+        position: index,
+        videoId: video.videoId,
+        name: video.name,
+      })),
+    };
+  }
+
   if (Object.keys(data).length === 0) {
     return null;
   }
@@ -211,5 +252,21 @@ function sameOrderedUrls(
 ): boolean {
   return (
     a.length === b.length && a.every((entry, i) => entry.url === b[i]?.url)
+  );
+}
+
+/**
+ * True when two video lists have the same length and the same `videoId` and
+ * `name` at every position.
+ */
+function sameOrderedVideos(
+  a: readonly { videoId: string; name: string | null }[],
+  b: readonly { videoId: string; name: string | null }[],
+): boolean {
+  return (
+    a.length === b.length &&
+    a.every(
+      (entry, i) => entry.videoId === b[i]?.videoId && entry.name === b[i].name,
+    )
   );
 }

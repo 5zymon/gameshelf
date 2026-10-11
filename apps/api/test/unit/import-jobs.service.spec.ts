@@ -1448,9 +1448,13 @@ describe('ImportJobsService (unit)', () => {
       publisher: 'Bungie',
       genre: 'Shooter',
       playerCount: 16,
+      summary: 'Halo is…',
+      rating: 78.4,
+      ratingCount: 512,
       coverUrl: '/api/covers/0123456789abcdef0123456789abcdef.jpg',
       sourceCoverUrl: 'https://images.igdb.com/halo.jpg',
       images: [],
+      videos: [],
       rawMetadata: JSON.stringify({ id: 7 }),
       enrichedAt: new Date('2026-10-07T00:00:00.000Z'),
       source: 'IGDB' as const,
@@ -1489,6 +1493,7 @@ describe('ImportJobsService (unit)', () => {
           ...enriched,
           platformUnverified: false,
           images: { create: [] },
+          videos: { create: [] },
         },
       });
       expect(mock.recognizedItem.updateMany).toHaveBeenCalledWith({
@@ -1618,6 +1623,7 @@ describe('ImportJobsService (unit)', () => {
               },
             ],
           },
+          videos: { create: [] },
         },
       });
     });
@@ -1780,7 +1786,12 @@ describe('ImportJobsService (unit)', () => {
       });
 
       expect(mock.game.create).toHaveBeenCalledWith({
-        data: { ...enriched, platformUnverified: true, images: { create: [] } },
+        data: {
+          ...enriched,
+          platformUnverified: true,
+          images: { create: [] },
+          videos: { create: [] },
+        },
       });
     });
 
@@ -1808,6 +1819,7 @@ describe('ImportJobsService (unit)', () => {
           ...enriched,
           platformUnverified: false,
           images: { create: [] },
+          videos: { create: [] },
         },
       });
     });

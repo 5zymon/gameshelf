@@ -52,6 +52,12 @@ interface EnrichCandidateBody {
   raw?: unknown;
 }
 
+interface GameVideoBody {
+  id: number;
+  name: string | null;
+  videoId: string;
+}
+
 interface GameDetailBody {
   id: number;
   title: string;
@@ -61,7 +67,11 @@ interface GameDetailBody {
   publisher: string | null;
   genre: string | null;
   playerCount: number | null;
+  summary: string | null;
+  rating: number | null;
+  ratingCount: number | null;
   coverUrl: string | null;
+  videos: GameVideoBody[];
   rawMetadata: string | null;
   enrichedAt: string | null;
   source: string;
@@ -722,6 +732,70 @@ describe('Game re-enrichment (e2e)', () => {
     ]);
     const file = servedCover(GALLERY_ART).split('/').pop() ?? '';
     await expect(app.get(CoverCacheService).has(file)).resolves.toBe(true);
+  });
+
+  it('applies summary, rating and videos from a re-enrichment candidate', async () => {
+    const { gameId } = await seedGameWith();
+    resolver.search.mockResolvedValue(
+      searchMatches(
+        candidate({
+          summary: 'IGDB text',
+          rating: 90,
+          ratingCount: 42,
+          videos: [{ videoId: 'AbCdEfGhIj0', name: 'Trailer' }],
+        }),
+      ),
+    );
+    coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
+
+    const res = await test.request
+      .post(`/games/${String(gameId)}/enrich`)
+      .send({ candidate: { source: 'IGDB', externalId: 1036 } });
+    expect(res.status).toBe(200);
+    expect((res.body as EnrichBody).applied).toBe(true);
+
+    const detail = await test.request.get(`/games/${String(gameId)}`);
+    const detailBody = detail.body as GameDetailBody;
+    expect(detailBody.summary).toBe('IGDB text');
+    expect(detailBody.rating).toBe(90);
+    expect(detailBody.ratingCount).toBe(42);
+    expect(detailBody.videos[0]?.videoId).toBe('AbCdEfGhIj0');
+    expect(detailBody.videos[0]?.name).toBe('Trailer');
+  });
+
+  it('keeps a hand-edited summary while refreshing the rating', async () => {
+    const { gameId } = await seedGameWith({
+      source: 'IGDB',
+      externalId: 1036,
+    });
+
+    const patch = await test.request
+      .patch(`/games/${String(gameId)}`)
+      .send({ summary: 'Mine' });
+    expect(patch.status).toBe(200);
+
+    resolver.search.mockResolvedValue(
+      searchMatches(candidate({ summary: 'IGDB text', rating: 90 })),
+    );
+    coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
+
+    const res = await test.request
+      .post(`/games/${String(gameId)}/enrich`)
+      .send({ candidate: { source: 'IGDB', externalId: 1036 } });
+    expect(res.status).toBe(200);
+    expect((res.body as EnrichBody).applied).toBe(true);
+
+    const game = await test.prisma.game.findUniqueOrThrow({
+      where: { id: gameId },
+    });
+    expect(game.summary).toBe('Mine');
+    expect(game.rating).toBe(90);
+
+    const detail = await test.request.get(`/games/${String(gameId)}`);
+    const detailBody = detail.body as GameDetailBody;
+    expect(detailBody.userEditedFields).toContain('summary');
+    expect(detailBody.summary).toBe('Mine');
+    expect(detailBody.rating).toBe(90);
   });
 
   describe('errors', () => {

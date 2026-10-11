@@ -36,8 +36,33 @@ export class GameListItemModel {
   })
   coverThumbUrl!: string | null;
 
+  @ApiProperty({
+    type: Number,
+    nullable: true,
+    description:
+      'IGDB rating 0–100; null when unrated (never 0 as a placeholder)',
+    example: 78.4,
+  })
+  rating!: number | null;
+
   @ApiProperty({ type: GamePlatformModel })
   platform!: GamePlatformModel;
+}
+
+/** One embedded YouTube video (card 9.1). */
+export class GameVideoModel {
+  @ApiProperty({ example: 7 })
+  id!: number;
+
+  @ApiPropertyOptional({ nullable: true, example: 'Trailer' })
+  name!: string | null;
+
+  @ApiProperty({
+    example: 'dQw4w9WgXcQ',
+    description:
+      'YouTube video id; embedded as https://www.youtube.com/embed/<videoId>',
+  })
+  videoId!: string;
 }
 
 /** One locally cached gallery image, served same-origin. */
@@ -79,6 +104,27 @@ export class GameDetailModel {
   @ApiPropertyOptional({ nullable: true, example: 1 })
   playerCount!: number | null;
 
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Description (IGDB summary or hand-written; not translated)',
+    example: 'A first-person shooter set in the Halo universe.',
+  })
+  summary!: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'IGDB rating 0–100; null when unrated',
+    example: 78.4,
+  })
+  rating!: number | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'IGDB user-rating vote count',
+    example: 512,
+  })
+  ratingCount!: number | null;
+
   @ApiProperty({
     example: 1,
     description: 'Physical copies owned (identity is one row)',
@@ -101,6 +147,9 @@ export class GameDetailModel {
 
   @ApiProperty({ type: [GameImageModel] })
   images!: GameImageModel[];
+
+  @ApiProperty({ type: [GameVideoModel] })
+  videos!: GameVideoModel[];
 
   @ApiPropertyOptional({
     nullable: true,

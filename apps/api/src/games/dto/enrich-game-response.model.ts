@@ -56,13 +56,24 @@ export class EnrichCandidateModel {
  * Drops the archival `raw` payload and the internal IGDB `slug` — neither is
  * exposed in a response body — and replaces the candidate's external `coverUrl`
  * with a same-origin signed preview URL (the external host never reaches the
- * browser).
+ * browser). The enrichment-only keys (`summary`, `rating`, `ratingCount`,
+ * `videos`) are also dropped: search and enrich candidates keep their current
+ * shape (card 9.1 exposes them on the game, not on the candidate).
  */
 export function toEnrichCandidateModel(
   candidate: CatalogCandidate,
   coverUrl: string | null,
 ): EnrichCandidateModel {
-  const { raw: _raw, images: _images, slug: _slug, ...rest } = candidate;
+  const {
+    raw: _raw,
+    images: _images,
+    slug: _slug,
+    summary: _summary,
+    rating: _rating,
+    ratingCount: _ratingCount,
+    videos: _videos,
+    ...rest
+  } = candidate;
   return { ...rest, coverUrl };
 }
 
