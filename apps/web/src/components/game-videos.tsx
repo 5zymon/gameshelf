@@ -1,7 +1,7 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import type { GameVideo } from '@/lib/api';
 import {
   isYoutubePlaceholder,
@@ -131,6 +131,11 @@ interface VideoFacadeProps {
  * their own guaranteed dark backing (a disc and a pill) so they stay legible
  * over any thumbnail — or over the near-white surface when the thumbnail is
  * hidden — in both themes.
+ *
+ * The browser can settle the image before React hydrates (warm cache, slow
+ * hydration): the `load`/`error` event then fires first and React does not
+ * replay it, so the handlers below would never run. A mount-time check on the
+ * `<img>` covers that case; see {@link VideoFacade}'s `checkSettled`.
  */
 function VideoFacade({
   videoId,
@@ -139,12 +144,33 @@ function VideoFacade({
 }: VideoFacadeProps): React.ReactElement {
   const [quality, setQuality] = useState<'max' | 'hq'>('max');
   const [failed, setFailed] = useState(false);
+  // Guards the mount-time check so it runs at most once per mounted facade
+  // (the ref callback is re-invoked on every render while the `<img>` exists).
+  const settledChecked = useRef(false);
   const src = youtubeThumbnailUrl(videoId, quality);
 
-  // One-shot fallback: maxresdefault -> hqdefault -> hidden.
+  // One-shot fallback: maxresdefault -> hqdefault -> hidden. The state machine
+  // is idempotent, so a repeated trigger from any source is a no-op.
   const fallback = (): void => {
     if (quality === 'max') setQuality('hq');
     else setFailed(true);
+  };
+
+  // Run the placeholder detection when the thumbnail was already settled before
+  // hydration. `complete` is true for both a hit (a missing `maxresdefault` is
+  // served as a 404 *with* a decodable 120×90 body) and an error
+  // (`naturalWidth === 0`, which the predicate already flags); `false` means the
+  // image is still loading, so the `onLoad`/`onError` handlers will do the work
+  // and we must not fire here. A `null` node (unmount) is a no-op.
+  const checkSettled = (node: HTMLImageElement | null): void => {
+    if (node === null || settledChecked.current) return;
+    settledChecked.current = true;
+    if (
+      node.complete &&
+      isYoutubePlaceholder(node.naturalWidth, node.naturalHeight)
+    ) {
+      fallback();
+    }
   };
 
   return (
@@ -156,6 +182,7 @@ function VideoFacade({
       {!failed && src !== null && (
         // eslint-disable-next-line @next/next/no-img-element -- YouTube's thumbnail CDN; next/image cannot optimise a host we do not proxy.
         <img
+          ref={checkSettled}
           src={src}
           alt=""
           aria-hidden="true"
