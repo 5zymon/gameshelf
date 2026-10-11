@@ -17,17 +17,6 @@ function sourceLabel(
   return source === 'MANUAL' ? t('source.manual') : source;
 }
 
-/** Pretty-prints the archival `rawMetadata`; falls back to the raw text. */
-function prettyRaw(raw: string | null, t: TranslatorFor<'gameDetail'>): string {
-  if (raw === null) return t('noRawMetadata');
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return JSON.stringify(parsed, null, 2);
-  } catch {
-    return raw;
-  }
-}
-
 function Chip({
   children,
   tone = 'default',
@@ -304,15 +293,6 @@ export async function GameDetailView({
               <DeleteGameButton gameId={game.id} title={game.title} />
             </div>
           </div>
-
-          <details className="rounded-card border border-edge bg-surface">
-            <summary className="cursor-pointer px-4 py-3 text-sm text-muted select-none">
-              {t('rawMetadata')}
-            </summary>
-            <pre className="max-h-96 overflow-auto border-t border-edge px-4 py-3 font-mono text-xs break-words whitespace-pre-wrap text-muted">
-              {prettyRaw(game.rawMetadata, t)}
-            </pre>
-          </details>
         </div>
       </div>
 

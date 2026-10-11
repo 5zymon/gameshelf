@@ -218,8 +218,6 @@
     "summary": "Description",
     "notSet": "Not set",
     "handEdited": "hand-edited",
-    "rawMetadata": "Raw metadata (archival)",
-    "noRawMetadata": "No raw metadata stored.",
     "never": "Never",
     "unknown": "Unknown",
     "coverAlt": "{title} cover art",

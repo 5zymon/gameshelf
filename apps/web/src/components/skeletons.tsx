@@ -117,8 +117,6 @@ export async function GameDetailSkeleton(): Promise<React.ReactElement> {
               <SkeletonBlock className="h-9 w-40 rounded-control border border-edge" />
               <SkeletonBlock className="ml-auto h-9 w-32 rounded-control border border-edge" />
             </div>
-
-            <SkeletonBlock className="h-12 w-full rounded-card border border-edge" />
           </div>
         </div>
       </article>

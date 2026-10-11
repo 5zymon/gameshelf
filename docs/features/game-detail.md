@@ -1,7 +1,7 @@
 ---
 type: Feature
 title: Game Detail View with Edit, Delete & Re-enrich
-description: The authenticated /games/[id] route showing every record field including archival raw metadata, inline edit (PATCH), confirmed delete (DELETE), re-enrich from a corrected title (POST /enrich) reporting its outcome, metadata source and last enrichment, the copy count, and catalog tiles linked from the grid.
+description: The authenticated /games/[id] route showing every record field, inline edit (PATCH), confirmed delete (DELETE), re-enrich from a corrected title (POST /enrich) reporting its outcome, metadata source and last enrichment, the copy count, and catalog tiles linked from the grid.
 tags: [web, ui, catalog, enrichment]
 status: draft
 generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-10T00:00:00Z }
@@ -20,9 +20,8 @@ control that calls the [Web API Client](/web-api-client.md) and then
 hard reload.
 
 The detail view exists to close the loop opened by import/manual add: a user can
-see exactly what was stored (including the archival `rawMetadata`), fix a field,
-delete a mistake, or re-run enrichment against a corrected title and read the
-outcome.
+see exactly what was stored, fix a field, delete a mistake, or re-run enrichment
+against a corrected title and read the outcome.
 
 # Behaviour
 
@@ -31,7 +30,6 @@ outcome.
 | Route / id parsing       | `apps/web/src/app/(app)/games/[id]/page.tsx` (`force-dynamic`); `parseId` accepts `/^\d+$/` and rejects `< 1` or values above `2147483647`; both an unknown id and a 404 from `getGame` call `notFound()` (the generic `app/not-found.tsx`). `/games/new` stays a static segment.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | Data loading             | `requireUser()` first, then `Promise.all([getGame(id), getPlatforms()])`; `getGame` maps only `404 → null`, other errors propagate.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | All record fields (AC 1) | A `<dl>` shows Platform, Edition, Release year, Publisher, Genre, Players, Rating, Copies, Platform ID, External ID, Source, Added, Updated and Record ID; `null`/empty renders a muted "Not set".                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
-| Raw metadata (AC 1)      | A collapsed read-only `<details>` "Raw metadata (archival)" renders `rawMetadata` pretty-printed (JSON `2`-space indent, raw text fallback, "No raw metadata stored." when null) in `font-mono text-xs`, `max-h-96` scroll, muted.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | Provenance (AC 5)        | A chip row shows `Source: Manual \| IGDB \| MobyGames` and `Last enriched: …` (or "Never enriched"); `platformUnverified` adds a `text-danger` "Platform unverified" chip; an unlinked record (`externalId === null`) adds a muted "Not linked" chip.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | View on IGDB             | A **View on IGDB** chip (`<a target="_blank" rel="noopener noreferrer">`) sits in the provenance chip row when the server returns `igdbUrl` (`https://www.igdb.com/games/<slug>`), which the API builds in `igdbUrlFor` (`apps/api/src/games/game-detail.mapper.ts`) only when `source === IGDB`, `externalId` is set and a `igdbSlug` is stored. MobyGames, Manual and unlinked games get no link. The slug is persisted by enrichment and re-enrichment (`Game.igdbSlug`, migration `20261010090000_game_igdb_slug`); records enriched before this change show no link until re-enriched (no backfill, no IGDB call on page view). `igdbSlug` itself never reaches the response.                                                                                                             |
 | Hand-edited markers      | A field in `game.userEditedFields` (`releaseYear`/`publisher`/`genre`/`playerCount`/`summary`) gets a small muted "hand-edited" marker.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
@@ -50,7 +48,7 @@ outcome.
 # Components
 
 - `apps/web/src/app/(app)/games/[id]/page.tsx` — the route; id parsing, parallel fetch, `notFound()`.
-- `apps/web/src/components/game-detail-view.tsx` — `GameDetailView`, `DataRow`, `Chip`, `formatDateTime`, `sourceLabel`, `prettyRaw`.
+- `apps/web/src/components/game-detail-view.tsx` — `GameDetailView`, `DataRow`, `Chip`, `formatDateTime`, `sourceLabel`.
 - `apps/web/src/components/game-edit-form.tsx` — `'use client'` `GameEditForm`, `buildDelta`, `toDraft`, `boundedInt`, `textDelta`.
 - `apps/web/src/components/delete-game-button.tsx` — `'use client'` `DeleteGameButton` (inline confirmation).
 - `apps/web/src/components/re-enrich-control.tsx` — `'use client'` `ReEnrichControl` (search → apply state machine).
@@ -65,6 +63,7 @@ outcome.
 # Out of scope
 
 - Editing `copyCount`, the cover, `source` or `enrichedAt`; an "add another copy" action (the API endpoint exists but is not surfaced here).
+- Rendering the archival `rawMetadata`: it is still stored and returned by `GET /games/:id` but no longer shown in the UI.
 - A frontend test runner.
 - i18n (ticket 7.2), platform management (ticket 7.1).
 - Any backend or `packages/contracts` change — the endpoints already existed.
@@ -73,12 +72,11 @@ outcome.
 
 1. Open a catalog tile: it navigates to `/games/<id>` and shows the cover, title, platform · edition · year, and the provenance chip row.
 2. The record list shows every field (including Copies, External ID and Record ID); empty fields read "Not set".
-3. Expand "Raw metadata (archival)": it shows pretty-printed JSON (or "No raw metadata stored.") and is read-only.
-4. **Edit record** → change the publisher → **Save changes**: "Saved." appears and the record row updates without a full page reload. Return to `/`: the tile reflects the new title (if changed).
-5. Clearing an optional field to blank and saving sends `null` (the row returns to "Not set").
-6. A field edited here shows the "hand-edited" marker afterwards; a later re-enrich does not overwrite it.
-7. **Delete game** → **Delete game**? shows the inline confirmation; **Cancel** (focused) or Escape closes it; **Delete** removes the game and returns to `/`.
-8. **Re-enrich from title** with a corrected title: a radio group of ranked candidate cards appears (title/year/publisher/genre/players/platforms/same-origin cover), top match preselected; pick any card and **Apply metadata** reports "Fresh metadata applied." (or "Already up to date — nothing changed.") and the record updates in place. An unresolved title reports "No match found for … Nothing changed."
-9. A game with a description shows a "Description" section (with a "hand-edited" marker after an edit); a rated game shows the `78/100` badge on its grid tile and a "Rating" row on the detail page; a game with videos shows a "Videos" player that loads nothing from YouTube until **Play** is pressed.
-10. Every cover request (tile, detail, candidate preview) is same-origin; no CSP violation appears in the Console.
-11. `/games/abc` and `/games/999999` render the 404 page; `/games/new` renders the manual-add form ([Manual Add Form](/manual-add-form.md)).
+3. **Edit record** → change the publisher → **Save changes**: "Saved." appears and the record row updates without a full page reload. Return to `/`: the tile reflects the new title (if changed).
+4. Clearing an optional field to blank and saving sends `null` (the row returns to "Not set").
+5. A field edited here shows the "hand-edited" marker afterwards; a later re-enrich does not overwrite it.
+6. **Delete game** → **Delete game**? shows the inline confirmation; **Cancel** (focused) or Escape closes it; **Delete** removes the game and returns to `/`.
+7. **Re-enrich from title** with a corrected title: a radio group of ranked candidate cards appears (title/year/publisher/genre/players/platforms/same-origin cover), top match preselected; pick any card and **Apply metadata** reports "Fresh metadata applied." (or "Already up to date — nothing changed.") and the record updates in place. An unresolved title reports "No match found for … Nothing changed."
+8. A game with a description shows a "Description" section (with a "hand-edited" marker after an edit); a rated game shows the `78/100` badge on its grid tile and a "Rating" row on the detail page; a game with videos shows a "Videos" player that loads nothing from YouTube until **Play** is pressed.
+9. Every cover request (tile, detail, candidate preview) is same-origin; no CSP violation appears in the Console.
+10. `/games/abc` and `/games/999999` render the 404 page; `/games/new` renders the manual-add form ([Manual Add Form](/manual-add-form.md)).

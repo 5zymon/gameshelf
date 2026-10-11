@@ -218,8 +218,6 @@
     "summary": "Opis",
     "notSet": "Nie ustawiono",
     "handEdited": "edytowane ręcznie",
-    "rawMetadata": "Surowe metadane (archiwalne)",
-    "noRawMetadata": "Nie zapisano surowych metadanych.",
     "never": "Nigdy",
     "unknown": "Nieznana",
     "coverAlt": "Okładka gry {title}",
