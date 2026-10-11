@@ -38,14 +38,17 @@ const IGDB_PLATFORMS_QUERY =
  * Exactly the fields the catalog needs. `involved_companies.company.name`
  * feeds CatalogCandidate.publisher; `summary` and `version_parent` are
  * requested by card 4.3 (version_parent is IGDB's edition/version link).
- * Deliberately no `*` and no `alternative_names`.
+ * `summary`, `rating`, `rating_count` and `videos.*` feed card 9.1
+ * (description, rating and embedded YouTube videos). Deliberately no `*` and
+ * no `alternative_names`, and no `aggregated_rating` (we use the user-rating
+ * `rating`, not the critic aggregate).
  */
 const IGDB_GAME_FIELDS =
   'name,slug,first_release_date,cover.url,involved_companies.company.name,' +
   'genres.name,platforms.id,platforms.name,platforms.abbreviation,' +
   'summary,version_parent,multiplayer_modes.offlinemax,multiplayer_modes.onlinemax,' +
   'multiplayer_modes.offlinecoopmax,multiplayer_modes.onlinecoopmax,' +
-  'screenshots.url,artworks.url';
+  'screenshots.url,artworks.url,rating,rating_count,videos.id,videos.name,videos.video_id';
 
 /** IGDB `multiplayer_modes` row (only the player-count maxima are requested). */
 export interface IgdbMultiplayerMode {
@@ -75,6 +78,12 @@ export interface IgdbGame {
   screenshots?: { url?: string }[];
   /** IGDB artworks (key art); used for the local gallery. */
   artworks?: { url?: string }[];
+  /** IGDB user-rating average, 0–100 (double). NOT `aggregated_rating`. */
+  rating?: number;
+  /** IGDB user-rating vote count. */
+  rating_count?: number;
+  /** IGDB `game_videos`; `video_id` is the YouTube id. IGDB order is kept. */
+  videos?: { id?: number; name?: string; video_id?: string }[];
 }
 
 /**

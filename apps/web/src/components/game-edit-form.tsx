@@ -14,6 +14,10 @@ import { api } from '@/lib/api/browser';
 
 const FIELD =
   'w-full h-10 rounded-control border border-edge bg-field px-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent/55 focus:ring-[3px] focus:ring-accent/15 disabled:opacity-60';
+// `FIELD` has a fixed `h-10`, so the multiline summary field needs its own
+// class (a growing textarea, not a fixed-height input).
+const TEXTAREA =
+  'w-full min-h-32 rounded-control border border-edge bg-field px-3 py-2 text-sm leading-relaxed text-ink placeholder:text-muted outline-none focus:border-accent/55 focus:ring-[3px] focus:ring-accent/15 disabled:opacity-60';
 const LABEL = 'block text-sm text-muted';
 
 interface Draft {
@@ -24,6 +28,7 @@ interface Draft {
   publisher: string;
   genre: string;
   playerCount: string;
+  summary: string;
 }
 
 type FieldErrors = Partial<
@@ -39,6 +44,7 @@ function toDraft(game: GameDetail): Draft {
     publisher: game.publisher ?? '',
     genre: game.genre ?? '',
     playerCount: game.playerCount === null ? '' : String(game.playerCount),
+    summary: game.summary ?? '',
   };
 }
 
@@ -82,6 +88,21 @@ function textDelta(
   if (trimmed === (current ?? '')) return undefined;
   if (trimmed === '') return null;
   return trimmed;
+}
+
+/**
+ * Multiline edit: compares newline-normalised, trimmed text. A textarea
+ * normalizes CRLF to LF, so a plain comparison would mark an untouched IGDB
+ * summary as hand-edited. Unchanged → omit; cleared → null; else set.
+ */
+function multilineDelta(
+  value: string,
+  current: string | null,
+): string | null | undefined {
+  const norm = (s: string): string => s.replace(/\r\n?/g, '\n').trim();
+  const next = norm(value);
+  if (next === norm(current ?? '')) return undefined;
+  return next === '' ? null : next;
 }
 
 interface DeltaResult {
@@ -144,6 +165,9 @@ function buildDelta(
   } else if (playerCount !== game.playerCount) {
     delta.playerCount = playerCount;
   }
+
+  const summary = multilineDelta(draft.summary, game.summary);
+  if (summary !== undefined) delta.summary = summary;
 
   return { delta, errors };
 }
@@ -427,6 +451,23 @@ export function GameEditForm({
                   setField('genre', event.target.value);
                 }}
                 className={FIELD}
+              />
+            </div>
+
+            <div className="space-y-1.5 sm:col-span-2">
+              <label htmlFor="edit-summary" className={LABEL}>
+                {t('field.summary')}
+              </label>
+              <textarea
+                id="edit-summary"
+                name="summary"
+                rows={6}
+                maxLength={16000}
+                value={draft.summary}
+                onChange={(event) => {
+                  setField('summary', event.target.value);
+                }}
+                className={TEXTAREA}
               />
             </div>
           </div>

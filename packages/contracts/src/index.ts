@@ -21,6 +21,8 @@ export interface GameListItem {
   edition: string | null;
   coverUrl: string | null;
   coverThumbUrl: string | null;
+  /** IGDB 0–100; null = unrated. */
+  rating: number | null;
   /** NON-nullable: the backend always projects the platform. */
   platform: GamePlatform;
 }
@@ -33,6 +35,12 @@ export interface GameImage {
   thumbUrl: string | null;
 }
 
+export interface GameVideo {
+  id: number;
+  name: string | null;
+  videoId: string;
+}
+
 export interface GameDetail {
   id: number;
   title: string;
@@ -42,10 +50,14 @@ export interface GameDetail {
   publisher: string | null;
   genre: string | null;
   playerCount: number | null;
+  summary: string | null;
+  rating: number | null;
+  ratingCount: number | null;
   copyCount: number;
   coverUrl: string | null;
   coverThumbUrl: string | null;
   images: GameImage[];
+  videos: GameVideo[];
   rawMetadata: string | null;
   enrichedAt: string | null;
   source: GameSource;
@@ -144,6 +156,7 @@ export interface CreateGameRequest {
   publisher?: string;
   genre?: string;
   playerCount?: number;
+  summary?: string;
   coverUrl?: string;
   candidate?: EnrichCandidateRef;
 }

@@ -81,6 +81,15 @@ export class CreateGameDto {
   playerCount?: number;
 
   @ApiPropertyOptional({
+    description: 'Description (IGDB summary or hand-written; not translated)',
+    maxLength: 16000,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(16000)
+  summary?: string;
+
+  @ApiPropertyOptional({
     description:
       'Cover image URL (no format check — local paths are a later ticket, S1.8)',
     example: 'https://example.com/hk.jpg',

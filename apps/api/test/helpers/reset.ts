@@ -6,6 +6,7 @@ const TABLES = [
   'llm_settings',
   'unrecognized_items',
   'import_jobs',
+  'game_videos',
   'game_images',
   'games',
   'sessions',

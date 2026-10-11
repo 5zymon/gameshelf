@@ -111,6 +111,13 @@ model Game {
   publisher   String?    @db.VarChar(255)
   genre       String?    @db.VarChar(255)
   playerCount Int?       @map("player_count")
+  // IGDB `summary` (English, never translated). Hand-editable and provenance
+  // tracked ('summary' in TRACKED_METADATA_FIELDS), like publisher/genre.
+  summary     String?    @db.Text
+  // IGDB `rating` (0–100, user-rating average) and its vote count. Source-derived
+  // only (no manual edit); re-enrichment never wipes them with null.
+  rating      Float?
+  ratingCount Int?       @map("rating_count")
   // Number of physical copies owned. Owning several copies is deliberate
   // (ticket 4.12): identity stays one catalog row, copies are counted here.
   copyCount   Int        @default(1) @map("copy_count")
@@ -140,6 +147,7 @@ model Game {
 
   recognizedItems RecognizedItem[]
   images          GameImage[]
+  videos          GameVideo[]
 
   @@index([platformId])
   @@index([edition])
@@ -258,6 +266,26 @@ model GameImage {
   @@unique([gameId, position])
   @@index([gameId])
   @@map("game_images")
+}
+
+// One IGDB `videos` entry (a YouTube video) for a game, in IGDB order.
+// `videoId` is the YouTube id embedded as https://www.youtube.com/embed/<id>
+// (the scoped CSP frame-src exception). Rows are replaced wholesale on
+// re-enrichment, so `position` is the display order.
+model GameVideo {
+  id        Int      @id @default(autoincrement())
+  gameId    Int      @map("game_id")
+  position  Int
+  videoId   String   @map("video_id") @db.VarChar(32)
+  name      String?  @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  game Game @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@unique([gameId, position])
+  @@index([gameId])
+  @@map("game_videos")
 }
 
 // Runtime LLM provider settings (ticket 3.3). A singleton row (`id = 1`) so

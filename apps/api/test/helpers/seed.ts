@@ -48,6 +48,9 @@ export function seedGame(
     publisher?: string | null;
     genre?: string | null;
     playerCount?: number | null;
+    summary?: string | null;
+    rating?: number | null;
+    ratingCount?: number | null;
     copyCount?: number;
     coverUrl?: string | null;
     sourceCoverUrl?: string | null;

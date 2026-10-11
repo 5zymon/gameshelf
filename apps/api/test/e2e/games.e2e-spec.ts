@@ -28,6 +28,7 @@ interface GameListItem {
   edition: string | null;
   coverUrl: string | null;
   coverThumbUrl: string | null;
+  rating: number | null;
   platform: PlatformRef;
 }
 
@@ -115,6 +116,20 @@ describe('Games API (e2e)', () => {
         .body as GamesListBody;
       expect(page3.items).toHaveLength(1);
       expect(page3.items[0]?.id).toBe(games[4]?.id);
+    });
+
+    it('exposes the IGDB rating on list items and null when unrated', async () => {
+      const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+      await seedGame(test.prisma, {
+        title: 'Rated',
+        platformId: p.id,
+        rating: 78.4,
+      });
+      await seedGame(test.prisma, { title: 'Unrated', platformId: p.id });
+
+      const res = (await test.request.get('/games')).body as GamesListBody;
+
+      expect(res.items.map((g) => g.rating)).toEqual([78.4, null]);
     });
 
     it('filters by platformId, edition, year, publisher, genre and playerCount', async () => {

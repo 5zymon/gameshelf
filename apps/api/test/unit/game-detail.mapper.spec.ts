@@ -1,5 +1,12 @@
-import { igdbUrlFor, toGameDetail } from '../../src/games/game-detail.mapper';
-import type { GameDetailRow } from '../../src/games/game-detail.mapper';
+import {
+  igdbUrlFor,
+  toGameDetail,
+  toGameListItem,
+} from '../../src/games/game-detail.mapper';
+import type {
+  GameDetailRow,
+  GameListRow,
+} from '../../src/games/game-detail.mapper';
 
 function row(overrides: Partial<GameDetailRow> = {}): GameDetailRow {
   return {
@@ -11,6 +18,9 @@ function row(overrides: Partial<GameDetailRow> = {}): GameDetailRow {
     publisher: 'Bungie',
     genre: 'Shooter',
     playerCount: 16,
+    summary: 'Desc',
+    rating: 78.4,
+    ratingCount: 512,
     copyCount: 1,
     coverUrl: '/api/covers/abc.jpg',
     sourceCoverUrl:
@@ -26,6 +36,7 @@ function row(overrides: Partial<GameDetailRow> = {}): GameDetailRow {
     updatedAt: new Date('2026-10-02T00:00:00.000Z'),
     platform: { id: 3, name: 'Xbox', slug: 'xbox' },
     images: [{ url: '/api/covers/img1.jpg' }, { url: '/api/covers/img2.jpg' }],
+    videos: [{ id: 7, videoId: 'AbCdEfGhIj0', name: 'Trailer' }],
     ...overrides,
   };
 }
@@ -64,6 +75,32 @@ describe('toGameDetail (unit)', () => {
     ).toBeNull();
     expect(toGameDetail(row({ externalId: null })).igdbUrl).toBeNull();
     expect(toGameDetail(row({ igdbSlug: null })).igdbUrl).toBeNull();
+  });
+
+  it('exposes summary, rating, ratingCount and the ordered videos', () => {
+    const detail = toGameDetail(row());
+
+    expect(detail.summary).toBe('Desc');
+    expect(detail.rating).toBe(78.4);
+    expect(detail.ratingCount).toBe(512);
+    expect(detail.videos).toEqual([
+      { id: 7, name: 'Trailer', videoId: 'AbCdEfGhIj0' },
+    ]);
+  });
+});
+
+describe('toGameListItem (unit)', () => {
+  it('passes the rating through (null stays null)', () => {
+    const item = toGameListItem({
+      id: 1,
+      title: 'Halo',
+      edition: null,
+      coverUrl: null,
+      rating: null,
+      platform: { id: 3, name: 'Xbox', slug: 'xbox' },
+    } satisfies GameListRow);
+
+    expect(item.rating).toBeNull();
   });
 });
 

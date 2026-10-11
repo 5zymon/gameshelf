@@ -20,33 +20,36 @@ reverse proxy, and no assumption that TLS terminates anywhere else.
 This document covers the three guarantees that make that setup work end to end:
 
 1. the same-origin `/api` rewrite (server-to-server);
-2. a strict Content Security Policy that only ever allows `'self'`;
+2. a strict Content Security Policy that allows `'self'` everywhere except the
+   single, scoped YouTube-embed exception for the game-detail video player;
 3. self-hosted assets at build time (fonts) and a local cover cache served
    from the app origin, so the UI loads zero external resources at runtime.
 
 # Content Security Policy
 
-`apps/web/src/middleware.ts` builds a fresh Content Security Policy per request
-and sets it on **both** the request (so Next.js can read the nonce and stamp it
-onto its inline scripts) and the response (so the browser enforces it). The
+`apps/web/src/lib/csp.ts` builds a fresh Content Security Policy
+(`contentSecurityPolicy`) per request and `apps/web/src/middleware.ts` sets it on
+**both** the request (so Next.js can read the nonce and stamp it onto its inline
+scripts) and the response (so the browser enforces it). The
 middleware matcher covers every document route but excludes `/api`,
 `/_next/static`, `/_next/image`, and `/favicon.ico`; the auth screens
 (`/login`, `/setup`) are matched so they receive a nonce too, and are allowed to
 render without a session.
 
-| Directive         | Value                                     | Notes                                                         |
-| ----------------- | ----------------------------------------- | ------------------------------------------------------------- |
-| `default-src`     | `'self'`                                  | Fallback for every unlisted type                              |
-| `script-src`      | `'self' 'nonce-<nonce>' 'strict-dynamic'` | `'unsafe-eval'` is dev-only                                   |
-| `style-src`       | `'self' 'nonce-<nonce>'`                  | No `'unsafe-inline'` anywhere                                 |
-| `img-src`         | `'self' blob:`                            | Covers same-origin; local `blob:` thumbnails for photo import |
-| `font-src`        | `'self'`                                  | Fonts are served from `/_next/static/media`                   |
-| `connect-src`     | `'self'`                                  | `fetch`/XHR only to the app origin                            |
-| `worker-src`      | `'self' blob:`                            | The HEIC→JPEG libheif worker is spawned from a `blob:` URL    |
-| `object-src`      | `'none'`                                  | No plugins                                                    |
-| `base-uri`        | `'self'`                                  | No injected `<base>`                                          |
-| `form-action`     | `'self'`                                  | Forms post to the app origin only                             |
-| `frame-ancestors` | `'none'`                                  | Clickjacking protection                                       |
+| Directive         | Value                                                                                        | Notes                                                                                 |
+| ----------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `default-src`     | `'self'`                                                                                     | Fallback for every unlisted type                                                      |
+| `script-src`      | `'self' 'nonce-<nonce>' 'strict-dynamic' https://www.youtube.com https://player.youtube.com` | `'unsafe-eval'` is dev-only; the YouTube hosts are the card-9.1 exception (see below) |
+| `style-src`       | `'self' 'nonce-<nonce>'`                                                                     | No `'unsafe-inline'` anywhere                                                         |
+| `img-src`         | `'self' blob:`                                                                               | Covers same-origin; local `blob:` thumbnails for photo import                         |
+| `font-src`        | `'self'`                                                                                     | Fonts are served from `/_next/static/media`                                           |
+| `connect-src`     | `'self'`                                                                                     | `fetch`/XHR only to the app origin                                                    |
+| `worker-src`      | `'self' blob:`                                                                               | The HEIC→JPEG libheif worker is spawned from a `blob:` URL                            |
+| `frame-src`       | `'self' https://www.youtube.com https://player.youtube.com`                                  | The game-detail YouTube player only (card 9.1)                                        |
+| `object-src`      | `'none'`                                                                                     | No plugins                                                                            |
+| `base-uri`        | `'self'`                                                                                     | No injected `<base>`                                                                  |
+| `form-action`     | `'self'`                                                                                     | Forms post to the app origin only                                                     |
+| `frame-ancestors` | `'none'`                                                                                     | Clickjacking protection                                                               |
 
 Key properties:
 
@@ -59,10 +62,17 @@ Key properties:
   production omits it.
 - **No `upgrade-insecure-requests`.** That directive would rewrite plain-HTTP
   subresource URLs to HTTPS and break the supported `http://localhost` install.
-- **No external host.** Every directive is `'self'` (plus the nonce,
-  `'strict-dynamic'`, and the local-only `blob:` used for photo-import
-  thumbnails and the HEIC converter worker); there is no `http://`, `https://`,
-  or `*` source.
+- **No external host, with one scoped exception.** Every directive is `'self'`
+  (plus the nonce, `'strict-dynamic'`, and the local-only `blob:` used for
+  photo-import thumbnails and the HEIC converter worker). The **only** external
+  origins named anywhere are the YouTube embed hosts
+  (`https://www.youtube.com`, `https://player.youtube.com`), added to
+  `script-src` and `frame-src` for the game-detail video player (card 9.1). Under
+  `'strict-dynamic'`, CSP3 browsers ignore the host entries in `script-src` — the
+  player's scripts run inside the iframe's own document, which our policy does
+  not govern — but the hosts are present because the card asks for them. Nothing
+  is fetched from YouTube until the user presses play
+  ([Game Summary, Rating & YouTube Videos](/game-summary-rating-videos.md)).
 - **Covers are same-origin.** A saved `Game.coverUrl` is a first-party
   `/api/covers/<file>` path, not an external URL: the import downloads the
   external cover once into the local cache and the API serves it through
@@ -138,7 +148,9 @@ CSP.
 
 The app makes no request to a non-GameShelf origin on a page load: it self-hosts
 its fonts and any rendered cover is a same-origin `/api/covers/<file>` asset.
-Verify it two ways:
+The one external connection the UI can make is the game-detail YouTube iframe,
+and only **after** the user presses play — the initial HTML contains no
+`<iframe>`, so a page load still touches nothing external. Verify it two ways:
 
 - **Network panel.** Open DevTools → Network, hard-reload `/login` (or any page),
   and confirm every request's host is the app origin. There is no Google Fonts,
@@ -182,7 +194,8 @@ it to `true`). No config assumes TLS terminates elsewhere.
 
 # Out of scope
 
-- Automated frontend tests for the CSP/font behavior; verification is the manual
-  Network-panel and curl checks above.
+- Automated frontend tests for the font behavior; verification is the manual
+  Network-panel and curl checks above. The CSP directive set is unit-tested
+  (`apps/web/test/csp.test.mjs`).
 - CDN or multi-origin deployment topologies.
 - CSRF tokens (the app relies on `SameSite=Lax`; see [Auth API](/auth-api.md)).

@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { Prisma } from '../generated/prisma/client';
-import type { CatalogCandidate } from '../game-catalog/game-catalog.resolver';
+import type {
+  CatalogCandidate,
+  CatalogVideo,
+} from '../game-catalog/game-catalog.resolver';
 import { CoverCacheService } from '../covers/cover-cache.service';
 
 /** One locally cached gallery image (same-origin served path + source URL). */
@@ -20,11 +23,19 @@ export interface EnrichedGameData {
   publisher: string | null;
   genre: string | null;
   playerCount: number | null;
+  /** IGDB `summary` (English); hand-editable, provenance tracked. */
+  summary: string | null;
+  /** IGDB `rating` 0–100 (user-rating average); source-derived only. */
+  rating: number | null;
+  /** IGDB `rating_count` (user-rating vote count); source-derived only. */
+  ratingCount: number | null;
   coverUrl: string | null;
   /** External catalog cover URL (internal; drives the background retry). */
   sourceCoverUrl: string | null;
   /** Locally cached, ordered gallery images. */
   images: GalleryImageInput[];
+  /** YouTube videos in IGDB order. */
+  videos: CatalogVideo[];
   rawMetadata: string;
   enrichedAt: Date;
   source: CatalogCandidate['source'];
@@ -63,9 +74,13 @@ export function mapCandidateToGameData(
     publisher: candidate.publisher,
     genre: candidate.genre,
     playerCount: candidate.playerCount,
+    summary: candidate.summary ?? null,
+    rating: candidate.rating ?? null,
+    ratingCount: candidate.ratingCount ?? null,
     coverUrl,
     sourceCoverUrl: candidate.coverUrl,
     images,
+    videos: candidate.videos ?? [],
     rawMetadata: JSON.stringify(candidate.raw),
     enrichedAt: input.fetchedAt ?? new Date(),
     source: candidate.source,
@@ -75,14 +90,15 @@ export function mapCandidateToGameData(
 }
 
 /**
- * A Prisma `game.create` data object with the ordered gallery nested-create.
- * Splitting `images` out keeps the flat `EnrichedGameData` usable where only
- * scalar columns are wanted (e.g. the re-enrichment merge input).
+ * A Prisma `game.create` data object with the ordered gallery and videos
+ * nested-create. Splitting `images` and `videos` out keeps the flat
+ * `EnrichedGameData` usable where only scalar columns are wanted (e.g. the
+ * re-enrichment merge input).
  */
 export function toGameCreateData(
   enriched: EnrichedGameData,
 ): Prisma.GameUncheckedCreateInput {
-  const { images, ...scalars } = enriched;
+  const { images, videos, ...scalars } = enriched;
   return {
     ...scalars,
     images: {
@@ -90,6 +106,13 @@ export function toGameCreateData(
         position: index,
         url: image.url,
         sourceUrl: image.sourceUrl,
+      })),
+    },
+    videos: {
+      create: videos.map((video, index) => ({
+        position: index,
+        videoId: video.videoId,
+        name: video.name,
       })),
     },
   };

@@ -78,7 +78,7 @@ path), optional `sourceUrl` (external IGDB URL, internal, never serialized), and
 timestamps, with `@@unique([gameId, position])` and an index on `gameId`.
 
 `Game.rawMetadata` is untouched. `images` is **not** a tracked metadata field
-(`TRACKED_METADATA_FIELDS` stays `releaseYear/publisher/genre/playerCount/coverUrl`),
+(`TRACKED_METADATA_FIELDS` is `releaseYear/publisher/genre/playerCount/coverUrl/summary`),
 because the gallery is source-derived and cannot be hand-edited.
 
 Writes:

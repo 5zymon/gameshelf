@@ -45,7 +45,7 @@ import { GAME_ALREADY_IN_CATALOG, type GameIdentity } from './game-identity';
 import { GameIdentityService } from './game-identity.service';
 import {
   GAME_DETAIL_INCLUDE,
-  PLATFORM_SELECT,
+  GAME_LIST_SELECT,
   toGameDetail,
   toGameListItem,
 } from './game-detail.mapper';
@@ -79,13 +79,7 @@ export class GamesService {
     const orderBy = this.buildOrderBy(query);
     const [items, total, platforms, editions] = await Promise.all([
       this.prisma.game.findMany({
-        select: {
-          id: true,
-          title: true,
-          edition: true,
-          coverUrl: true,
-          platform: { select: PLATFORM_SELECT },
-        },
+        select: GAME_LIST_SELECT,
         where,
         orderBy,
         skip: (page - 1) * limit,
@@ -230,6 +224,7 @@ export class GamesService {
         publisher: dto.publisher ?? null,
         genre: dto.genre ?? null,
         playerCount: dto.playerCount ?? null,
+        summary: dto.summary ?? null,
         coverUrl: cover.coverUrl,
         sourceCoverUrl: cover.sourceCoverUrl,
         ...(editedNow.length > 0 && {
@@ -312,6 +307,7 @@ export class GamesService {
         ...(dto.publisher !== undefined && { publisher: dto.publisher }),
         ...(dto.genre !== undefined && { genre: dto.genre }),
         ...(dto.playerCount !== undefined && { playerCount: dto.playerCount }),
+        ...(dto.summary !== undefined && { summary: dto.summary }),
         ...(coverWrite !== null && {
           coverUrl: coverWrite.coverUrl,
           sourceCoverUrl: coverWrite.sourceCoverUrl,

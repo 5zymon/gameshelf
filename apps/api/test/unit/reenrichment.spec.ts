@@ -18,6 +18,9 @@ function existing(
     publisher: null,
     genre: null,
     playerCount: null,
+    summary: null,
+    rating: null,
+    ratingCount: null,
     coverUrl: null,
     sourceCoverUrl: null,
     rawMetadata: null,
@@ -27,6 +30,7 @@ function existing(
     platformUnverified: false,
     userEditedFields: null,
     images: [],
+    videos: [],
     ...overrides,
   };
 }
@@ -40,6 +44,9 @@ function enriched(overrides: Partial<EnrichedGameData> = {}): EnrichedGameData {
     publisher: 'Bungie',
     genre: 'Shooter',
     playerCount: 16,
+    summary: 'Halo is…',
+    rating: 78.4,
+    ratingCount: 512,
     coverUrl: '/api/covers/abc.jpg',
     sourceCoverUrl:
       'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
@@ -49,6 +56,7 @@ function enriched(overrides: Partial<EnrichedGameData> = {}): EnrichedGameData {
     externalId: 1036,
     igdbSlug: 'halo-combat-evolved',
     images: [],
+    videos: [],
     ...overrides,
   };
 }
@@ -108,6 +116,9 @@ describe('buildReenrichmentUpdate', () => {
         publisher: 'Bungie',
         genre: 'Shooter',
         playerCount: 16,
+        summary: 'Halo is…',
+        rating: 78.4,
+        ratingCount: 512,
         coverUrl: '/api/covers/abc.jpg',
         sourceCoverUrl:
           'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
@@ -132,6 +143,9 @@ describe('buildReenrichmentUpdate', () => {
       publisher: 'Bungie',
       genre: 'Shooter',
       playerCount: 16,
+      summary: 'Halo is…',
+      rating: 78.4,
+      ratingCount: 512,
       coverUrl: '/api/covers/abc.jpg',
       sourceCoverUrl:
         'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
@@ -150,6 +164,9 @@ describe('buildReenrichmentUpdate', () => {
         publisher: 'Old',
         genre: 'Old',
         playerCount: 2,
+        summary: 'Old description',
+        rating: 50,
+        ratingCount: 10,
         coverUrl: '/old.jpg',
         source: 'MobyGames',
         externalId: 7,
@@ -159,6 +176,9 @@ describe('buildReenrichmentUpdate', () => {
         publisher: null,
         genre: null,
         playerCount: null,
+        summary: null,
+        rating: null,
+        ratingCount: null,
         coverUrl: null,
         sourceCoverUrl: null,
         source: 'IGDB',
@@ -268,6 +288,9 @@ describe('buildReenrichmentUpdate', () => {
         publisher: 'Bungie',
         genre: 'Shooter',
         playerCount: 16,
+        summary: 'Halo is…',
+        rating: 78.4,
+        ratingCount: 512,
         coverUrl: '/api/covers/abc.jpg',
         sourceCoverUrl:
           'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
@@ -293,6 +316,9 @@ describe('buildReenrichmentUpdate', () => {
         publisher: 'Bungie',
         genre: 'Shooter',
         playerCount: 16,
+        summary: 'Halo is…',
+        rating: 78.4,
+        ratingCount: 512,
         coverUrl: '/api/covers/abc.jpg',
         sourceCoverUrl:
           'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
@@ -355,6 +381,9 @@ describe('buildReenrichmentUpdate', () => {
         publisher: 'Bungie',
         genre: 'Shooter',
         playerCount: 16,
+        summary: 'Halo is…',
+        rating: 78.4,
+        ratingCount: 512,
         coverUrl: '/api/covers/abc.jpg',
         sourceCoverUrl:
           'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
@@ -383,5 +412,112 @@ describe('buildReenrichmentUpdate', () => {
 
     expect(data).not.toBeNull();
     expect(data).not.toHaveProperty('images');
+  });
+
+  it('never overwrites a hand-edited summary but still refreshes rating', () => {
+    const data = buildReenrichmentUpdate({
+      existing: existing({
+        source: 'IGDB',
+        externalId: 1036,
+        summary: 'Mine',
+        rating: null,
+        ratingCount: null,
+      }),
+      enriched: enriched({ summary: 'IGDB text', rating: 90, ratingCount: 10 }),
+      editedFields: new Set(['summary']),
+    });
+
+    expect(data).not.toBeNull();
+    expect(data).not.toHaveProperty('summary');
+    expect(data).toMatchObject({ rating: 90, ratingCount: 10 });
+  });
+
+  it('updates a non-edited summary when the source text changed', () => {
+    const data = buildReenrichmentUpdate({
+      existing: existing({ source: 'IGDB', externalId: 1036, summary: 'Old' }),
+      enriched: enriched({ summary: 'New' }),
+    });
+
+    expect(data).toMatchObject({ summary: 'New' });
+  });
+
+  it('never wipes summary, rating or videos with null/empty candidate values', () => {
+    const data = buildReenrichmentUpdate({
+      existing: existing({
+        source: 'IGDB',
+        externalId: 1036,
+        summary: 'Keep me',
+        rating: 78.4,
+        ratingCount: 512,
+        videos: [{ videoId: 'AbCdEfGhIj0', name: 'Trailer' }],
+      }),
+      enriched: enriched({
+        summary: null,
+        rating: null,
+        ratingCount: null,
+        videos: [],
+      }),
+    });
+
+    expect(data).not.toBeNull();
+    expect(data).not.toHaveProperty('summary');
+    expect(data).not.toHaveProperty('rating');
+    expect(data).not.toHaveProperty('ratingCount');
+    expect(data).not.toHaveProperty('videos');
+  });
+
+  it('replaces videos when the order or a name differs', () => {
+    const data = buildReenrichmentUpdate({
+      existing: existing({
+        source: 'IGDB',
+        externalId: 1036,
+        videos: [{ videoId: 'AbCdEfGhIj0', name: 'Trailer' }],
+      }),
+      enriched: enriched({
+        videos: [
+          { videoId: 'Zyx_wvu-987', name: 'Gameplay' },
+          { videoId: 'AbCdEfGhIj0', name: 'Trailer' },
+        ],
+      }),
+    });
+
+    expect(data).toMatchObject({
+      videos: {
+        deleteMany: {},
+        create: [
+          { position: 0, videoId: 'Zyx_wvu-987', name: 'Gameplay' },
+          { position: 1, videoId: 'AbCdEfGhIj0', name: 'Trailer' },
+        ],
+      },
+    });
+  });
+
+  it('writes nothing when the videos are identical', () => {
+    const videos = [{ videoId: 'AbCdEfGhIj0', name: 'Trailer' }];
+    const data = buildReenrichmentUpdate({
+      existing: existing({
+        releaseYear: 2001,
+        publisher: 'Bungie',
+        genre: 'Shooter',
+        playerCount: 16,
+        summary: 'Halo is…',
+        rating: 78.4,
+        ratingCount: 512,
+        coverUrl: '/api/covers/abc.jpg',
+        sourceCoverUrl:
+          'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
+        source: 'IGDB',
+        externalId: 1036,
+        igdbSlug: 'halo-combat-evolved',
+        videos,
+      }),
+      enriched: enriched({ videos }),
+    });
+
+    expect(data).toBeNull();
+  });
+
+  it('tracks summary as a hand-editable metadata field', () => {
+    expect(TRACKED_METADATA_FIELDS).toContain('summary');
   });
 });

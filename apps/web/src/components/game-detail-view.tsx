@@ -2,10 +2,12 @@ import { Fragment } from 'react';
 import { getFormatter, getTranslations } from 'next-intl/server';
 import type { TranslatorFor } from '@/i18n/translate';
 import type { GameDetail, GamePlatform } from '@/lib/api';
+import { formatRating } from '@/lib/rating';
 import { DeleteGameButton } from './delete-game-button';
 import { GameCover } from './game-cover';
 import { GameGallery } from './game-gallery';
 import { GameEditForm } from './game-edit-form';
+import { GameVideos } from './game-videos';
 import { ReEnrichControl } from './re-enrich-control';
 
 function sourceLabel(
@@ -226,6 +228,12 @@ export async function GameDetailView({
                 handEdited={handEdited}
               />
               <DataRow
+                label={t('field.rating')}
+                value={formatRating(game.rating)}
+                notSet={notSet}
+                handEdited={handEdited}
+              />
+              <DataRow
                 label={t('field.copies')}
                 value={game.copyCount}
                 notSet={notSet}
@@ -270,6 +278,25 @@ export async function GameDetailView({
             </dl>
           </section>
 
+          {game.summary !== null && game.summary.trim() !== '' && (
+            <section aria-labelledby="summary-heading" className="space-y-2">
+              <h2
+                id="summary-heading"
+                className="text-lg font-semibold text-ink"
+              >
+                {t('summary')}
+                {edited.has('summary') && (
+                  <span className="ml-2 text-xs font-normal text-muted">
+                    {handEdited}
+                  </span>
+                )}
+              </h2>
+              <p className="max-w-prose text-sm leading-relaxed whitespace-pre-line text-ink">
+                {game.summary}
+              </p>
+            </section>
+          )}
+
           <div className="flex flex-wrap items-start gap-3">
             <GameEditForm game={game} platforms={platforms} />
             <ReEnrichControl gameId={game.id} title={game.title} />
@@ -289,6 +316,7 @@ export async function GameDetailView({
         </div>
       </div>
 
+      <GameVideos title={game.title} videos={game.videos} />
       <GameGallery title={game.title} images={game.images} />
     </article>
   );

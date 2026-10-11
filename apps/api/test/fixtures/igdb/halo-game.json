@@ -17,6 +17,12 @@
     { "id": 6, "name": "PC (Microsoft Windows)", "abbreviation": "PC" }
   ],
   "summary": "Halo: Combat Evolved is a first-person shooter and the debut title of the Halo series.",
+  "rating": 78.4,
+  "rating_count": 512,
+  "videos": [
+    { "id": 101, "name": "Trailer", "video_id": "AbCdEfGhIj0" },
+    { "id": 102, "name": "Gameplay", "video_id": "Zyx_wvu-987" }
+  ],
   "multiplayer_modes": [
     {
       "offlinemax": 4,
