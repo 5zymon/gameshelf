@@ -194,8 +194,8 @@
     "source": {
       "manual": "Ręczne"
     },
-    "neverEnriched": "Nigdy wzbogacona",
-    "lastEnriched": "Ostatnie wzbogacenie: {date}",
+    "neverEnriched": "Nigdy nie pobrano danych",
+    "lastEnriched": "Ostatnie pobranie danych: {date}",
     "platformUnverified": "Platforma niezweryfikowana",
     "notLinked": "Niespowiązana",
     "viewOnIgdb": "Zobacz w IGDB",
@@ -205,15 +205,10 @@
       "releaseYear": "Rok wydania",
       "publisher": "Wydawca",
       "genre": "Gatunek",
-      "players": "Gracze",
       "rating": "Ocena",
-      "copies": "Egzemplarze",
-      "platformId": "ID platformy",
-      "externalId": "ID zewnętrzne",
       "source": "Źródło",
       "added": "Dodana",
-      "updated": "Zaktualizowana",
-      "recordId": "ID rekordu"
+      "updated": "Zaktualizowana"
     },
     "summary": "Opis",
     "tabs": {
@@ -279,7 +274,7 @@
     }
   },
   "reEnrich": {
-    "search": "Wzbogać ponownie z tytułu",
+    "search": "Pobierz dane ponownie",
     "searching": "Wyszukiwanie…",
     "applying": "Stosowanie…",
     "usesTitle": "Używa bieżącego tytułu „{title}”.",

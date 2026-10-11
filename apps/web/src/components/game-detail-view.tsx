@@ -177,33 +177,8 @@ export async function GameDetailView({
           handEdited={handEdited}
         />
         <DataRow
-          label={t('field.players')}
-          value={game.playerCount}
-          edited={edited.has('playerCount')}
-          notSet={notSet}
-          handEdited={handEdited}
-        />
-        <DataRow
           label={t('field.rating')}
           value={formatRating(game.rating)}
-          notSet={notSet}
-          handEdited={handEdited}
-        />
-        <DataRow
-          label={t('field.copies')}
-          value={game.copyCount}
-          notSet={notSet}
-          handEdited={handEdited}
-        />
-        <DataRow
-          label={t('field.platformId')}
-          value={game.platformId}
-          notSet={notSet}
-          handEdited={handEdited}
-        />
-        <DataRow
-          label={t('field.externalId')}
-          value={game.externalId}
           notSet={notSet}
           handEdited={handEdited}
         />
@@ -222,12 +197,6 @@ export async function GameDetailView({
         <DataRow
           label={t('field.updated')}
           value={formatDateTime(game.updatedAt)}
-          notSet={notSet}
-          handEdited={handEdited}
-        />
-        <DataRow
-          label={t('field.recordId')}
-          value={game.id}
           notSet={notSet}
           handEdited={handEdited}
         />

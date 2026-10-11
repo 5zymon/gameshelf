@@ -205,15 +205,10 @@
       "releaseYear": "Release year",
       "publisher": "Publisher",
       "genre": "Genre",
-      "players": "Players",
       "rating": "Rating",
-      "copies": "Copies",
-      "platformId": "Platform ID",
-      "externalId": "External ID",
       "source": "Source",
       "added": "Added",
-      "updated": "Updated",
-      "recordId": "Record ID"
+      "updated": "Updated"
     },
     "summary": "Description",
     "tabs": {
