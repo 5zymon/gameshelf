@@ -5,7 +5,7 @@ import type {
   SetPasswordInput,
 } from '../auth/users.service';
 import type { UsersCliArgs } from './args';
-import type { PasswordReader } from './prompt';
+import type { LineReader, PasswordReader } from './prompt';
 
 export interface UsersCliService {
   createUser(input: CreateUserInput): Promise<CreatedUser>;
@@ -15,8 +15,10 @@ export interface UsersCliService {
 export interface UsersCliDeps {
   users: UsersCliService;
   readPassword: PasswordReader;
-  /** Ask twice and require a match (interactive TTY only). */
-  confirm: boolean;
+  /** Visible prompt (email). */
+  readLine: LineReader;
+  /** stdin is a TTY: prompt for a missing email and confirm the password. */
+  interactive: boolean;
   out: (line: string) => void;
   err: (line: string) => void;
 }
@@ -39,12 +41,25 @@ export async function runUsersCli(
   args: UsersCliArgs,
   deps: UsersCliDeps,
 ): Promise<number> {
-  const password = await deps.readPassword('Password: ');
+  let email = args.email;
+  if (email === undefined) {
+    if (!deps.interactive) {
+      deps.err('Error: --email is required when not running in a terminal.');
+      return 1;
+    }
+    email = (await deps.readLine('Email: ')).trim();
+  }
+  if (email.trim() === '') {
+    deps.err('Error: email must not be empty.');
+    return 1;
+  }
+
+  const password = args.password ?? (await deps.readPassword('Password: '));
   if (password.length === 0) {
     deps.err('Error: password must not be empty.');
     return 1;
   }
-  if (deps.confirm) {
+  if (args.password === undefined && deps.interactive) {
     const confirmation = await deps.readPassword('Confirm password: ');
     if (confirmation !== password) {
       deps.err('Error: passwords do not match.');
@@ -54,11 +69,11 @@ export async function runUsersCli(
 
   try {
     if (args.command === 'create') {
-      const user = await deps.users.createUser({ email: args.email, password });
+      const user = await deps.users.createUser({ email, password });
       deps.out(`Created user ${String(user.id)} <${user.email}>`);
     } else {
       const user = await deps.users.setPassword({
-        email: args.email,
+        email,
         password,
       });
       deps.out(`Updated password for user ${String(user.id)} <${user.email}>`);

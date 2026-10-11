@@ -3,7 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from '../app.module';
 import { UsersService } from '../auth/users.service';
 import { parseUsersArgs, UsageError } from './args';
-import { createPasswordReader } from './prompt';
+import { createLineReader, createPasswordReader } from './prompt';
 import { runUsersCli } from './run-users';
 
 async function main(): Promise<void> {
@@ -16,7 +16,8 @@ async function main(): Promise<void> {
     process.exitCode = await runUsersCli(args, {
       users: app.get(UsersService),
       readPassword: createPasswordReader(),
-      confirm: process.stdin.isTTY,
+      readLine: createLineReader(),
+      interactive: process.stdin.isTTY,
       out: (line) => {
         process.stdout.write(`${line}\n`);
       },

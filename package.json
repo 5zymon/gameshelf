@@ -23,6 +23,7 @@
     "db:migrate:check": "npm run db:migrate:check --workspace apps/api",
     "platforms:sync": "npm run platforms:sync --workspace apps/api",
     "covers:redownload": "npm run covers:redownload --workspace apps/api",
+    "db:clear-dev": "npm run db:clear-dev --workspace apps/api --",
     "db:studio": "npm run db:studio --workspace apps/api",
     "user:create": "npm run user:create --workspace apps/api --",
     "user:passwd": "npm run user:passwd --workspace apps/api --",

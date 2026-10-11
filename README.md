@@ -98,27 +98,28 @@ npm run dev
 
 Other useful scripts (all run from the root):
 
-| Command                     | Description                                                    |
-| --------------------------- | -------------------------------------------------------------- |
-| `npm run dev`               | Start API + web in watch mode                                  |
-| `npm run dev:api`           | Start only the NestJS API                                      |
-| `npm run dev:web`           | Start only the Next.js frontend                                |
-| `npm run build`             | Build both workspaces                                          |
-| `npm run db:migrate`        | Local migration (Prisma, shadow DB)                            |
-| `npm run platforms:sync`    | Fetch and reconcile the canonical IGDB platform list locally   |
-| `npm run covers:redownload` | Re-download every missing game cover from its stored link      |
-| `npm run db:deploy`         | Apply committed migrations                                     |
-| `npm run db:migrate:check`  | Fail if schema and deployed DB diverge                         |
-| `npm run db:generate`       | Regenerate the Prisma client                                   |
-| `npm run db:studio`         | Open Prisma Studio                                             |
-| `npm run user:create`       | Create an account from the terminal (prompts for the password) |
-| `npm run user:passwd`       | Reset an account's password from the terminal (prompts for it) |
-| `npm run typecheck`         | Type-check both workspaces                                     |
-| `npm run test`              | Run the API test suite (unit + e2e)                            |
-| `npm run lint`              | Lint both workspaces                                           |
-| `npm run lint:fix`          | Lint both workspaces and autofix                               |
-| `npm run format`            | Format the whole repo with Prettier                            |
-| `npm run format:check`      | Check formatting without writing                               |
+| Command                     | Description                                                                    |
+| --------------------------- | ------------------------------------------------------------------------------ |
+| `npm run dev`               | Start API + web in watch mode                                                  |
+| `npm run dev:api`           | Start only the NestJS API                                                      |
+| `npm run dev:web`           | Start only the Next.js frontend                                                |
+| `npm run build`             | Build both workspaces                                                          |
+| `npm run db:migrate`        | Local migration (Prisma, shadow DB)                                            |
+| `npm run platforms:sync`    | Fetch and reconcile the canonical IGDB platform list locally                   |
+| `npm run covers:redownload` | Re-download every missing game cover from its stored link                      |
+| `npm run db:clear-dev`      | Dev only: delete all games and import data, keep accounts                      |
+| `npm run db:deploy`         | Apply committed migrations                                                     |
+| `npm run db:migrate:check`  | Fail if schema and deployed DB diverge                                         |
+| `npm run db:generate`       | Regenerate the Prisma client                                                   |
+| `npm run db:studio`         | Open Prisma Studio                                                             |
+| `npm run user:create`       | Create an account from the terminal (prompts for email and password)           |
+| `npm run user:passwd`       | Reset an account's password from the terminal (prompts for email and password) |
+| `npm run typecheck`         | Type-check both workspaces                                                     |
+| `npm run test`              | Run the API test suite (unit + e2e)                                            |
+| `npm run lint`              | Lint both workspaces                                                           |
+| `npm run lint:fix`          | Lint both workspaces and autofix                                               |
+| `npm run format`            | Format the whole repo with Prettier                                            |
+| `npm run format:check`      | Check formatting without writing                                               |
 
 ### Code quality and git hooks
 
@@ -193,24 +194,26 @@ Accounts are provisioned only by:
   exists. See [`docs/features/first-run-setup.md`](./docs/features/first-run-setup.md).
 - **The CLI** — operator-run commands that reuse `UsersService`, for when the
   first account already exists (or the only account is locked out):
-  - `npm run user:create -- --email <email>` — create an account. The command
-    prompts for the password without echoing it; it is never accepted as a
-    command-line argument.
-  - `npm run user:passwd -- --email <email>` — set a new password (the
-    account-recovery path: there is no email/SMTP reset flow).
+  - `npm run user:create` — create an account. It prompts for `Email: ` (unless
+    `--email <email>` is given), then `Password: ` and `Confirm password: `
+    without echoing them.
+  - `npm run user:passwd` — set a new password (the account-recovery path: there
+    is no email/SMTP reset flow).
 
-  Both accept the password on stdin when run non-interactively, so they work in
-  scripts and CI:
+  `--password <password>` / `--password=<password>` skips both password prompts
+  and the confirmation, but it shows up in shell history and `ps`, so prefer the
+  stdin pipe when running non-interactively (off a TTY, `--email` is required):
 
   ```bash
   printf '%s\n' "$NEW_PASSWORD" | npm run user:passwd -- --email player@example.com
   ```
 
-  Failures — missing `--email`, blank email, empty password, password mismatch,
-  duplicate email on create, unknown email on passwd — print a readable message
-  to stderr and exit non-zero. Validation and hashing use the same code path as
-  first-run setup (`UsersService.prepareUser`); the CLI adds no separate rules.
-  See [`docs/features/user-cli.md`](./docs/features/user-cli.md).
+  Failures — missing `--email` off a TTY, blank email, empty password, password
+  mismatch, duplicate email on create, unknown email on passwd — print a
+  readable message to stderr and exit non-zero. Validation and hashing use the
+  same code path as first-run setup (`UsersService.prepareUser`); the CLI adds
+  no separate rules. See
+  [`docs/features/user-cli.md`](./docs/features/user-cli.md).
 
 Additional users therefore require operator action. The web client exposes no
 signup page or link either; that is enforced by the frontend ticket.

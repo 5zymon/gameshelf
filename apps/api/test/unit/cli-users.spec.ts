@@ -1,7 +1,7 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Readable, Writable } from 'node:stream';
 import { parseUsersArgs, UsageError } from '../../src/cli/args';
-import { createPasswordReader } from '../../src/cli/prompt';
+import { createLineReader, createPasswordReader } from '../../src/cli/prompt';
 import { runUsersCli, type UsersCliDeps } from '../../src/cli/run-users';
 
 interface UsersMock {
@@ -23,7 +23,8 @@ function createHarness(overrides: Partial<UsersCliDeps> = {}): Harness {
   const deps: UsersCliDeps = {
     users,
     readPassword: jest.fn(),
-    confirm: false,
+    readLine: jest.fn(),
+    interactive: false,
     out: (line) => {
       out.push(line);
     },
@@ -52,6 +53,7 @@ describe('parseUsersArgs', () => {
       {
         command: 'create',
         email: 'player@example.com',
+        password: undefined,
       },
     );
   });
@@ -61,6 +63,7 @@ describe('parseUsersArgs', () => {
       {
         command: 'passwd',
         email: 'player@example.com',
+        password: undefined,
       },
     );
   });
@@ -72,8 +75,12 @@ describe('parseUsersArgs', () => {
     );
   });
 
-  it('requires --email', () => {
-    expect(() => parseUsersArgs(['create'])).toThrow('--email is required');
+  it('allows a missing --email', () => {
+    expect(parseUsersArgs(['create'])).toEqual({
+      command: 'create',
+      email: undefined,
+      password: undefined,
+    });
   });
 
   it('requires a value after --email', () => {
@@ -85,19 +92,46 @@ describe('parseUsersArgs', () => {
     );
   });
 
-  it('rejects a password passed as an argument', () => {
-    expect(() =>
+  it('accepts --password with a value', () => {
+    expect(
       parseUsersArgs(['create', '--email', 'a@b.c', '--password', 'secret']),
-    ).toThrow('Do not pass the password');
-    expect(() =>
+    ).toEqual({ command: 'create', email: 'a@b.c', password: 'secret' });
+  });
+
+  it('accepts --password=<value>', () => {
+    expect(
       parseUsersArgs(['create', '--email', 'a@b.c', '--password=secret']),
-    ).toThrow('Do not pass the password');
+    ).toEqual({ command: 'create', email: 'a@b.c', password: 'secret' });
+  });
+
+  it('accepts an empty --password= so the flow can report it', () => {
+    expect(parseUsersArgs(['create', '--password=']).password).toBe('');
+  });
+
+  it('rejects --password with no value or followed by a flag', () => {
+    expect(() => parseUsersArgs(['create', '--password'])).toThrow(
+      '--password requires a value',
+    );
+    expect(() => parseUsersArgs(['create', '--password', '--email'])).toThrow(
+      '--password requires a value',
+    );
   });
 
   it('rejects an unknown flag', () => {
     expect(() =>
       parseUsersArgs(['create', '--email', 'a@b.c', '--admin']),
     ).toThrow('Unknown argument: --admin');
+  });
+
+  it('never echoes the value of an unknown password-like flag', () => {
+    let message = '';
+    try {
+      parseUsersArgs(['create', '--passwrod=secret']);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toBe('Unknown argument: --passwrod');
+    expect(message).not.toContain('secret');
   });
 });
 
@@ -152,6 +186,92 @@ describe('runUsersCli', () => {
     );
   });
 
+  it('prompts for a missing email when interactive', async () => {
+    const harness = createHarness({
+      interactive: true,
+      readLine: jest.fn().mockResolvedValue('  ash@example.com  '),
+      readPassword: jest.fn().mockResolvedValue('pikachu123'),
+    });
+    harness.users.createUser.mockResolvedValue({
+      id: 1,
+      email: 'ash@example.com',
+      createdAt: new Date('2026-10-05T12:00:00.000Z'),
+    });
+
+    const code = await runUsersCli({ command: 'create' }, harness.deps);
+
+    expect(code).toBe(0);
+    expect(harness.deps.readLine).toHaveBeenCalledWith('Email: ');
+    expect(harness.users.createUser).toHaveBeenCalledWith({
+      email: 'ash@example.com',
+      password: 'pikachu123',
+    });
+  });
+
+  it('requires --email off a TTY without reading anything', async () => {
+    const harness = createHarness();
+
+    const code = await runUsersCli({ command: 'create' }, harness.deps);
+
+    expect(code).toBe(1);
+    expect(harness.err.join('\n')).toContain(
+      '--email is required when not running in a terminal',
+    );
+    expect(harness.deps.readLine).not.toHaveBeenCalled();
+    expect(harness.deps.readPassword).not.toHaveBeenCalled();
+  });
+
+  it('rejects a blank prompted email before asking for a password', async () => {
+    const harness = createHarness({
+      interactive: true,
+      readLine: jest.fn().mockResolvedValue('   '),
+    });
+
+    const code = await runUsersCli({ command: 'create' }, harness.deps);
+
+    expect(code).toBe(1);
+    expect(harness.err.join('\n')).toContain('email must not be empty');
+    expect(harness.deps.readPassword).not.toHaveBeenCalled();
+    expect(harness.users.createUser).not.toHaveBeenCalled();
+  });
+
+  it('uses --password without prompting or confirming', async () => {
+    const harness = createHarness({
+      interactive: true,
+      readPassword: jest.fn(),
+    });
+    harness.users.createUser.mockResolvedValue({
+      id: 1,
+      email: 'ash@example.com',
+      createdAt: new Date('2026-10-05T12:00:00.000Z'),
+    });
+
+    const code = await runUsersCli(
+      { command: 'create', email: 'ash@example.com', password: 'from-arg' },
+      harness.deps,
+    );
+
+    expect(code).toBe(0);
+    expect(harness.deps.readPassword).not.toHaveBeenCalled();
+    expect(harness.users.createUser).toHaveBeenCalledWith({
+      email: 'ash@example.com',
+      password: 'from-arg',
+    });
+  });
+
+  it('rejects an empty --password without calling the service', async () => {
+    const harness = createHarness();
+
+    const code = await runUsersCli(
+      { command: 'create', email: 'ash@example.com', password: '' },
+      harness.deps,
+    );
+
+    expect(code).toBe(1);
+    expect(harness.err.join('\n')).toContain('password must not be empty');
+    expect(harness.users.createUser).not.toHaveBeenCalled();
+  });
+
   it('rejects an empty password without calling the service', async () => {
     const harness = createHarness({
       readPassword: jest.fn().mockResolvedValue(''),
@@ -169,11 +289,11 @@ describe('runUsersCli', () => {
 
   it('rejects a confirmation mismatch without calling the service', async () => {
     const harness = createHarness({
+      interactive: true,
       readPassword: jest
         .fn()
         .mockResolvedValueOnce('one')
         .mockResolvedValueOnce('two'),
-      confirm: true,
     });
 
     const code = await runUsersCli(
@@ -269,6 +389,23 @@ describe('createPasswordReader (TTY)', () => {
     await expect(readPassword('Password: ')).resolves.toBe('secret');
     expect(capture.text()).toContain('Password: ');
     expect(capture.text()).not.toContain('secret');
+    // Hidden mode keeps exactly one trailing newline, added by the reader
+    // because the no-echo override swallows readline's own.
+    expect(/\n+$/.exec(capture.text())?.[0]).toBe('\n');
+  });
+
+  it('redraws the prompt after the last row clear', async () => {
+    const capture = capturingWritable();
+    const readPassword = createPasswordReader({
+      input: ttyInput(['secret\n']),
+      output: capture.stream,
+    });
+
+    await expect(readPassword('Password: ')).resolves.toBe('secret');
+    const text = capture.text();
+    expect(text.lastIndexOf('Password: ')).toBeGreaterThan(
+      text.lastIndexOf('\x1b[0J'),
+    );
   });
 
   it('rejects instead of hanging when the prompt is aborted (Ctrl-D/EOF)', async () => {
@@ -282,5 +419,42 @@ describe('createPasswordReader (TTY)', () => {
       'Password prompt aborted',
     );
     expect(capture.text()).toContain('Password: ');
+  });
+});
+
+describe('createLineReader (TTY)', () => {
+  function ttyInput(chunks: readonly string[]): Readable & { isTTY: boolean } {
+    const input = Readable.from(chunks) as Readable & { isTTY?: boolean };
+    input.isTTY = true;
+    return input as Readable & { isTTY: boolean };
+  }
+
+  it('echoes the input and keeps the prompt after the last row clear', async () => {
+    const capture = capturingWritable();
+    const readLine = createLineReader({
+      input: ttyInput(['ash@example.com\n']),
+      output: capture.stream,
+    });
+
+    await expect(readLine('Email: ')).resolves.toBe('ash@example.com');
+    const text = capture.text();
+    expect(text).toContain('ash@example.com');
+    expect(text.lastIndexOf('Email: ')).toBeGreaterThan(
+      text.lastIndexOf('\x1b[0J'),
+    );
+    // Visible readline already writes the line's own newline; the reader must
+    // not append a second one (which left a blank line after the answer).
+    expect(/\n+$/.exec(text)?.[0]).toBe('\n');
+  });
+
+  it('rejects instead of hanging when the prompt is aborted (Ctrl-D/EOF)', async () => {
+    const capture = capturingWritable();
+    const readLine = createLineReader({
+      input: ttyInput([]),
+      output: capture.stream,
+    });
+
+    await expect(readLine('Email: ')).rejects.toThrow('Prompt aborted');
+    expect(capture.text()).toContain('Email: ');
   });
 });
