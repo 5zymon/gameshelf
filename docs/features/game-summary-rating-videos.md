@@ -30,8 +30,9 @@ It reuses the one candidate→`Game` mapping
 The videos player is the **single sanctioned exception** to the
 [strict single-origin CSP](/single-origin-frontend-api.md): the detail page
 embeds `https://www.youtube.com/embed/<id>`, so the policy gains the YouTube
-hosts and a `frame-src` directive. Nothing loads from YouTube until the user
-presses play.
+hosts and a `frame-src` directive, plus the `https://i.ytimg.com` thumbnail host
+in `img-src`. The player's facade fetches the video thumbnail from YouTube at
+render; the embed `<iframe>` loads only after the user presses play.
 
 # Data model
 
@@ -160,13 +161,15 @@ cannot be hand-edited.
   section from `game.summary` (whitespace-pre-line, with a "hand-edited" marker
   when `summary` is in `userEditedFields`) and a "Rating" row.
 - **Detail videos.** `GameVideos` (`apps/web/src/components/game-videos.tsx`)
-  shows a same-origin **click-to-play placeholder** — no `<iframe>`, no external
-  request — until the user presses Play or picks a video; only then is the
-  `https://www.youtube.com/embed/<id>?autoplay=1` iframe mounted. A text-only
+  shows a **thumbnail facade** until the user presses Play or picks a video: the
+  video's YouTube poster (`i.ytimg.com`, `maxresdefault.jpg` with an `hqdefault`
+  fallback) sits behind a scrim with a play glyph, and no `<iframe>` is mounted
+  until Play — then the `https://www.youtube.com/embed/<id>?autoplay=1` iframe
+  takes over. The thumbnail alone is fetched from YouTube at render. A text-only
   switcher (translated labels) appears when there is more than one playable
-  video, with a notice that videos play from YouTube. The component renders
-  nothing when there are no valid ids. `apps/web/src/lib/youtube.ts` holds the
-  id validation (`isYoutubeVideoId`), `youtubeEmbedUrl`, and `playableVideos`.
+  video. The component renders nothing when there are no valid ids.
+  `apps/web/src/lib/youtube.ts` holds the id validation (`isYoutubeVideoId`),
+  `youtubeEmbedUrl`, `youtubeThumbnailUrl`, and `playableVideos`.
 - **Edit.** `GameEditForm` adds a "Description" `<textarea>` (`maxLength=16000`).
   `multilineDelta` compares newline-normalized, trimmed text, so an untouched
   IGDB summary is not marked hand-edited just because a textarea normalizes CRLF
@@ -179,14 +182,18 @@ cannot be hand-edited.
 
 `apps/web/src/lib/csp.ts` centralises the policy (the middleware imports it) and
 defines `YOUTUBE_EMBED_SOURCES = ['https://www.youtube.com',
-'https://player.youtube.com']`. Those hosts are added to `script-src` and a new
-`frame-src` directive (`frame-src 'self' https://www.youtube.com
-https://player.youtube.com`) is added; every other fetch directive stays
-`'self'`. Under `'strict-dynamic'`, CSP3 browsers ignore the host entries in
-`script-src` — the player's scripts run inside the iframe's own document, which
-our policy does not govern — but the card asks for them. See
+'https://player.youtube.com']`, added to `script-src` and a new `frame-src`
+directive (`frame-src 'self' https://www.youtube.com
+https://player.youtube.com`). `YOUTUBE_THUMBNAIL_SOURCES =
+['https://i.ytimg.com']` is added to `img-src` only
+(`img-src 'self' blob: https://i.ytimg.com`) so the facade can fetch each video's
+thumbnail at render — a deliberate extension of the card-9.1 exception that
+relaxes its old "only while a video is playing" wording; every other fetch
+directive stays `'self'`. Under `'strict-dynamic'`, CSP3 browsers ignore the host
+entries in `script-src` — the player's scripts run inside the iframe's own
+document, which our policy does not govern — but the card asks for them. See
 [Single-Origin Frontend & API with Strict CSP](/single-origin-frontend-api.md)
-for the full directive table and the "no external request" caveat.
+for the full directive table and the external-request caveat.
 
 # Tests
 
@@ -215,9 +222,10 @@ for the full directive table and the "no external request" caveat.
 - `games.e2e-spec.ts` (e2e): `GET /games` items carry the rating (and `null` when
   unrated).
 - Web (`node --test`): `rating.test.mjs` (rounding, clamping, non-finite → no
-  label), `youtube.test.mjs` (id validation, embed URL, `playableVideos`), and
-  `csp.test.mjs` (the YouTube hosts in `script-src` and `frame-src`, and the
-  dev/prod differences).
+  label), `youtube.test.mjs` (id validation, embed URL, thumbnail URL,
+  `playableVideos`), and `csp.test.mjs` (the YouTube hosts in `script-src`,
+  `frame-src` and the thumbnail host in `img-src`, and the dev/prod
+  differences).
 
 # Out of scope
 

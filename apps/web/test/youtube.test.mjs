@@ -47,8 +47,12 @@ registerHooks({
   },
 });
 
-const { isYoutubeVideoId, youtubeEmbedUrl, playableVideos } =
-  await import('../src/lib/youtube.ts');
+const {
+  isYoutubeVideoId,
+  youtubeEmbedUrl,
+  youtubeThumbnailUrl,
+  playableVideos,
+} = await import('../src/lib/youtube.ts');
 
 test('isYoutubeVideoId: accepts exactly 11 id characters', () => {
   assert.equal(isYoutubeVideoId('dQw4w9WgXcQ'), true);
@@ -77,6 +81,27 @@ test('youtubeEmbedUrl: builds the embed URL, optionally autoplaying', () => {
 test('youtubeEmbedUrl: an invalid id never yields a URL', () => {
   assert.equal(youtubeEmbedUrl('bad'), null);
   assert.equal(youtubeEmbedUrl(''), null);
+});
+
+test('youtubeThumbnailUrl: builds the thumbnail URL, defaulting to maxres', () => {
+  assert.equal(
+    youtubeThumbnailUrl('dQw4w9WgXcQ'),
+    'https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg',
+  );
+  assert.equal(
+    youtubeThumbnailUrl('dQw4w9WgXcQ', 'max'),
+    'https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg',
+  );
+  assert.equal(
+    youtubeThumbnailUrl('dQw4w9WgXcQ', 'hq'),
+    'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+  );
+});
+
+test('youtubeThumbnailUrl: an invalid id never yields a URL', () => {
+  assert.equal(youtubeThumbnailUrl('bad'), null);
+  assert.equal(youtubeThumbnailUrl(''), null);
+  assert.equal(youtubeThumbnailUrl('dQw4w9WgXcQ!', 'hq'), null);
 });
 
 test('playableVideos: keeps valid ids in order and drops the rest', () => {

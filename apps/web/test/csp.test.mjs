@@ -47,11 +47,15 @@ registerHooks({
   },
 });
 
-const { contentSecurityPolicy, YOUTUBE_EMBED_SOURCES } =
-  await import('../src/lib/csp.ts');
+const {
+  contentSecurityPolicy,
+  YOUTUBE_EMBED_SOURCES,
+  YOUTUBE_THUMBNAIL_SOURCES,
+} = await import('../src/lib/csp.ts');
 
 const NONCE = 'test-nonce';
 const YOUTUBE = YOUTUBE_EMBED_SOURCES.join(' ');
+const YOUTUBE_THUMBNAILS = YOUTUBE_THUMBNAIL_SOURCES.join(' ');
 
 test('production policy allows only the YouTube hosts as a frame source', () => {
   const csp = contentSecurityPolicy(NONCE, false);
@@ -60,7 +64,11 @@ test('production policy allows only the YouTube hosts as a frame source', () => 
   // Every other fetch directive stays self-only.
   assert.match(csp, /(^|; )default-src 'self'/);
   assert.match(csp, /(^|; )connect-src 'self'/);
-  assert.match(csp, /(^|; )img-src 'self' blob:/);
+  // `img-src` keeps `'self'`/`blob:` and adds only the YouTube thumbnail host.
+  assert.match(
+    csp,
+    new RegExp(`(^|; )img-src 'self' blob: ${YOUTUBE_THUMBNAILS}(;|$)`),
+  );
 });
 
 test('production policy names the YouTube hosts in script-src and drops unsafe-eval', () => {
@@ -94,13 +102,27 @@ test('no directive uses a bare wildcard, and only YouTube adds an https origin',
 
   // No `*` source anywhere.
   assert.doesNotMatch(csp, /\*/);
-  // Every directive except `script-src`/`frame-src` (the card-9.1 YouTube
+  // `img-src` keeps `'self'` and `blob:` and may name only the YouTube
+  // thumbnail host — no other external origin.
+  const imgSrc = csp.split('; ').find((d) => d.startsWith('img-src '));
+  assert.ok(imgSrc, 'img-src directive is present');
+  assert.match(imgSrc, /'self'/);
+  assert.match(imgSrc, /blob:/);
+  assert.ok(
+    imgSrc.includes(YOUTUBE_THUMBNAILS),
+    `img-src contains ${YOUTUBE_THUMBNAILS}`,
+  );
+  assert.equal(
+    imgSrc.match(/https:/g)?.length,
+    1,
+    'img-src names exactly one https origin',
+  );
+  // Every other directive except `script-src`/`frame-src` (the card-9.1 YouTube
   // exception) stays free of external origins.
   for (const directive of [
     'default-src',
     'connect-src',
     'font-src',
-    'img-src',
     'style-src',
   ]) {
     const value = csp.split('; ').find((d) => d.startsWith(`${directive} `));

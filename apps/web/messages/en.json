@@ -236,8 +236,7 @@
       "play": "Play: {name}",
       "playerTitle": "{title} — {name}",
       "untitled": "Video {index}",
-      "choose": "Choose a video",
-      "externalNotice": "Videos play from YouTube; nothing loads until you press play."
+      "choose": "Choose a video"
     }
   },
   "gameEdit": {

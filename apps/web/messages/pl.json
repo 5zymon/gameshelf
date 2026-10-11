@@ -236,8 +236,7 @@
       "play": "Odtwórz: {name}",
       "playerTitle": "{title} — {name}",
       "untitled": "Film {index}",
-      "choose": "Wybierz film",
-      "externalNotice": "Filmy są odtwarzane z YouTube; nic się nie wczytuje, dopóki nie naciśniesz odtwarzania."
+      "choose": "Wybierz film"
     }
   },
   "gameEdit": {

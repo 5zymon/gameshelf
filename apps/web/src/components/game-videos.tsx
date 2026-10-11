@@ -3,7 +3,11 @@
 import { useTranslations } from 'next-intl';
 import { useId, useState } from 'react';
 import type { GameVideo } from '@/lib/api';
-import { playableVideos, youtubeEmbedUrl } from '@/lib/youtube';
+import {
+  playableVideos,
+  youtubeEmbedUrl,
+  youtubeThumbnailUrl,
+} from '@/lib/youtube';
 
 interface GameVideosProps {
   title: string;
@@ -12,10 +16,12 @@ interface GameVideosProps {
 
 /**
  * One embedded YouTube player with a text-only switcher. Until the user
- * presses Play (or picks a video) the frame shows a same-origin click-to-play
- * placeholder — no `<iframe>`, no external request — so YouTube is contacted
- * only while a video is playing (card 9.1 acceptance criterion). Hidden
- * entirely when there are no embeddable videos.
+ * presses Play (or picks a video) the frame shows the video's YouTube
+ * thumbnail behind a same-origin click-to-play facade — the thumbnail is
+ * fetched from `i.ytimg.com` at render (a deliberate, scoped extension of the
+ * card-9.1 YouTube exception), but no `<iframe>` is mounted until Play, so
+ * YouTube is not contacted for playback before then. Hidden entirely when
+ * there are no embeddable videos.
  */
 export function GameVideos({
   title,
@@ -61,22 +67,16 @@ export function GameVideos({
             className="absolute inset-0 h-full w-full"
           />
         ) : (
-          <button
-            type="button"
-            onClick={() => {
+          <VideoFacade
+            key={current.videoId}
+            videoId={current.videoId}
+            label={t('play', { name: label(current, activeIndex) })}
+            onPlay={() => {
               setPlaying(true);
             }}
-            className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-ink focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
-          >
-            <PlayIcon />
-            <span className="text-sm font-medium">
-              {t('play', { name: label(current, activeIndex) })}
-            </span>
-          </button>
+          />
         )}
       </div>
-
-      <p className="max-w-3xl text-xs text-muted">{t('externalNotice')}</p>
 
       {list.length > 1 && (
         <nav aria-label={t('choose')}>
@@ -110,13 +110,66 @@ export function GameVideos({
 const PILL =
   'rounded-full border px-3 py-1 text-xs transition-colors duration-[140ms] ease-[ease] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent motion-reduce:transition-none';
 
+interface VideoFacadeProps {
+  videoId: string;
+  /** Accessible label, already translated (`Play: <name>`). */
+  label: string;
+  onPlay: () => void;
+}
+
+/**
+ * Click-to-play facade over the video's YouTube thumbnail. `maxresdefault.jpg`
+ * is absent for some videos, so a failed load falls back once to `hqdefault.jpg`
+ * (guarded so a second failure hides the `<img>` instead of looping); the
+ * frame's surface background then shows through. A dark scrim keeps the glyph
+ * and label legible over any thumbnail.
+ */
+function VideoFacade({
+  videoId,
+  label,
+  onPlay,
+}: VideoFacadeProps): React.ReactElement {
+  const [quality, setQuality] = useState<'max' | 'hq'>('max');
+  const [failed, setFailed] = useState(false);
+  const src = youtubeThumbnailUrl(videoId, quality);
+
+  return (
+    <button
+      type="button"
+      onClick={onPlay}
+      className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent"
+    >
+      {!failed && src !== null && (
+        // eslint-disable-next-line @next/next/no-img-element -- YouTube's thumbnail CDN; next/image cannot optimise a host we do not proxy.
+        <img
+          src={src}
+          alt=""
+          aria-hidden="true"
+          decoding="async"
+          onError={() => {
+            if (quality === 'max') setQuality('hq');
+            else setFailed(true);
+          }}
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      )}
+      <span
+        aria-hidden="true"
+        className="absolute inset-0 bg-linear-to-t from-black/65 via-black/25 to-black/40"
+      />
+      <PlayIcon />
+      <span className="relative text-sm font-medium">{label}</span>
+    </button>
+  );
+}
+
 function PlayIcon(): React.ReactElement {
   return (
     <svg
       viewBox="0 0 24 24"
       fill="currentColor"
       aria-hidden="true"
-      className="h-12 w-12"
+      className="relative h-12 w-12"
     >
       <path d="M8 5v14l11-7z" />
     </svg>

@@ -11,6 +11,16 @@ export const YOUTUBE_EMBED_SOURCES = [
 ] as const;
 
 /**
+ * YouTube thumbnail host, added to `img-src` only. The game-detail Videos
+ * player fetches each video's poster image from here at render, before the user
+ * presses play — a deliberate extension of the card-9.1 YouTube exception that
+ * knowingly relaxes its old "only while a video is playing" wording. YouTube
+ * remains the sole sanctioned external origin; no other host is added. See
+ * docs/features/single-origin-frontend-api.md.
+ */
+export const YOUTUBE_THUMBNAIL_SOURCES = ['https://i.ytimg.com'] as const;
+
+/**
  * Strict, self-only policy. The per-request nonce lets Next.js execute its
  * inline bootstrap/flight scripts without `'unsafe-inline'`; `'strict-dynamic'`
  * lets those nonce'd scripts load the `/_next/static` chunks. `'unsafe-eval'`
@@ -24,6 +34,7 @@ export function contentSecurityPolicy(
   isDev = process.env.NODE_ENV === 'development',
 ): string {
   const youtubeSources = YOUTUBE_EMBED_SOURCES.join(' ');
+  const youtubeThumbnails = YOUTUBE_THUMBNAIL_SOURCES.join(' ');
   return [
     "default-src 'self'",
     // Under `'strict-dynamic'`, CSP3 browsers ignore the YouTube host entries
@@ -39,8 +50,9 @@ export function contentSecurityPolicy(
     `style-src 'self'${isDev ? " 'unsafe-inline'" : ` 'nonce-${nonce}'`}`,
     // `blob:` is required by the photo import screen: thumbnails are local
     // `URL.createObjectURL` blobs and the HEIC→JPEG converter spawns a
-    // blob worker.
-    "img-src 'self' blob:",
+    // blob worker. The YouTube thumbnail host serves the game-detail video
+    // posters, fetched at render (the card-9.1 exception, see below).
+    `img-src 'self' blob: ${youtubeThumbnails}`,
     "font-src 'self'",
     "connect-src 'self'",
     "worker-src 'self' blob:",
