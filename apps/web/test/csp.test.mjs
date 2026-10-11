@@ -76,10 +76,17 @@ test('production policy names the YouTube hosts in script-src and drops unsafe-e
 
   const scriptSrc = csp.split('; ').find((d) => d.startsWith('script-src'));
   assert.ok(scriptSrc, 'script-src directive is present');
+  assert.match(scriptSrc, /'self'/);
   assert.match(scriptSrc, /'nonce-test-nonce'/);
   assert.match(scriptSrc, /'strict-dynamic'/);
   assert.match(scriptSrc, /https:\/\/www\.youtube\.com/);
   assert.match(scriptSrc, /https:\/\/player\.youtube\.com/);
+  // Exactly the two YouTube embed hosts, and no other https origin.
+  assert.deepEqual(
+    (scriptSrc.match(/https:\/\/[^ ]+/g) ?? []).sort(),
+    [...YOUTUBE_EMBED_SOURCES].sort(),
+    'script-src names exactly the two YouTube embed hosts',
+  );
   assert.doesNotMatch(csp, /unsafe-eval/);
 });
 

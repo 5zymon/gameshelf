@@ -121,8 +121,10 @@ interface VideoFacadeProps {
  * Click-to-play facade over the video's YouTube thumbnail. `maxresdefault.jpg`
  * is absent for some videos, so a failed load falls back once to `hqdefault.jpg`
  * (guarded so a second failure hides the `<img>` instead of looping); the
- * frame's surface background then shows through. A dark scrim keeps the glyph
- * and label legible over any thumbnail.
+ * frame's surface background then shows through. A dark scrim darkens the
+ * whole frame, and the glyph and label each carry their own guaranteed dark
+ * backing (a disc and a pill) so they stay legible over any thumbnail — or over
+ * the near-white surface when the thumbnail is hidden — in both themes.
  */
 function VideoFacade({
   videoId,
@@ -146,6 +148,7 @@ function VideoFacade({
           alt=""
           aria-hidden="true"
           decoding="async"
+          referrerPolicy="no-referrer"
           onError={() => {
             if (quality === 'max') setQuality('hq');
             else setFailed(true);
@@ -155,10 +158,17 @@ function VideoFacade({
       )}
       <span
         aria-hidden="true"
-        className="absolute inset-0 bg-linear-to-t from-black/65 via-black/25 to-black/40"
+        className="absolute inset-0 bg-linear-to-t from-black/65 via-black/45 to-black/40"
       />
-      <PlayIcon />
-      <span className="relative text-sm font-medium">{label}</span>
+      <span
+        aria-hidden="true"
+        className="relative flex h-16 w-16 items-center justify-center rounded-full bg-black/60"
+      >
+        <PlayIcon />
+      </span>
+      <span className="relative rounded-full bg-black/70 px-3 py-1 text-sm font-medium">
+        {label}
+      </span>
     </button>
   );
 }
