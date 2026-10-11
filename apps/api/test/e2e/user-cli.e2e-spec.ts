@@ -86,14 +86,30 @@ describe('User CLI (e2e, subprocess)', () => {
     expect(result.stderr).toContain('already exists');
   });
 
-  it('rejects a password passed as an argument', async () => {
+  it('user:create accepts --password non-interactively and the account can log in', async () => {
     const result = spawnCli(
-      ['run', 'user:create', '--', '--email', EMAIL, '--password', 'leaked'],
+      [
+        'run',
+        'user:create',
+        '--',
+        '--email',
+        EMAIL,
+        '--password',
+        FIRST_PASSWORD,
+      ],
       '',
     );
 
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain('Created user');
+    await expect(login(FIRST_PASSWORD)).resolves.toBe(200);
+  });
+
+  it('user:create without --email off a TTY exits 1', async () => {
+    const result = spawnCli(['run', 'user:create', '--'], '');
+
     expect(result.status).toBe(1);
-    expect(result.stderr).toContain('Do not pass the password');
+    expect(result.stderr).toContain('--email is required');
     await expect(test.prisma.user.count()).resolves.toBe(0);
   });
 });

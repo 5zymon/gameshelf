@@ -2,6 +2,7 @@ import { createInterface } from 'node:readline';
 import type { Readable, Writable } from 'node:stream';
 
 export type PasswordReader = (promptText: string) => Promise<string>;
+export type LineReader = (promptText: string) => Promise<string>;
 
 export interface PasswordReaderStreams {
   input?: Readable & { isTTY?: boolean };
@@ -57,24 +58,40 @@ function readLine(input: Readable): Promise<string> {
 }
 
 /**
- * Prompts on a TTY and reads one secret line without echoing it. A Ctrl-D /
- * EOF at the prompt makes readline emit `close` without ever calling the
+ * Prompts on a TTY and reads one line, optionally without echoing it. A Ctrl-D
+ * / EOF at the prompt makes readline emit `close` without ever calling the
  * question callback, so `close` must settle the promise or the CLI hangs
  * forever instead of exiting non-zero.
+ *
+ * The prompt must go through `question()`: readline's refresh (`kRefreshLine`)
+ * writes `cursorTo(output, 0)` and `clearScreenDown(output)` **directly to the
+ * stream**, bypassing `_writeToOutput`. That refresh runs when `question()`
+ * first renders the prompt and again on edits such as backspace or delete;
+ * plain characters typed at the end of the line are appended with no clear. A
+ * prompt pre-written before `question()` is therefore erased at `prompt()`,
+ * before any typing. Letting `question()` own the prompt means the refresh
+ * redraws it after the clear.
  */
 function readTtyLine(
   input: Readable,
   output: Writable,
   promptText: string,
+  echo: boolean,
 ): Promise<string> {
-  output.write(promptText);
   return new Promise<string>((resolve, reject) => {
     const rl = createInterface({ input, output, terminal: true });
-    // readline has no public no-echo switch; overriding the private writer
-    // is the documented workaround. Only our prompt and trailing \n print.
-    (
-      rl as unknown as { _writeToOutput: (text: string) => void }
-    )._writeToOutput = (): void => undefined;
+    if (!echo) {
+      // readline has no public no-echo switch; overriding the private writer
+      // is the documented workaround. A refresh redraws `prompt + line` after
+      // clearing the row; keep the prompt, drop the typed secret.
+      (
+        rl as unknown as { _writeToOutput: (text: string) => void }
+      )._writeToOutput = (text: string): void => {
+        if (text.startsWith(promptText)) {
+          output.write(promptText);
+        }
+      };
+    }
 
     let answered = false;
     function onError(error: Error): void {
@@ -91,11 +108,11 @@ function readTtyLine(
       }
       answered = true;
       rl.removeListener('error', onError);
-      reject(new Error('Password prompt aborted'));
+      reject(new Error(echo ? 'Prompt aborted' : 'Password prompt aborted'));
     }
     rl.once('error', onError);
     rl.once('close', onClose);
-    rl.question('', (answer) => {
+    rl.question(promptText, (answer) => {
       if (answered) {
         return;
       }
@@ -103,7 +120,12 @@ function readTtyLine(
       rl.removeListener('error', onError);
       rl.removeListener('close', onClose);
       rl.close();
-      output.write('\n');
+      // The no-echo override drops readline's own newline along with the typed
+      // secret, so hidden mode must add one. Visible mode already got readline's
+      // newline; a second one would leave a blank line after the answer.
+      if (!echo) {
+        output.write('\n');
+      }
       resolve(answer);
     });
   });
@@ -123,6 +145,25 @@ export function createPasswordReader(
     if (input.isTTY !== true) {
       return readLine(input);
     }
-    return readTtyLine(input, output, promptText);
+    return readTtyLine(input, output, promptText, false);
+  };
+}
+
+/**
+ * Prompts for a visible line on a TTY (normal readline echo), so the user can
+ * see and edit what they type. Off a TTY it reads one line and prints no
+ * prompt. Callers only reach the TTY branch in practice (the CLI checks
+ * `interactive` first), but the reader stays total.
+ */
+export function createLineReader(
+  streams: PasswordReaderStreams = {},
+): LineReader {
+  const input = streams.input ?? process.stdin;
+  const output = streams.output ?? process.stdout;
+  return (promptText) => {
+    if (input.isTTY !== true) {
+      return readLine(input);
+    }
+    return readTtyLine(input, output, promptText, true);
   };
 }
