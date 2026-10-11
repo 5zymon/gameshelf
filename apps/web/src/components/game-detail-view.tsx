@@ -2,13 +2,16 @@ import { Fragment } from 'react';
 import { getFormatter, getTranslations } from 'next-intl/server';
 import type { TranslatorFor } from '@/i18n/translate';
 import type { GameDetail, GamePlatform } from '@/lib/api';
+import { sameOriginPath } from '@/lib/image-url';
 import { formatRating } from '@/lib/rating';
+import { playableVideos } from '@/lib/youtube';
 import { DeleteGameButton } from './delete-game-button';
 import { GameCover } from './game-cover';
 import { GameGallery } from './game-gallery';
 import { GameEditForm } from './game-edit-form';
 import { GameVideos } from './game-videos';
 import { ReEnrichControl } from './re-enrich-control';
+import { Tabs } from './tabs';
 
 function sourceLabel(
   source: GameDetail['source'],
@@ -108,6 +111,130 @@ export async function GameDetailView({
     game.releaseYear === null ? null : String(game.releaseYear),
   ].filter((part): part is string => part !== null && part !== '');
 
+  /**
+   * A Media tab only exists when the client components have something to
+   * render — a playable video id or a same-origin image, the exact filters
+   * `GameVideos` and `GameGallery` apply. Otherwise About renders alone.
+   */
+  const hasMedia =
+    playableVideos(game.videos).length > 0 ||
+    game.images.some((image) => sameOriginPath(image.url) !== null);
+
+  const summarySection =
+    game.summary !== null && game.summary.trim() !== '' ? (
+      <section aria-labelledby="summary-heading" className="space-y-2">
+        <h2 id="summary-heading" className="text-lg font-semibold text-ink">
+          {t('summary')}
+          {edited.has('summary') && (
+            <span className="ml-2 text-xs font-normal text-muted">
+              {handEdited}
+            </span>
+          )}
+        </h2>
+        <p className="max-w-prose text-sm leading-relaxed whitespace-pre-line text-ink">
+          {game.summary}
+        </p>
+      </section>
+    ) : null;
+
+  const recordSection = (
+    <section aria-labelledby="record-heading">
+      <h2 id="record-heading" className="sr-only">
+        {t('record')}
+      </h2>
+      <dl className="grid gap-x-8 sm:grid-cols-2">
+        <DataRow
+          label={t('field.platform')}
+          value={game.platform.name}
+          notSet={notSet}
+          handEdited={handEdited}
+        />
+        <DataRow
+          label={t('field.edition')}
+          value={game.edition}
+          notSet={notSet}
+          handEdited={handEdited}
+        />
+        <DataRow
+          label={t('field.releaseYear')}
+          value={game.releaseYear}
+          edited={edited.has('releaseYear')}
+          notSet={notSet}
+          handEdited={handEdited}
+        />
+        <DataRow
+          label={t('field.publisher')}
+          value={game.publisher}
+          edited={edited.has('publisher')}
+          notSet={notSet}
+          handEdited={handEdited}
+        />
+        <DataRow
+          label={t('field.genre')}
+          value={game.genre}
+          edited={edited.has('genre')}
+          notSet={notSet}
+          handEdited={handEdited}
+        />
+        <DataRow
+          label={t('field.players')}
+          value={game.playerCount}
+          edited={edited.has('playerCount')}
+          notSet={notSet}
+          handEdited={handEdited}
+        />
+        <DataRow
+          label={t('field.rating')}
+          value={formatRating(game.rating)}
+          notSet={notSet}
+          handEdited={handEdited}
+        />
+        <DataRow
+          label={t('field.copies')}
+          value={game.copyCount}
+          notSet={notSet}
+          handEdited={handEdited}
+        />
+        <DataRow
+          label={t('field.platformId')}
+          value={game.platformId}
+          notSet={notSet}
+          handEdited={handEdited}
+        />
+        <DataRow
+          label={t('field.externalId')}
+          value={game.externalId}
+          notSet={notSet}
+          handEdited={handEdited}
+        />
+        <DataRow
+          label={t('field.source')}
+          value={sourceLabel(game.source, t)}
+          notSet={notSet}
+          handEdited={handEdited}
+        />
+        <DataRow
+          label={t('field.added')}
+          value={formatDateTime(game.createdAt)}
+          notSet={notSet}
+          handEdited={handEdited}
+        />
+        <DataRow
+          label={t('field.updated')}
+          value={formatDateTime(game.updatedAt)}
+          notSet={notSet}
+          handEdited={handEdited}
+        />
+        <DataRow
+          label={t('field.recordId')}
+          value={game.id}
+          notSet={notSet}
+          handEdited={handEdited}
+        />
+      </dl>
+    </section>
+  );
+
   return (
     <article className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
@@ -171,121 +298,6 @@ export async function GameDetailView({
         </div>
 
         <div className="min-w-0 space-y-6">
-          <section aria-labelledby="record-heading">
-            <h2 id="record-heading" className="sr-only">
-              {t('record')}
-            </h2>
-            <dl className="grid gap-x-8 sm:grid-cols-2">
-              <DataRow
-                label={t('field.platform')}
-                value={game.platform.name}
-                notSet={notSet}
-                handEdited={handEdited}
-              />
-              <DataRow
-                label={t('field.edition')}
-                value={game.edition}
-                notSet={notSet}
-                handEdited={handEdited}
-              />
-              <DataRow
-                label={t('field.releaseYear')}
-                value={game.releaseYear}
-                edited={edited.has('releaseYear')}
-                notSet={notSet}
-                handEdited={handEdited}
-              />
-              <DataRow
-                label={t('field.publisher')}
-                value={game.publisher}
-                edited={edited.has('publisher')}
-                notSet={notSet}
-                handEdited={handEdited}
-              />
-              <DataRow
-                label={t('field.genre')}
-                value={game.genre}
-                edited={edited.has('genre')}
-                notSet={notSet}
-                handEdited={handEdited}
-              />
-              <DataRow
-                label={t('field.players')}
-                value={game.playerCount}
-                edited={edited.has('playerCount')}
-                notSet={notSet}
-                handEdited={handEdited}
-              />
-              <DataRow
-                label={t('field.rating')}
-                value={formatRating(game.rating)}
-                notSet={notSet}
-                handEdited={handEdited}
-              />
-              <DataRow
-                label={t('field.copies')}
-                value={game.copyCount}
-                notSet={notSet}
-                handEdited={handEdited}
-              />
-              <DataRow
-                label={t('field.platformId')}
-                value={game.platformId}
-                notSet={notSet}
-                handEdited={handEdited}
-              />
-              <DataRow
-                label={t('field.externalId')}
-                value={game.externalId}
-                notSet={notSet}
-                handEdited={handEdited}
-              />
-              <DataRow
-                label={t('field.source')}
-                value={sourceLabel(game.source, t)}
-                notSet={notSet}
-                handEdited={handEdited}
-              />
-              <DataRow
-                label={t('field.added')}
-                value={formatDateTime(game.createdAt)}
-                notSet={notSet}
-                handEdited={handEdited}
-              />
-              <DataRow
-                label={t('field.updated')}
-                value={formatDateTime(game.updatedAt)}
-                notSet={notSet}
-                handEdited={handEdited}
-              />
-              <DataRow
-                label={t('field.recordId')}
-                value={game.id}
-                notSet={notSet}
-                handEdited={handEdited}
-              />
-            </dl>
-          </section>
-
-          {game.summary !== null && game.summary.trim() !== '' && (
-            <section aria-labelledby="summary-heading" className="space-y-2">
-              <h2
-                id="summary-heading"
-                className="text-lg font-semibold text-ink"
-              >
-                {t('summary')}
-                {edited.has('summary') && (
-                  <span className="ml-2 text-xs font-normal text-muted">
-                    {handEdited}
-                  </span>
-                )}
-              </h2>
-              <p className="max-w-prose text-sm leading-relaxed whitespace-pre-line text-ink">
-                {game.summary}
-              </p>
-            </section>
-          )}
-
           <div className="flex flex-wrap items-start gap-3">
             <GameEditForm game={game} platforms={platforms} />
             <ReEnrichControl gameId={game.id} title={game.title} />
@@ -293,11 +305,40 @@ export async function GameDetailView({
               <DeleteGameButton gameId={game.id} title={game.title} />
             </div>
           </div>
+          <Tabs
+            label={t('tabs.label')}
+            items={[
+              {
+                id: 'about',
+                label: t('tabs.about'),
+                panel: (
+                  <div className="space-y-6">
+                    {summarySection}
+                    {recordSection}
+                  </div>
+                ),
+              },
+              ...(hasMedia
+                ? [
+                    {
+                      id: 'media',
+                      label: t('tabs.media'),
+                      panel: (
+                        <div className="space-y-8">
+                          <GameVideos title={game.title} videos={game.videos} />
+                          <GameGallery
+                            title={game.title}
+                            images={game.images}
+                          />
+                        </div>
+                      ),
+                    },
+                  ]
+                : []),
+            ]}
+          />
         </div>
       </div>
-
-      <GameVideos title={game.title} videos={game.videos} />
-      <GameGallery title={game.title} images={game.images} />
     </article>
   );
 }

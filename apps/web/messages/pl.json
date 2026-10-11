@@ -216,6 +216,11 @@
       "recordId": "ID rekordu"
     },
     "summary": "Opis",
+    "tabs": {
+      "label": "Sekcje gry",
+      "about": "O grze",
+      "media": "Multimedia"
+    },
     "notSet": "Nie ustawiono",
     "handEdited": "edytowane ręcznie",
     "never": "Nigdy",

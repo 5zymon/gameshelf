@@ -102,8 +102,8 @@ gallery files are removed on game delete and on a duplicate import.
 `GET /games/:id` returns `images[]` with `url` + `thumbUrl`, mapped through an
 explicit Prisma select (`GAME_DETAIL_INCLUDE`, ordered by `position`).
 `GameListItem` is unchanged (the list stays cover-only). The web `GameGallery`
-(`'use client'`) renders a full-width thumbnail strip; clicking a thumbnail opens
-a modal lightbox:
+(`'use client'`) renders a thumbnail strip inside the detail page's **Media**
+tab; clicking a thumbnail opens a modal lightbox:
 
 - `role="dialog"`, `aria-modal="true"`, translated `aria-label` and alt text;
 - Escape closes; `ArrowLeft`/`ArrowRight` navigate (wrapping);
