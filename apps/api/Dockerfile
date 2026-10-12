@@ -34,4 +34,8 @@ COPY --from=build /app /app
 RUN mkdir -p /data/covers
 WORKDIR /app/apps/api
 EXPOSE 3001
-CMD ["node", "dist/main"]
+# Gate boot on database readiness. `docker compose restart` (unlike `up`)
+# does not honour depends_on, so the API can otherwise start before MySQL is
+# ready; a boot-time DB failure leaves the Prisma pool stuck (500s until the
+# container is restarted again). wait-for-db retries a real `SELECT 1` first.
+CMD ["sh", "-c", "node scripts/wait-for-db.cjs && exec node dist/main"]
