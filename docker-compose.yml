@@ -35,8 +35,9 @@ services:
       # Localhost-only by default; change the host part to expose it.
       - '127.0.0.1:${MYSQL_PORT:-3306}:3306'
     volumes:
-      # Persistent host path (gitignored) — never an ephemeral container path.
-      - ./data/mysql:/var/lib/mysql
+      # Docker-managed named volume (not a host bind mount): survives
+      # `docker compose down` and is deleted by `docker compose down -v`.
+      - mysql-data:/var/lib/mysql
       # One-time bootstrap: creates the Prisma shadow and e2e test databases
       # (runs only on first initialization of an empty data dir — see
       # README, "Migrations").
@@ -146,4 +147,5 @@ services:
     restart: unless-stopped
 
 volumes:
+  mysql-data:
   covers:

@@ -31,12 +31,12 @@ The app itself still depends only on a MySQL 8.4 server.
 
 # Services
 
-| Service   | Image                 | Role                                                                       | Host port                            |
-| --------- | --------------------- | -------------------------------------------------------------------------- | ------------------------------------ |
-| `mysql`   | `mysql:8.4`           | Database, utf8mb4 / `utf8mb4_0900_ai_ci` (ADR-001), data in `./data/mysql` | `127.0.0.1:${MYSQL_PORT:-3306}`      |
-| `migrate` | `gameshelf-api:local` | One-shot `npm run db:deploy` (`prisma migrate deploy`), then exits 0       | —                                    |
-| `api`     | `gameshelf-api:local` | NestJS API, `node dist/main`; covers on the `covers` volume                | `127.0.0.1:${API_PORT:-3001}`        |
-| `web`     | `gameshelf-web:local` | `next start` on 3000; rewrites `/api/*` to `http://api:3001`               | `${WEB_PORT:-3000}` (all interfaces) |
+| Service   | Image                 | Role                                                                                | Host port                            |
+| --------- | --------------------- | ----------------------------------------------------------------------------------- | ------------------------------------ |
+| `mysql`   | `mysql:8.4`           | Database, utf8mb4 / `utf8mb4_0900_ai_ci` (ADR-001), data in the `mysql-data` volume | `127.0.0.1:${MYSQL_PORT:-3306}`      |
+| `migrate` | `gameshelf-api:local` | One-shot `npm run db:deploy` (`prisma migrate deploy`), then exits 0                | —                                    |
+| `api`     | `gameshelf-api:local` | NestJS API, `node dist/main`; covers on the `covers` volume                         | `127.0.0.1:${API_PORT:-3001}`        |
+| `web`     | `gameshelf-web:local` | `next start` on 3000; rewrites `/api/*` to `http://api:3001`                        | `${WEB_PORT:-3000}` (all interfaces) |
 
 Start order is enforced with `depends_on` conditions:
 `mysql` healthy → `migrate` completed successfully → `api` healthy → `web`.
@@ -88,7 +88,7 @@ mysql://${MYSQL_USER:-gameshelf}:${MYSQL_PASSWORD:-gameshelf}@mysql:3306/${MYSQL
 
 | Variable                                                                                    | Default in compose                                | Notes                                                                                                         |
 | ------------------------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `MYSQL_ROOT_PASSWORD`                                                                       | `gameshelf-root`                                  | Applied only when `./data/mysql` is first initialized                                                         |
+| `MYSQL_ROOT_PASSWORD`                                                                       | `gameshelf-root`                                  | Applied only when the `mysql-data` volume is first initialized                                                |
 | `MYSQL_USER` / `MYSQL_PASSWORD`                                                             | `gameshelf` / `gameshelf`                         | Same; a password with URL-reserved characters must be URL-encoded                                             |
 | `MYSQL_DATABASE`                                                                            | `gameshelf`                                       |                                                                                                               |
 | `SESSION_SECRET`                                                                            | `gameshelf-local-docker-session-secret-change-me` | Local use only; set your own (32+ chars). Changing it logs everyone out and makes a stored LLM key unreadable |
@@ -105,9 +105,10 @@ Fixed values: `NODE_ENV=production` (so the dev-only `db:seed` and
 
 # Data and persistence
 
-- **Library:** `./data/mysql`, a host bind mount shared with the Node-based
-  flow. Back it up as described in the README, "Backup and restore". The
-  `docker compose exec mysql …` commands there work unchanged.
+- **Library:** the `mysql-data` named volume, shared with the Node-based flow
+  (both use the same `mysql` service). Back it up as described in the README,
+  "Backup and restore". The `docker compose exec mysql …` commands there work
+  unchanged.
 - **Covers:** the `covers` named volume (`<project>_covers`). It survives
   `docker compose down` but is deleted by `docker compose down -v`. Missing
   covers can be fetched again with

@@ -28,9 +28,10 @@ logged in.
   `docker compose logs -f api web`.
 - **Stop:** `docker compose down` (data is kept). Start again with
   `docker compose up -d`.
-- **Your data:** the database lives in `./data/mysql` on the host (gitignored);
-  cached covers live in the `covers` Docker volume. `docker compose down -v`
-  deletes the covers volume; `rm -rf data/mysql` deletes the library.
+- **Your data:** the database lives in the `mysql-data` Docker volume (shared
+  with the Node-based dev flow, since both use the same `mysql` service); cached
+  covers live in the `covers` Docker volume. `docker compose down` keeps both;
+  `docker compose down -v` deletes them.
 - **Configuration:** it works without a `.env`, using local-only defaults. For
   anything beyond trying it out, create a `.env` next to `docker-compose.yml`
   and set at least `SESSION_SECRET` (32+ characters), plus `IGDB_CLIENT_ID` /
@@ -379,13 +380,15 @@ docker compose exec mysql mysql --default-character-set=utf8mb4 \
 
 ### Persistent data directory
 
-The data directory is bind-mounted to `./data/mysql` (gitignored) — a real host path, **not** an ephemeral container path. Recreating the container never loses data. The application cannot verify that this path sits on durable storage — that is a human check.
+The data directory lives in the `mysql-data` Docker named volume — **not** an ephemeral container path. Recreating the container never loses data. The application cannot verify that the volume sits on durable storage — that is a human check.
 
 To reset the dev database completely:
 
 ```bash
-docker compose down && rm -rf data/mysql
+docker compose down -v
 ```
+
+`down -v` also deletes the `covers` volume.
 
 Note: the MySQL image creates the database and user only on **first** initialization (empty data directory). Changing `MYSQL_USER`/`MYSQL_PASSWORD` in `.env` later has no effect until you reset.
 
@@ -402,7 +405,7 @@ Prisma is the data-access layer (ADR-003). The schema lives at `apps/api/prisma/
 
 The generated Prisma client is a **build artifact**: it is written to `apps/api/src/generated/` (gitignored) and regenerated automatically by `npm run build` — never commit it.
 
-The **shadow database** (`gameshelf_shadow`) is created by `docker/mysql-init/01-prisma-shadow.sql` on **first initialization only**, and is required by `prisma migrate dev` (local work). The **test database** (`gameshelf_test`, used by the e2e tier — see "Testing") is created the same way by `docker/mysql-init/02-test-database.sql`. To change either you must reset the data directory: `docker compose down && rm -rf data/mysql`.
+The **shadow database** (`gameshelf_shadow`) is created by `docker/mysql-init/01-prisma-shadow.sql` on **first initialization only**, and is required by `prisma migrate dev` (local work). The **test database** (`gameshelf_test`, used by the e2e tier — see "Testing") is created the same way by `docker/mysql-init/02-test-database.sql`. To change either you must reset the data directory: `docker compose down -v`.
 
 **Character set:** the `?charset=utf8mb4` suffix in `DATABASE_URL` is declarative — Prisma's MySQL connector does not parse it. The real enforcement is threefold: the migration engine connects with `utf8mb4` (MySQL ≥ 5.5.3), every generated table declares `DEFAULT CHARACTER SET utf8mb4`, and the server runs with `--character-set-server=utf8mb4` (see "Confirming the character set").
 
@@ -491,9 +494,9 @@ rebuildable or ephemeral:
 
 > **⚠️ ADR-001 — the app cannot verify your data directory is durable.** GameShelf
 > assumes the MySQL data directory is on durable storage, but it **cannot check
-> this itself** — that is a human check. Confirm `data/mysql` (or your system
-> MySQL's data dir) is on real, backed-up storage, not an ephemeral container
-> layer, tmpfs, or an unbacked disk.
+> this itself** — that is a human check. Confirm the `mysql-data` volume (or
+> your system MySQL's data dir) is on real, backed-up storage, not an ephemeral
+> container layer, tmpfs, or an unbacked disk.
 
 ### Backup (recommended: logical dump)
 
@@ -550,17 +553,29 @@ schema); they are only needed for a from-scratch setup (see "Setup").
 ### Alternative: physical data-directory snapshot
 
 For a full point-in-time snapshot of the MySQL data dir, stop the service and
-copy the bind-mounted directory (a live InnoDB copy is unsafe, so MySQL must be
-stopped):
+copy the named volume's contents out with a throwaway container (a live InnoDB
+copy is unsafe, so MySQL must be stopped):
 
 ```bash
 docker compose stop mysql
+project=$(basename "$PWD")   # compose project name (dir basename by default, or your -p value)
 ts=$(date +%s)
-cp -a data/mysql "data/mysql.bak.$ts"
+mkdir -p "backups/mysql-physical-$ts"
+docker run --rm -v "${project}_mysql-data":/src:ro \
+  -v "$PWD/backups/mysql-physical-$ts":/dst alpine cp -a /src/. /dst/
 docker compose start mysql
 ```
 
-Restore: `docker compose stop mysql && rm -rf data/mysql && cp -a "data/mysql.bak.$ts" data/mysql && docker compose start mysql`.
+Restore: stop MySQL, clear the volume, copy the snapshot back in, then start it:
+
+```bash
+docker compose stop mysql
+docker run --rm -v "${project}_mysql-data":/dst \
+  -v "$PWD/backups/mysql-physical-$ts":/src:ro \
+  alpine sh -c 'find /dst -mindepth 1 -delete && cp -a /src/. /dst'
+docker compose start mysql
+```
+
 Prefer the logical dump for game data.
 
 ## External services (LLM, IGDB, MobyGames)
@@ -662,15 +677,15 @@ All variables live in a single root `.env` file (see `.env.example`):
 Run these after setup and after any incident. All are read-only and safe while
 the app is up.
 
-| Check                  | Command                                                                 | Expected                                                              |
-| ---------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| API health             | `curl -fsS http://localhost:3001/health`                                | `{"status":"ok"}`                                                     |
-| Queue health           | `curl -fsS http://localhost:3001/health/queue`                          | job counts per status from MySQL + worker ready (HTTP 200)            |
-| IGDB connectivity      | `curl -fsS http://localhost:3001/health/igdb`                           | `{"status":"ok","token":"cached"}` (or `acquired`)                    |
-| MySQL charset          | see "Confirming the character set"                                      | `character_set_server=utf8mb4`, `collation_server=utf8mb4_0900_ai_ci` |
-| Migration drift        | `npm run db:migrate:check`                                              | exit 0 (no drift)                                                     |
-| Durable data dir       | **human check** — confirm `data/mysql` is on durable, backed-up storage | you confirm it                                                        |
-| Zero external requests | see "Single origin, CSP, and fonts"                                     | no non-GameShelf hosts                                                |
+| Check                  | Command                                                                            | Expected                                                              |
+| ---------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| API health             | `curl -fsS http://localhost:3001/health`                                           | `{"status":"ok"}`                                                     |
+| Queue health           | `curl -fsS http://localhost:3001/health/queue`                                     | job counts per status from MySQL + worker ready (HTTP 200)            |
+| IGDB connectivity      | `curl -fsS http://localhost:3001/health/igdb`                                      | `{"status":"ok","token":"cached"}` (or `acquired`)                    |
+| MySQL charset          | see "Confirming the character set"                                                 | `character_set_server=utf8mb4`, `collation_server=utf8mb4_0900_ai_ci` |
+| Migration drift        | `npm run db:migrate:check`                                                         | exit 0 (no drift)                                                     |
+| Durable data dir       | **human check** — confirm the `mysql-data` volume is on durable, backed-up storage | you confirm it                                                        |
+| Zero external requests | see "Single origin, CSP, and fonts"                                                | no non-GameShelf hosts                                                |
 
 The **durable data dir** row is the ADR-001 check the application cannot perform
 for you — it is always a human decision.
