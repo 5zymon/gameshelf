@@ -38,32 +38,6 @@ describe('VisionService (unit)', () => {
     ).rejects.toBeInstanceOf(VisionUnavailableError);
   });
 
-  it('recognize delegates to the active provider with the resolved config', async () => {
-    const { service, mocks } = createService();
-    mocks.resolveActive.mockResolvedValue({
-      provider: 'openai',
-      model: 'gpt-4o-mini',
-      apiKey: 'key-123',
-    });
-    mocks.get.mockReturnValue({ recognize: mocks.recognize });
-    mocks.recognize.mockResolvedValue({
-      items: [{ title: 'Hades', edition: null, platform: null, confidence: 1 }],
-      countVisible: null,
-    });
-
-    const result = await service.recognize({
-      image: Buffer.from('x'),
-      mimeType: 'image/png',
-    });
-
-    expect(mocks.get).toHaveBeenCalledWith('openai');
-    expect(mocks.recognize).toHaveBeenCalledWith(
-      { image: expect.any(Buffer) as Buffer, mimeType: 'image/png' },
-      { apiKey: 'key-123', model: 'gpt-4o-mini' },
-    );
-    expect(result.items).toHaveLength(1);
-  });
-
   it('recognize passes the base URL through for the custom provider', async () => {
     const { service, mocks } = createService();
     mocks.resolveActive.mockResolvedValue({
@@ -94,23 +68,24 @@ describe('VisionService (unit)', () => {
   it('test reports not_configured with 200-style result when no key is set', async () => {
     const { service, mocks } = createService();
     mocks.resolveActive.mockResolvedValue(null);
-    mocks.getPublic.mockResolvedValue({ provider: 'gemini', model: 'm' });
+    mocks.getPublic.mockResolvedValue({ provider: 'custom', model: '' });
 
     await expect(service.test()).resolves.toEqual({
       ok: false,
       code: 'not_configured',
-      provider: 'gemini',
-      model: 'm',
-      message: 'No LLM provider API key is configured',
+      provider: 'custom',
+      model: '',
+      message: 'No LLM base URL or API key is configured',
     });
   });
 
   it('test sends a real 1x1 PNG and reports ok', async () => {
     const { service, mocks } = createService();
     mocks.resolveActive.mockResolvedValue({
-      provider: 'gemini',
-      model: 'gemini-3.8-flash',
+      provider: 'custom',
+      model: 'llava:7b',
       apiKey: 'key',
+      baseUrl: 'http://localhost:11434/v1',
     });
     mocks.get.mockReturnValue({ recognize: mocks.recognize });
     mocks.recognize.mockResolvedValue({ items: [], countVisible: null });
@@ -127,14 +102,20 @@ describe('VisionService (unit)', () => {
     expect(input.image.subarray(0, 4)).toEqual(
       Buffer.from([0x89, 0x50, 0x4e, 0x47]),
     );
+    expect(mocks.recognize).toHaveBeenCalledWith(expect.anything(), {
+      apiKey: 'key',
+      model: 'llava:7b',
+      baseUrl: 'http://localhost:11434/v1',
+    });
   });
 
   it('test maps a provider error to its code without throwing', async () => {
     const { service, mocks } = createService();
     mocks.resolveActive.mockResolvedValue({
-      provider: 'gemini',
-      model: 'gemini-3.8-flash',
+      provider: 'custom',
+      model: 'llava:7b',
       apiKey: 'key',
+      baseUrl: 'http://localhost:11434/v1',
     });
     mocks.get.mockReturnValue({ recognize: mocks.recognize });
     mocks.recognize.mockRejectedValue(
@@ -147,8 +128,8 @@ describe('VisionService (unit)', () => {
     await expect(service.test()).resolves.toEqual({
       ok: false,
       code: 'unauthorized',
-      provider: 'gemini',
-      model: 'gemini-3.8-flash',
+      provider: 'custom',
+      model: 'llava:7b',
       message: 'The provider rejected the API key',
     });
   });
@@ -156,9 +137,10 @@ describe('VisionService (unit)', () => {
   it('test maps an unexpected error to server_error', async () => {
     const { service, mocks } = createService();
     mocks.resolveActive.mockResolvedValue({
-      provider: 'gemini',
-      model: 'gemini-3.8-flash',
+      provider: 'custom',
+      model: 'llava:7b',
       apiKey: 'key',
+      baseUrl: 'http://localhost:11434/v1',
     });
     mocks.get.mockReturnValue({ recognize: mocks.recognize });
     mocks.recognize.mockRejectedValue(new Error('boom'));

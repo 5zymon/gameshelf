@@ -14,6 +14,7 @@ import { PHOTO_IMPORT_QUEUE } from '../../src/queue/queue.constants';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 import { createNoopPhotoImportHandler } from '../helpers/noop-photo-handler';
 import { resetDatabase } from '../helpers/reset';
+import { seedLlmSettings } from '../helpers/seed';
 
 const connection = {
   host: process.env.REDIS_HOST ?? 'localhost',
@@ -111,6 +112,7 @@ describe('Import photo upload API (e2e)', () => {
 
   beforeEach(async () => {
     await resetDatabase(test.prisma);
+    await seedLlmSettings(test.prisma);
     await test.login();
     clearPhotoDir(photoDir);
   });

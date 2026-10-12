@@ -80,7 +80,9 @@ describe('db:clear-dev CLI (e2e, subprocess)', () => {
     await test.prisma.unrecognizedItem.create({
       data: { importJobId: job.id, rawTitle: 'Mystery' },
     });
-    await test.prisma.llmSetting.create({ data: { provider: 'gemini' } });
+    await test.prisma.llmSetting.create({
+      data: { provider: 'custom', baseUrl: 'http://localhost:11434/v1' },
+    });
   }
 
   async function loginStatus(): Promise<number> {

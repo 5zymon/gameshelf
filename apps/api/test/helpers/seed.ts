@@ -87,3 +87,17 @@ export function seedUser(
     },
   });
 }
+
+/** A configured `custom` LLM settings row (id 1); the key comes from `CUSTOM_API_KEY`. */
+export function seedLlmSettings(
+  prisma: PrismaService,
+  data: { baseUrl?: string } = {},
+) {
+  return prisma.llmSetting.create({
+    data: {
+      id: 1,
+      provider: 'custom',
+      baseUrl: data.baseUrl ?? 'http://localhost:11434/v1',
+    },
+  });
+}

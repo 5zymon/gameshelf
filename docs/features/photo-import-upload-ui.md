@@ -130,7 +130,7 @@ JPEG/PNG/WebP; HEIC is converted client-side first.
 Setup:
 
 ```bash
-cp .env.example .env      # fill SESSION_SECRET (>=32 chars), DB; leave GEMINI_API_KEY commented for step 3
+cp .env.example .env      # fill SESSION_SECRET (>=32 chars), DB; leave CUSTOM_API_KEY commented for step 3
 docker compose up -d mysql redis
 npm run db:deploy
 npm run dev               # API :3001, web :3000
@@ -142,9 +142,9 @@ npm run dev               # API :3001, web :3000
    link to `/games/new`. Expect no upload button enabled.
 2. **Manual entry still works.** From `/import`, follow "Add a game by hand",
    save a game, confirm it lands in the catalog.
-3. **Gate on.** Set `GEMINI_API_KEY=…` in `.env` (or `PUT /api/settings/llm`
-   with a session cookie) and restart. Reload `/import`; expect the picker
-   enabled.
+3. **Gate on.** In `/settings` save a base URL, model and API key for your
+   OpenAI-compatible endpoint (or `PUT /api/settings/llm`). Reload `/import`;
+   expect the picker enabled.
 4. **Multi-select + thumbnails.** Browse and select several JPEG/PNG/WebP files
    at once. Expect one thumbnail per photo, each with a filename, size and
    optional count field.

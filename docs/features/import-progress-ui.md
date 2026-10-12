@@ -226,7 +226,7 @@ No API or contract change was required for this ticket.
 Setup:
 
 ```bash
-cp .env.example .env      # SESSION_SECRET (>=32 chars), DB, GEMINI_API_KEY
+cp .env.example .env      # SESSION_SECRET (>=32 chars), DB; then save the LLM base URL + key in /settings
 docker compose up -d mysql redis
 npm run db:deploy
 npm run dev               # API :3001, web :3000
@@ -251,10 +251,10 @@ npm run dev               # API :3001, web :3000
    import** on `/import` to return; expect current progress.
 8. **Completion.** When every photo is terminal, the heading becomes "Import
    finished" and polling stops (Network tab goes quiet).
-9. **Paused banner.** With a bad `GEMINI_API_KEY` (or reject IGDB), start an
-   import. Expect the "Queue paused" banner with the reason and a fix hint; the
-   heartbeat is 15 s. Fix the configuration, press **Resume queue**, and confirm
-   the import continues.
+9. **Paused banner.** With a bad LLM API key saved in Settings (or reject
+   IGDB), start an import. Expect the "Queue paused" banner with the reason
+   and a fix hint; the heartbeat is 15 s. Fix the configuration, press
+   **Resume queue**, and confirm the import continues.
 10. **Paused focus refetch.** While paused, focus another window and return;
     expect one refetch (not a 2 s storm).
 11. **No CSP violations.** The console shows no CSP errors from the view.

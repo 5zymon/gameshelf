@@ -27,7 +27,7 @@ export class CustomVisionProvider implements VisionProvider {
   ): Promise<VisionRecognitionResult> {
     const baseUrl = config.baseUrl?.trim();
     if (baseUrl === undefined || baseUrl === '') {
-      // Defensive: settings validation guarantees a base URL for `custom`.
+      // Defensive: `LlmSettingsService.resolveActive` returns null without a base URL.
       throw new VisionProviderError(
         'bad_response',
         'The custom provider has no base URL configured',

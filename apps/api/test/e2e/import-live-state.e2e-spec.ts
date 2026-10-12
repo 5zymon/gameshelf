@@ -10,6 +10,7 @@ import type {
 } from '../../src/queue/photo-import.types';
 import { PHOTO_IMPORT_QUEUE } from '../../src/queue/queue.constants';
 import { resetDatabase } from '../helpers/reset';
+import { seedLlmSettings } from '../helpers/seed';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 
 const connection = {
@@ -73,6 +74,7 @@ describe('Import live queue state (e2e)', () => {
 
   beforeEach(async () => {
     await resetDatabase(test.prisma);
+    await seedLlmSettings(test.prisma);
     await queue.obliterate({ force: true });
     clearPhotoDir(photoDir);
     await test.login();

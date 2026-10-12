@@ -308,9 +308,12 @@ describe('GameShelf full product chain (e2e acceptance)', () => {
   });
 
   it('4. configure the LLM (stubbed key) and confirm it is active', async () => {
-    const put = await test.request
-      .put('/settings/llm')
-      .send({ provider: 'gemini', apiKey: 'e2e-stub-key' });
+    const put = await test.request.put('/settings/llm').send({
+      provider: 'custom',
+      baseUrl: 'http://localhost:11434/v1',
+      model: 'llava:7b',
+      apiKey: 'e2e-stub-key',
+    });
     expect(put.status).toBe(200);
     const putBody = put.body as { keyPresent: boolean; importEnabled: boolean };
     expect(putBody.keyPresent).toBe(true);

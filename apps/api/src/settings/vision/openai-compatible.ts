@@ -57,9 +57,8 @@ export interface OpenAiCompatibleOutcome {
 }
 
 /**
- * One OpenAI-compatible chat-completion vision call + parse. Shared by the
- * built-in OpenAI provider and the `custom` provider; the ONLY differences
- * between them are the endpoint URL and the (free-text) model name.
+ * One OpenAI-compatible chat-completion vision call + parse, used by the
+ * `custom` provider; the caller supplies only the endpoint URL.
  */
 export async function recognizeOpenAiCompatible(
   http: VisionHttpClient,

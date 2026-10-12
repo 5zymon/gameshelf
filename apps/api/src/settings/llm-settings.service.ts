@@ -10,7 +10,8 @@ import {
 import { LlmKeyCryptoService } from './llm-key-crypto.service';
 import { VisionProviderRegistry } from './vision/vision-provider.registry';
 import {
-  providerApiKeyEnvVar,
+  DEFAULT_PROVIDER_ID,
+  VISION_API_KEY_ENV_VAR,
   type VisionProviderId,
 } from './vision/vision-provider';
 
@@ -20,7 +21,7 @@ export interface ActiveLlmConfig {
   provider: VisionProviderId;
   model: string;
   apiKey: string;
-  baseUrl?: string;
+  baseUrl: string;
 }
 
 /**
@@ -45,11 +46,13 @@ export function normalizeBaseUrl(raw: string): string | null {
  * Reads and writes the singleton LLM settings row (`llm_settings.id = 1`) and
  * resolves the effective provider/model/key.
  *
- * Key precedence for the active provider:
+ * Key precedence:
  *   1. the encrypted `api_key_ciphertext` on the row (only when the row's
- *      provider matches the active provider), then
- *   2. the provider's env var (`GEMINI_API_KEY` / `OPENAI_API_KEY`), then
- *   3. none -> recognition is disabled.
+ *      provider is the active provider), then
+ *   2. `CUSTOM_API_KEY`, then
+ *   3. none.
+ * Recognition also needs a base URL (stored on a `custom` row only; no env
+ * fallback). Without a key AND a base URL, recognition is disabled.
  */
 @Injectable()
 export class LlmSettingsService {
@@ -65,34 +68,34 @@ export class LlmSettingsService {
   async getPublic(): Promise<LlmSettingsModel> {
     const row = await this.readRow();
     const provider = this.resolveProviderId(row);
-    const apiKey = this.resolveApiKey(provider, row);
-    const keyPresent = apiKey !== null;
-    const baseUrl =
-      provider === 'custom' ? (this.resolveBaseUrl(row) ?? null) : null;
+    const keyPresent = this.resolveApiKey(provider, row) !== null;
+    const baseUrl = this.resolveBaseUrl(provider, row) ?? null;
     return {
       provider,
       model: this.resolveModel(provider, row),
       baseUrl,
       keyPresent,
-      importEnabled: keyPresent,
+      importEnabled: keyPresent && baseUrl !== null,
       availableProviders: this.availableProviders(),
       updatedAt: row?.updatedAt ?? null,
     };
   }
 
-  /** Effective config, or `null` when no key is available for the provider. */
+  /**
+   * Effective config, or `null` when no key or no base URL is available for
+   * the provider.
+   */
   async resolveActive(): Promise<ActiveLlmConfig | null> {
     const row = await this.readRow();
     const provider = this.resolveProviderId(row);
     const apiKey = this.resolveApiKey(provider, row);
-    if (apiKey === null) {
-      return null;
-    }
+    const baseUrl = this.resolveBaseUrl(provider, row);
+    if (apiKey === null || baseUrl === undefined) return null;
     return {
       provider,
       model: this.resolveModel(provider, row),
       apiKey,
-      ...(provider === 'custom' && { baseUrl: this.resolveBaseUrl(row) }),
+      baseUrl,
     };
   }
 
@@ -128,46 +131,27 @@ export class LlmSettingsService {
           ? null
           : this.crypto.encrypt(dto.apiKey.trim());
 
-    // The base URL belongs to the `custom` provider only. It is required when
-    // saving `custom` (a fixed endpoint for the built-ins is not overridable),
-    // and must be omitted/empty for them.
-    let baseUrl: string | null | undefined;
-    if (provider === 'custom') {
-      if (dto.baseUrl !== undefined) {
-        const trimmed = dto.baseUrl.trim();
-        if (trimmed === '') {
-          throw new BadRequestException(
-            'Base URL is required for the custom provider',
-          );
-        }
-        const normalized = normalizeBaseUrl(trimmed);
-        if (normalized === null) {
-          throw new BadRequestException(
-            'Base URL must be an absolute http:// or https:// URL',
-          );
-        }
-        baseUrl = normalized;
-      } else if (switchesProvider) {
-        throw new BadRequestException(
-          'Base URL is required for the custom provider',
-        );
-      } else {
-        const stored = this.readStoredBaseUrl(existing);
-        if (stored === undefined) {
-          throw new BadRequestException(
-            'Base URL is required for the custom provider',
-          );
-        }
-        baseUrl = undefined; // keep the column as-is
+    // The base URL is required: send one, or keep the URL already stored on a
+    // `custom` row. A legacy row from a removed provider has none to keep.
+    let baseUrl: string | undefined;
+    if (dto.baseUrl !== undefined) {
+      const trimmed = dto.baseUrl.trim();
+      if (trimmed === '') {
+        throw new BadRequestException('Base URL is required');
       }
-    } else {
-      if (dto.baseUrl !== undefined && dto.baseUrl.trim() !== '') {
+      const normalized = normalizeBaseUrl(trimmed);
+      if (normalized === null) {
         throw new BadRequestException(
-          'Base URL is only supported by the custom provider',
+          'Base URL must be an absolute http:// or https:// URL',
         );
       }
-      baseUrl = null; // clear for the built-in providers
-    }
+      baseUrl = normalized;
+    } else if (
+      switchesProvider ||
+      this.readStoredBaseUrl(existing) === undefined
+    ) {
+      throw new BadRequestException('Base URL is required');
+    } // else: undefined → keep the column as-is
 
     await this.prisma.llmSetting.upsert({
       where: { id: SINGLETON_ID },
@@ -204,16 +188,11 @@ export class LlmSettingsService {
     return url !== undefined && url !== '' ? url : undefined;
   }
 
-  /** DB row provider if valid, else `LLM_PROVIDER`, else the default (`gemini`). */
+  /** The row's provider when registered, else `custom` (legacy gemini/openai rows land here). */
   private resolveProviderId(row: LlmSetting | null): VisionProviderId {
-    if (row !== null && this.registry.has(row.provider)) {
-      return row.provider;
-    }
-    const envProvider = this.config.get<string>('LLM_PROVIDER')?.trim();
-    if (envProvider !== undefined && this.registry.has(envProvider)) {
-      return envProvider;
-    }
-    return 'gemini';
+    return row !== null && this.registry.has(row.provider)
+      ? row.provider
+      : DEFAULT_PROVIDER_ID;
   }
 
   /** Row model (same provider only), else `LLM_MODEL`, else the default model. */
@@ -233,10 +212,13 @@ export class LlmSettingsService {
     return this.registry.get(provider).defaultModel;
   }
 
-  /** The stored base URL (custom rows only), trimmed, or `undefined` when absent. */
-  private resolveBaseUrl(row: LlmSetting | null): string | undefined {
+  /** The stored base URL when the row belongs to the active provider, trimmed; else `undefined`. */
+  private resolveBaseUrl(
+    provider: VisionProviderId,
+    row: LlmSetting | null,
+  ): string | undefined {
     const rowUrl =
-      row !== null && row.provider === 'custom'
+      row !== null && row.provider === provider
         ? row.baseUrl?.trim()
         : undefined;
     return rowUrl !== undefined && rowUrl !== '' ? rowUrl : undefined;
@@ -267,7 +249,7 @@ export class LlmSettingsService {
         );
       }
     }
-    const envKey = this.config.get<string>(providerApiKeyEnvVar(provider));
+    const envKey = this.config.get<string>(VISION_API_KEY_ENV_VAR);
     const trimmed = envKey?.trim();
     return trimmed !== undefined && trimmed !== '' ? trimmed : null;
   }

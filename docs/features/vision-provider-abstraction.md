@@ -1,7 +1,7 @@
 ---
 type: Feature
 title: Vision Provider Abstraction
-description: One VisionProvider interface with swappable Gemini/OpenAI/Custom backends behind a registry and a VisionService seam.
+description: One VisionProvider interface with a single Custom (OpenAI-compatible) backend behind a registry and a VisionService seam.
 tags: [import, llm, architecture]
 status: draft
 generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-09T21:21:30Z }
@@ -16,19 +16,18 @@ the concrete backend and its model/key can change at runtime (through the
 [LLM Settings API](/llm-settings-api.md)) or be swapped in code without touching
 the pipeline.
 
-Three backends ship: **Gemini** (default, `gemini-3.8-flash`), **OpenAI**
-(`gpt-4o-mini`), and **Custom** (OpenAI-compatible, user-supplied base URL and
-free-text model). All three use the same instruction prompt and item shape;
-only the request/response envelope differs. The prompt requires a JSON
-**list** of the games it can read and explicitly forbids estimating a count —
-the model is the source of the list, never of the number of games.
+One backend ships: **Custom** (OpenAI-compatible, user-supplied base URL and
+free-text model). The Gemini and OpenAI backends were removed on 2026-10-12.
+The prompt requires a JSON **list** of the games it can read and explicitly
+forbids estimating a count — the model is the source of the list, never of the
+number of games.
 
 # Interface
 
 `apps/api/src/settings/vision/vision-provider.ts`:
 
 ```ts
-export const SUPPORTED_PROVIDER_IDS = ['gemini', 'openai', 'custom'] as const;
+export const SUPPORTED_PROVIDER_IDS = ['custom'] as const;
 export type VisionProviderId = (typeof SUPPORTED_PROVIDER_IDS)[number];
 
 export interface RecognizedItem {
@@ -52,8 +51,9 @@ export interface VisionRecognitionInput {
 export interface VisionProviderConfig {
   apiKey: string;
   model: string;
-  // The `custom` provider's base URL (absolute, trailing-slash-normalized).
-  // Only set for `custom`.
+  // The OpenAI-compatible base URL (absolute, trailing-slash-normalized).
+  // Always set by `VisionService`; optional only so the provider can defend
+  // against a missing value.
   baseUrl?: string;
 }
 
@@ -68,9 +68,10 @@ export interface VisionProvider {
 }
 ```
 
-`DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash'` and
-`DEFAULT_OPENAI_MODEL = 'gpt-4o-mini'` are exported defaults; `LLM_MODEL` or a
-stored setting overrides them.
+`DEFAULT_PROVIDER_ID = 'custom'` is the provider used when the stored row
+names no registered provider; `VISION_API_KEY_ENV_VAR = 'CUSTOM_API_KEY'` is
+the env var the API key falls back to when no encrypted DB key is set.
+`LLM_MODEL` or a stored setting overrides the model.
 
 # Item JSON schema
 
@@ -118,24 +119,12 @@ same case/diacritic/punctuation/whitespace normalization as platform matching �
 are normalized to `null` at parse time, so a sentinel can never become an
 authoritative import platform. Real platform strings are preserved unchanged.
 
-Each provider adapts it to its API:
-
-- **OpenAI** and **Custom** share one builder,
-  `recognizeOpenAiCompatible` in `settings/vision/openai-compatible.ts`:
-  Structured Outputs requires a JSON-_object_ root, so it sends
-  `VISION_RECOGNITION_SCHEMA` directly as the strict `json_schema` response
-  format, posts to `{url}` with an `Authorization: Bearer` header, and decodes
-  `choices[0].message.content`. The two providers differ **only** in the
-  endpoint URL (`https://api.openai.com/v1/chat/completions` vs
-  `{baseUrl}/chat/completions`) and the (free-text) model name.
-- **Gemini** passes an OpenAPI-subset object schema as `responseSchema` (built
-  from `GEMINI_ITEM_SCHEMA` / `GEMINI_RESPONSE_SCHEMA`): uppercase types,
-  `nullable: true` in place of `type: ["string", "null"]`, and
-  `propertyOrdering`.
-
-All three providers decode their envelope (Gemini
-`candidates[0].content.parts[0].text`, OpenAI/Custom
-`choices[0].message.content`) and pass the parsed JSON through the shared
+The **Custom** adapter uses `recognizeOpenAiCompatible` in
+`settings/vision/openai-compatible.ts`: Structured Outputs requires a
+JSON-_object_ root, so it sends `VISION_RECOGNITION_SCHEMA` directly as the
+strict `json_schema` response format, posts to `{baseUrl}/chat/completions`
+with an `Authorization: Bearer` header, and decodes
+`choices[0].message.content`. It passes the parsed JSON through the shared
 `parseVisionRecognition`, which validates each item (a missing/invalid item
 list throws a safe `bad_response` error) and attaches the advisory count. The
 legacy bare-array shape is still accepted, with `countVisible: null`.
@@ -157,7 +146,7 @@ Malformed output is a boundary concern: the parsers throw only
 # Registry and facade
 
 - `VisionProviderRegistry` holds a `Map<VisionProviderId, VisionProvider>`,
-  populated from the injected concrete providers. `ids()`, `has(id)`, and
+  populated from the injected `CustomVisionProvider`. `ids()`, `has(id)`, and
   `get(id)`; `get` throws `VisionProviderError('unknown_provider')` for an
   unregistered id.
 - `VisionService` is the only surface the pipeline touches:
@@ -188,9 +177,9 @@ are fixed strings and never include the API key or the upstream response body.
 2. Register it in `VisionProviderRegistry` with one `this.register(provider)`
    line (and add it to the constructor).
 3. Add the class to `SettingsModule`'s `providers` array.
+4. Wire its env-key fallback in `LlmSettingsService.resolveApiKey`.
 
-No pipeline file changes. If the provider id follows the existing convention,
-its env fallback (`<ID>_API_KEY`) and settings enum are derived automatically.
+No pipeline file changes.
 
 # Out of scope
 

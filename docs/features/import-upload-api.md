@@ -69,11 +69,10 @@ the list with `GET /import-jobs?batchId=` — see
 # What the request does, in order
 
 1. **LLM gate.** `LlmSettingsService.isConfigured()` must be `true`: an API
-   key is available for the active provider either as the encrypted
-   `llm_settings` row or as the provider's env var (`GEMINI_API_KEY` /
-   `OPENAI_API_KEY`). If not, the API responds `503` _before storing or
-   enqueuing anything_ — the pipeline cannot run without a model, so the
-   upload is refused up front. See
+   key (the encrypted `llm_settings` row or `CUSTOM_API_KEY`) **and** a base
+   URL (stored in Settings) are available. If not, the API responds `503`
+   _before storing or enqueuing anything_ — the pipeline cannot run without a
+   model, so the upload is refused up front. See
    [LLM Settings API](/llm-settings-api.md) for the precedence rules.
 2. **Validation.** File type/size/count and `declaredCounts` are checked
    (`400` on violation).
@@ -109,11 +108,11 @@ not a URL and must not be served.
 
 # Errors
 
-| Status | When                                                                                                                                                                             |
-| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `400`  | No files; unsupported type; oversized file (the API remaps multer's `413` to `400`); misaligned or invalid `declaredCounts`.                                                     |
-| `401`  | No valid session.                                                                                                                                                                |
-| `503`  | No LLM provider API key is configured for the active provider (see [LLM Settings API](/llm-settings-api.md)), or enqueueing failed. Nothing is stored/queued in the no-LLM case. |
+| Status | When                                                                                                                                                                                   |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400`  | No files; unsupported type; oversized file (the API remaps multer's `413` to `400`); misaligned or invalid `declaredCounts`.                                                           |
+| `401`  | No valid session.                                                                                                                                                                      |
+| `503`  | Game recognition is not configured (no API key or no base URL; see [LLM Settings API](/llm-settings-api.md)), or enqueueing failed. Nothing is stored/queued in the unconfigured case. |
 
 An enqueue failure marks the just-created row `failed` and returns `503`;
 photos already enqueued earlier in the same request stay queued.

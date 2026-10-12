@@ -18,9 +18,9 @@ export default async function ImportPage(): Promise<React.ReactElement> {
     readiness = settings?.importEnabled
       ? {
           state: 'enabled',
-          providerLabel: settings.availableProviders.find(
-            (provider) => provider.id === settings.provider,
-          )?.label,
+          // The registry only ever contains `custom`, so the single entry is
+          // the active provider's label.
+          providerLabel: settings.availableProviders[0]?.label,
         }
       : { state: 'disabled' };
   } catch {

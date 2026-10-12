@@ -18,6 +18,7 @@ import {
   type PhotoKind,
 } from '@/lib/import/selection';
 import { convertHeicToJpeg } from '@/lib/import/heic';
+import { createClientId } from '@/lib/id';
 
 const FIELD =
   'w-full h-10 rounded-control border border-edge bg-field px-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent/55 focus:ring-[3px] focus:ring-accent/15 disabled:opacity-60';
@@ -176,7 +177,7 @@ export function PhotoImportForm({
 
     const sources = new Map<string, File>();
     const items: PhotoItem[] = accepted.map(({ file, kind }) => {
-      const id = crypto.randomUUID();
+      const id = createClientId();
       if (kind === 'raster') {
         const uploadFile = normalizeRasterMime(file);
         const previewUrl = URL.createObjectURL(uploadFile);

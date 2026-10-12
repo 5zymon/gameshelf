@@ -66,7 +66,6 @@ export function LlmSettingsForm({
   // The PUT response is authoritative, so a local snapshot drives the UI
   // instead of the (stale until reload) server prop.
   const [current, setCurrent] = useState<LlmSettingsModel>(settings);
-  const [providerId, setProviderId] = useState(settings.provider);
   const [model, setModel] = useState(settings.model);
   const [baseUrl, setBaseUrl] = useState(settings.baseUrl ?? '');
   const [apiKey, setApiKey] = useState('');
@@ -79,47 +78,21 @@ export function LlmSettingsForm({
   const [testResult, setTestResult] = useState<LlmTestResult | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
 
-  const providers = settings.availableProviders;
-  const selected = providers.find((provider) => provider.id === providerId);
-  const isActiveProvider = providerId === current.provider;
-  // Only the new `custom` provider gets a UI-localized label; the built-ins
-  // keep their API-provided labels.
-  const labelFor = (id: string | undefined, fallback: string): string =>
-    id === 'custom' ? t('llm.providerCustom') : fallback;
-  const selectedLabel = labelFor(selected?.id, selected?.label ?? providerId);
-
+  const providerLabel = t('llm.providerCustom');
   const trimmedModel = model.trim();
   const modelDiffers = trimmedModel !== current.model;
-  const isNewDefault =
-    !isActiveProvider && trimmedModel === (selected?.defaultModel ?? '');
   const hasNewKey = apiKey.trim() !== '';
   const trimmedBaseUrl = baseUrl.trim();
-  const baseUrlDiffers =
-    providerId === 'custom' && trimmedBaseUrl !== (current.baseUrl ?? '');
-  const dirty =
-    providerId !== current.provider ||
-    modelDiffers ||
-    baseUrlDiffers ||
-    clearKey ||
-    hasNewKey;
-
-  function onProviderChange(next: string): void {
-    const nextId = next as LlmSettingsModel['provider'];
-    const nextProvider = providers.find((provider) => provider.id === nextId);
-    setProviderId(nextId);
-    setModel(nextProvider?.defaultModel ?? '');
-    setApiKey('');
-    setClearKey(false);
-    setKeyReplace(false);
-    setSavedNotice(false);
-    setTestResult(null);
-    setTestError(null);
-  }
+  const baseUrlMissing = trimmedBaseUrl === '';
+  const baseUrlDiffers = trimmedBaseUrl !== (current.baseUrl ?? '');
+  const dirty = modelDiffers || baseUrlDiffers || clearKey || hasNewKey;
 
   function buildBody(): PutLlmSettingsRequest {
-    const body: PutLlmSettingsRequest = { provider: providerId };
-    if (providerId === 'custom') body.baseUrl = trimmedBaseUrl;
-    if (modelDiffers && !isNewDefault) body.model = trimmedModel;
+    const body: PutLlmSettingsRequest = {
+      provider: current.provider,
+      baseUrl: trimmedBaseUrl,
+    };
+    if (modelDiffers) body.model = trimmedModel;
     if (clearKey) body.apiKey = '';
     else if (hasNewKey) body.apiKey = apiKey.trim();
     return body;
@@ -129,14 +102,13 @@ export function LlmSettingsForm({
     event: React.SubmitEvent<HTMLFormElement>,
   ): Promise<void> {
     event.preventDefault();
-    if (saving || !dirty) return;
+    if (saving || !dirty || baseUrlMissing) return;
     setSaving(true);
     setError(null);
     setSavedNotice(false);
     try {
       const updated = await api.settings.llm.put(buildBody());
       setCurrent(updated);
-      setProviderId(updated.provider);
       setModel(updated.model);
       setBaseUrl(updated.baseUrl ?? '');
       setApiKey('');
@@ -177,15 +149,7 @@ export function LlmSettingsForm({
     }
   }
 
-  const modelPlaceholder = selected?.defaultModel ?? '';
-  // The recommended-defaults copy names both providers' default models so it
-  // stays accurate if the API's defaults change.
-  const geminiModel =
-    providers.find((provider) => provider.id === 'gemini')?.defaultModel ?? '';
-  const openaiModel =
-    providers.find((provider) => provider.id === 'openai')?.defaultModel ?? '';
-  const showSavedKey =
-    isActiveProvider && current.keyPresent && !keyReplace && !clearKey;
+  const showSavedKey = current.keyPresent && !keyReplace && !clearKey;
 
   return (
     <form
@@ -195,18 +159,7 @@ export function LlmSettingsForm({
       }}
       className="space-y-4 rounded-card border border-edge bg-surface p-4 shadow-[var(--shadow-card)]"
     >
-      <div className="space-y-1">
-        <h2 className="text-lg font-semibold text-ink">{t('llm.heading')}</h2>
-        <p className="text-sm text-muted">
-          {t.rich('llm.recommended', {
-            code: (chunks) => (
-              <code className="font-mono text-xs">{chunks}</code>
-            ),
-            geminiModel,
-            openaiModel,
-          })}
-        </p>
-      </div>
+      <h2 className="text-lg font-semibold text-ink">{t('llm.heading')}</h2>
 
       {error !== null && (
         <p
@@ -218,47 +171,33 @@ export function LlmSettingsForm({
       )}
 
       <div className="space-y-1.5">
-        <label htmlFor="llm-provider" className={LABEL}>
-          {t('llm.provider')}
-        </label>
-        <select
-          id="llm-provider"
-          value={providerId}
-          onChange={(event) => {
-            onProviderChange(event.target.value);
-          }}
-          className={`${FIELD} select-field`}
-        >
-          {providers.map((provider) => (
-            <option key={provider.id} value={provider.id}>
-              {labelFor(provider.id, provider.label)}
-            </option>
-          ))}
-        </select>
-        <p className="text-xs text-muted">{t('llm.providerHint')}</p>
+        <p className={LABEL}>{t('llm.provider')}</p>
+        <p className="text-sm font-medium text-ink">{providerLabel}</p>
       </div>
 
-      {providerId === 'custom' && (
-        <div className="space-y-1.5">
-          <label htmlFor="llm-base-url" className={LABEL}>
-            {t('llm.baseUrl')}
-          </label>
-          <input
-            id="llm-base-url"
-            type="text"
-            inputMode="url"
-            maxLength={512}
-            value={baseUrl}
-            placeholder={t('llm.baseUrlPlaceholder')}
-            onChange={(event) => {
-              setBaseUrl(event.target.value);
-              setSavedNotice(false);
-            }}
-            className={FIELD}
-          />
-          <p className="text-xs text-muted">{t('llm.baseUrlHint')}</p>
-        </div>
-      )}
+      <div className="space-y-1.5">
+        <label htmlFor="llm-base-url" className={LABEL}>
+          {t('llm.baseUrl')}
+        </label>
+        <input
+          id="llm-base-url"
+          type="text"
+          inputMode="url"
+          required
+          maxLength={512}
+          value={baseUrl}
+          placeholder={t('llm.baseUrlPlaceholder')}
+          onChange={(event) => {
+            setBaseUrl(event.target.value);
+            setSavedNotice(false);
+          }}
+          className={FIELD}
+        />
+        <p className="text-xs text-muted">{t('llm.baseUrlHint')}</p>
+        {dirty && baseUrlMissing && (
+          <p className="text-xs text-danger">{t('llm.baseUrlRequired')}</p>
+        )}
+      </div>
 
       <div className="space-y-1.5">
         <label htmlFor="llm-model" className={LABEL}>
@@ -269,21 +208,13 @@ export function LlmSettingsForm({
           type="text"
           maxLength={LLM_MODEL_MAX_LENGTH}
           value={model}
-          placeholder={modelPlaceholder}
           onChange={(event) => {
             setModel(event.target.value);
             setSavedNotice(false);
           }}
           className={FIELD}
         />
-        <p className="text-xs text-muted">
-          {providerId === 'custom'
-            ? t('llm.customModelHint')
-            : t.rich('llm.modelHint', {
-                code: (chunks) => <code className="font-mono">{chunks}</code>,
-                model: modelPlaceholder,
-              })}
-        </p>
+        <p className="text-xs text-muted">{t('llm.customModelHint')}</p>
       </div>
 
       <div className="space-y-1.5">
@@ -294,7 +225,7 @@ export function LlmSettingsForm({
         {showSavedKey ? (
           <div className="space-y-2">
             <p role="status" className="text-sm text-muted">
-              {t('llm.keySaved', { provider: selectedLabel })}
+              {t('llm.keySaved', { provider: providerLabel })}
             </p>
             <div className="flex flex-wrap gap-2">
               <button
@@ -350,11 +281,7 @@ export function LlmSettingsForm({
               }}
               className={FIELD}
             />
-            <p className="text-xs text-muted">
-              {providerId === 'custom'
-                ? t('llm.customKeyHint')
-                : t('llm.keyHint', { provider: selectedLabel })}
-            </p>
+            <p className="text-xs text-muted">{t('llm.customKeyHint')}</p>
           </>
         )}
       </div>
@@ -363,7 +290,7 @@ export function LlmSettingsForm({
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="submit"
-            disabled={saving || !dirty}
+            disabled={saving || !dirty || baseUrlMissing}
             className={PRIMARY_BUTTON}
           >
             {saving ? t('llm.saving') : t('llm.save')}

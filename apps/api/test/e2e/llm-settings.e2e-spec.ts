@@ -16,11 +16,19 @@ import { PhotoImportHandler } from '../../src/queue/photo-import.handler';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 import { createNoopPhotoImportHandler } from '../helpers/noop-photo-handler';
 import { resetDatabase } from '../helpers/reset';
+import { seedLlmSettings } from '../helpers/seed';
 
 const BASE = '/settings/llm';
 const UPLOAD_URL = '/import/upload';
 
 const SECRET_KEY = 'sk-e2e-secret-do-not-leak';
+const URL = 'http://localhost:11434/v1';
+const customBody = {
+  provider: 'custom',
+  baseUrl: URL,
+  model: 'llava:7b',
+  apiKey: SECRET_KEY,
+};
 
 interface SettingsBody {
   provider: string;
@@ -30,18 +38,6 @@ interface SettingsBody {
   importEnabled: boolean;
   availableProviders: unknown[];
   updatedAt: string | null;
-}
-
-function geminiBody(items: unknown[]): VisionHttpResponse {
-  return {
-    status: 200,
-    ok: true,
-    json: () =>
-      Promise.resolve({
-        candidates: [{ content: { parts: [{ text: JSON.stringify(items) }] } }],
-      }),
-    text: () => Promise.resolve(''),
-  };
 }
 
 function openAiBody(content: unknown): VisionHttpResponse {
@@ -115,32 +111,34 @@ describe('LLM settings API (e2e)', () => {
     const body = res.body as SettingsBody;
 
     expect(body).toMatchObject({
-      provider: 'gemini',
-      model: 'gemini-3.8-flash',
+      provider: 'custom',
+      model: '',
+      baseUrl: null,
       keyPresent: true,
-      importEnabled: true,
+      importEnabled: false,
       updatedAt: null,
     });
-    expect(body.availableProviders).toHaveLength(3);
+    expect(body.availableProviders).toEqual([
+      { id: 'custom', label: 'Custom (OpenAI-compatible)', defaultModel: '' },
+    ]);
     expect(JSON.stringify(body)).not.toContain('test-llm-key');
   });
 
   it('PUT stores an encrypted key and never echoes it back', async () => {
-    const res = await test.request
-      .put(BASE)
-      .send({ provider: 'openai', model: 'gpt-4o-mini', apiKey: SECRET_KEY })
-      .expect(200);
+    const res = await test.request.put(BASE).send(customBody).expect(200);
 
     expect(res.body).toMatchObject({
-      provider: 'openai',
-      model: 'gpt-4o-mini',
+      provider: 'custom',
+      model: 'llava:7b',
+      baseUrl: URL,
       keyPresent: true,
       importEnabled: true,
     });
     expect(JSON.stringify(res.body)).not.toContain(SECRET_KEY);
 
     const row = await test.prisma.llmSetting.findUnique({ where: { id: 1 } });
-    expect(row?.provider).toBe('openai');
+    expect(row?.provider).toBe('custom');
+    expect(row?.baseUrl).toBe(URL);
     expect(row?.apiKeyCiphertext).not.toBeNull();
     expect(row?.apiKeyCiphertext).not.toContain(SECRET_KEY);
 
@@ -159,10 +157,7 @@ describe('LLM settings API (e2e)', () => {
       .pauseForConfig('llm', 'The provider rejected the API key');
     expect(await queue.isPaused()).toBe(true);
 
-    await test.request
-      .put(BASE)
-      .send({ provider: 'gemini', apiKey: SECRET_KEY })
-      .expect(200);
+    await test.request.put(BASE).send(customBody).expect(200);
 
     expect(await queue.isPaused()).toBe(false);
     const state = await test.prisma.importQueueState.findUnique({
@@ -171,52 +166,63 @@ describe('LLM settings API (e2e)', () => {
     expect(state).toMatchObject({ paused: false, source: null, reason: null });
   });
 
-  it('PUT with a missing apiKey keeps the stored key', async () => {
-    await test.request
-      .put(BASE)
-      .send({ provider: 'gemini', apiKey: SECRET_KEY })
-      .expect(200);
+  it('PUT with a missing apiKey and baseUrl keeps the stored key and URL', async () => {
+    await test.request.put(BASE).send(customBody).expect(200);
 
     const res = await test.request
       .put(BASE)
-      .send({ provider: 'gemini' })
+      .send({ provider: 'custom' })
       .expect(200);
-    expect(res.body).toMatchObject({ provider: 'gemini', keyPresent: true });
+    expect(res.body).toMatchObject({
+      provider: 'custom',
+      keyPresent: true,
+      baseUrl: URL,
+    });
   });
 
-  it('PUT switching provider without a key does not reuse the stored key', async () => {
-    await test.request
-      .put(BASE)
-      .send({ provider: 'gemini', model: 'gemini-x', apiKey: SECRET_KEY })
-      .expect(200);
+  it('a legacy gemini row resolves to custom, not configured, until a base URL is saved', async () => {
+    const crypto = test.app.get(LlmKeyCryptoService);
+    await test.prisma.llmSetting.create({
+      data: {
+        id: 1,
+        provider: 'gemini',
+        model: 'gemini-x',
+        apiKeyCiphertext: crypto.encrypt(SECRET_KEY),
+      },
+    });
+
+    const read = await test.request.get(BASE).expect(200);
+    expect(read.body).toMatchObject({
+      provider: 'custom',
+      model: '',
+      baseUrl: null,
+      importEnabled: false,
+    });
+    expect(await settings.resolveActive()).toBeNull();
 
     const res = await test.request
       .put(BASE)
-      .send({ provider: 'openai' })
+      .send({ provider: 'custom', baseUrl: URL })
       .expect(200);
-    expect(res.body).toMatchObject({ provider: 'openai' });
 
     const row = await test.prisma.llmSetting.findUnique({ where: { id: 1 } });
-    expect(row?.provider).toBe('openai');
-    expect(row?.apiKeyCiphertext).toBeNull();
+    expect(row?.provider).toBe('custom');
     expect(row?.model).toBeNull();
+    expect(row?.apiKeyCiphertext).toBeNull();
 
-    // The old gemini secret must never be resolved for the new provider.
+    // The old gemini secret must never be resolved for the new provider: the
+    // effective key is the env fallback the e2e tier sets for CUSTOM_API_KEY.
     const active = await settings.resolveActive();
-    expect(active?.provider).toBe('openai');
-    expect(active?.apiKey).not.toBe(SECRET_KEY);
+    expect(active?.apiKey).toBe('test-llm-key');
     expect(JSON.stringify(res.body)).not.toContain(SECRET_KEY);
   });
 
   it('PUT with an empty apiKey clears the key', async () => {
-    await test.request
-      .put(BASE)
-      .send({ provider: 'gemini', apiKey: SECRET_KEY })
-      .expect(200);
+    await test.request.put(BASE).send(customBody).expect(200);
 
     const res = await test.request
       .put(BASE)
-      .send({ provider: 'gemini', apiKey: '' })
+      .send({ provider: 'custom', apiKey: '' })
       .expect(200);
     // Clearing falls back to the (test) env key, so keyPresent stays true.
     const row = await test.prisma.llmSetting.findUnique({ where: { id: 1 } });
@@ -224,48 +230,28 @@ describe('LLM settings API (e2e)', () => {
     expect((res.body as SettingsBody).keyPresent).toBe(true);
   });
 
-  it('PUT rejects an unknown provider with 400', async () => {
-    await test.request.put(BASE).send({ provider: 'anthropic' }).expect(400);
-  });
+  it.each(['anthropic', 'gemini', 'openai'])(
+    'PUT rejects the removed/unknown provider %s with 400',
+    async (id) => {
+      await test.request
+        .put(BASE)
+        .send({ provider: id, baseUrl: URL })
+        .expect(400);
+    },
+  );
 
   it('PUT rejects a model over 128 chars with 400', async () => {
     await test.request
       .put(BASE)
-      .send({ provider: 'gemini', model: 'x'.repeat(129) })
+      .send({ provider: 'custom', baseUrl: URL, model: 'x'.repeat(129) })
       .expect(400);
   });
 
   it('PUT rejects an unknown field with 400', async () => {
     await test.request
       .put(BASE)
-      .send({ provider: 'gemini', bogus: true })
+      .send({ provider: 'custom', baseUrl: URL, bogus: true })
       .expect(400);
-  });
-
-  it('PUT stores a custom base URL and never echoes the key', async () => {
-    const res = await test.request
-      .put(BASE)
-      .send({
-        provider: 'custom',
-        baseUrl: 'http://localhost:11434/v1',
-        model: 'llava:7b',
-        apiKey: SECRET_KEY,
-      })
-      .expect(200);
-
-    expect(res.body).toMatchObject({
-      provider: 'custom',
-      model: 'llava:7b',
-      baseUrl: 'http://localhost:11434/v1',
-      keyPresent: true,
-      importEnabled: true,
-    });
-    expect(JSON.stringify(res.body)).not.toContain(SECRET_KEY);
-
-    const row = await test.prisma.llmSetting.findUnique({ where: { id: 1 } });
-    expect(row?.provider).toBe('custom');
-    expect(row?.baseUrl).toBe('http://localhost:11434/v1');
-    expect(row?.apiKeyCiphertext).not.toBeNull();
   });
 
   it('PUT custom without a base URL is rejected with 400', async () => {
@@ -282,48 +268,18 @@ describe('LLM settings API (e2e)', () => {
       .expect(400);
   });
 
-  it('PUT openai with a base URL is rejected with 400', async () => {
+  it('PUT normalizes the stored base URL', async () => {
     await test.request
       .put(BASE)
-      .send({ provider: 'openai', baseUrl: 'http://x/v1' })
-      .expect(400);
-  });
-
-  it('GET returns the stored base URL for custom and null after switching back', async () => {
-    await test.request
-      .put(BASE)
-      .send({
-        provider: 'custom',
-        baseUrl: 'http://localhost:11434/v1/',
-        model: 'llava:7b',
-        apiKey: SECRET_KEY,
-      })
+      .send({ ...customBody, baseUrl: `${URL}/` })
       .expect(200);
 
-    const customRead = await test.request.get(BASE).expect(200);
-    expect((customRead.body as SettingsBody).baseUrl).toBe(
-      'http://localhost:11434/v1',
-    );
-
-    await test.request
-      .put(BASE)
-      .send({ provider: 'gemini', apiKey: SECRET_KEY })
-      .expect(200);
-
-    const geminiRead = await test.request.get(BASE).expect(200);
-    expect((geminiRead.body as SettingsBody).baseUrl).toBeNull();
+    const read = await test.request.get(BASE).expect(200);
+    expect((read.body as SettingsBody).baseUrl).toBe(URL);
   });
 
   it('POST test calls the custom endpoint with the stored base URL', async () => {
-    await test.request
-      .put(BASE)
-      .send({
-        provider: 'custom',
-        baseUrl: 'http://localhost:11434/v1',
-        model: 'llava:7b',
-        apiKey: SECRET_KEY,
-      })
-      .expect(200);
+    await test.request.put(BASE).send(customBody).expect(200);
     postJson.mockResolvedValue(openAiBody([]));
 
     const res = await test.request.post(`${BASE}/test`).expect(200);
@@ -335,24 +291,12 @@ describe('LLM settings API (e2e)', () => {
     });
     expect(postJson).toHaveBeenCalledTimes(1);
     const request = postJson.mock.calls[0]?.[0];
-    expect(request?.url).toBe('http://localhost:11434/v1/chat/completions');
+    expect(request?.url).toBe(`${URL}/chat/completions`);
     expect(request?.headers.authorization).toBe(`Bearer ${SECRET_KEY}`);
   });
 
-  it('POST test returns ok on a successful provider call', async () => {
-    postJson.mockResolvedValue(geminiBody([]));
-
-    const res = await test.request.post(`${BASE}/test`).expect(200);
-
-    expect(res.body).toMatchObject({
-      ok: true,
-      code: 'ok',
-      provider: 'gemini',
-    });
-    expect(postJson).toHaveBeenCalledTimes(1);
-  });
-
   it('POST test returns a failure code with HTTP 200', async () => {
+    await test.request.put(BASE).send(customBody).expect(200);
     postJson.mockResolvedValue(failure(401));
 
     const res = await test.request.post(`${BASE}/test`).expect(200);
@@ -369,6 +313,17 @@ describe('LLM settings API (e2e)', () => {
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it('POST test reports not_configured with no stored row', async () => {
+    const res = await test.request.post(`${BASE}/test`).expect(200);
+
+    expect(res.body).toMatchObject({
+      ok: false,
+      code: 'not_configured',
+      provider: 'custom',
+    });
+    expect(postJson).not.toHaveBeenCalled();
   });
 
   it('POST test requires authentication (401)', async () => {
@@ -392,7 +347,19 @@ describe('LLM settings API (e2e)', () => {
     }
   });
 
+  it('import upload is refused with 503 when no settings row exists', async () => {
+    await test.request
+      .post(UPLOAD_URL)
+      .attach('files', Buffer.from('x'), {
+        filename: 'x.png',
+        contentType: 'image/png',
+      })
+      .expect(503);
+    expect(await test.prisma.importJob.count()).toBe(0);
+  });
+
   it('import upload succeeds (202) when a key is configured', async () => {
+    await seedLlmSettings(test.prisma);
     const res = await test.request
       .post(UPLOAD_URL)
       .attach('files', Buffer.from('x'), {

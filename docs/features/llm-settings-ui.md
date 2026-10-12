@@ -23,11 +23,9 @@ ticket 0.x and wires three concerns into one page:
    [`POST /platforms/refresh`](/platforms-api.md), which re-runs the IGDB
    platform reconcile and restores hidden reference platforms.
 
-Recommended default provider: **Google Gemini** (`gemini-3.8-flash`) — a
-generous free tier, fast, reliable at reading box text. OpenAI (`gpt-4o-mini`)
-is a solid paid alternative. Each photo costs one vision call (a fraction of a
-cent to a few cents depending on provider and image size); recognition is only
-charged for imported photos. The screen states this in its copy.
+Game recognition uses a single provider — **Custom (OpenAI-compatible)** —
+pointed at any OpenAI-compatible endpoint. The screen shows the provider as
+static text (no selector) and asks for a base URL, model and API key.
 
 # Routes and components
 
@@ -45,48 +43,39 @@ the form would be, and a failed status fetch shows its own message.
 The form is driven entirely by the `LlmSettingsModel` returned by the API (and,
 after a save, by the authoritative `PUT` response kept in local state).
 
-- **Provider** — a `<select>` populated from
-  `settings.availableProviders` (Google Gemini, OpenAI, Custom
-  (OpenAI-compatible)). Changing it resets the local model to that provider's
-  default and clears any typed key, matching the backend rule that a
-  key/model belongs to the provider that stored it. The `custom` option's
-  label is localized in the UI (`llm.providerCustom`); the built-ins keep
-  their API-provided labels.
-- **Base URL** — a text input shown **only when `custom` is selected**,
-  seeded from `settings.baseUrl` and sent with every `custom` save (the
-  backend requires it). The hint names the supported endpoints (Ollama,
-  LM Studio, OpenRouter). The typed value survives provider hide/show —
-  toggling the provider does not reset it.
+- **Provider** — a static label (`llm.providerCustom`, "Custom
+  (OpenAI-compatible)"), not a form control.
+- **Base URL** — a text input always shown, seeded from `settings.baseUrl`,
+  always sent and required (the backend requires it). The hint names the
+  supported endpoints (Ollama, LM Studio, OpenRouter). **Save** is disabled
+  while it is empty, and `llm.baseUrlRequired` shows once the form is dirty.
 - **Model** — a text input capped at 128 chars (the backend
-  `LLM_MODEL_MAX_LENGTH`). The provider default is shown as the placeholder;
-  leaving it at the default omits `model` from the request, while clearing it
-  sends `""` to drop a stored override. For `custom` there is no default —
-  the hint tells the user to enter the exact model name their server exposes
-  (local models have arbitrary names).
-- **API key** — see below. For `custom`, the hint notes that local servers
-  typically accept any non-empty value.
+  `LLM_MODEL_MAX_LENGTH`) with no placeholder. Leaving it unchanged omits
+  `model` from the request, while clearing it sends `""` to drop a stored
+  override. The hint tells the user to enter the exact model name their
+  server exposes (local models have arbitrary names).
+- **API key** — see below. The hint notes that local servers typically accept
+  any non-empty value.
 
-Only changed keys are sent. `model` is omitted when it equals the saved model
-(or the new provider's default), `baseUrl` is always sent for `custom`
-(required by the backend) and never for the built-ins, and `apiKey` is omitted
-unless the user typed one or chose to remove the key. **Save** is disabled
-while saving or when the form is not dirty (a base-URL change counts as dirty
-only while `custom` is selected).
+Only changed keys are sent: `model` is omitted when it equals the saved model,
+`baseUrl` is always sent (required by the backend), and `apiKey` is omitted
+unless the user typed one or chose to remove the key. The dirty check is
+model / base URL / key. **Save** is disabled while saving, when the form is
+not dirty, or while the base URL is empty.
 
 # Key handling (write-only)
 
 The key is never rendered back. The server model exposes only `keyPresent`, so:
 
-- When a key is present for the active provider, the field is replaced by
-  "A key is saved for <provider>." plus **Replace key** and **Remove key**.
+- When a key is present, the field is replaced by "A key is saved for
+  Custom (OpenAI-compatible)." plus **Replace key** and **Remove key**.
 - **Replace key** reveals an empty password input (`type="password"`,
   `autoComplete="new-password"`).
 - **Remove key** shows "The key will be removed when you save." plus **Undo**;
   saving sends `apiKey: ""`.
-- Otherwise an empty password input is shown with the helper "It is stored
-  encrypted and never shown again." For `custom` the helper is replaced by a
-  custom-specific hint: local servers typically accept any non-empty value,
-  and it is still stored encrypted and never shown again.
+- Otherwise an empty password input is shown with the helper: local servers
+  typically accept any non-empty value, and it is stored encrypted and never
+  shown again.
 
 Guarantees:
 
@@ -102,18 +91,18 @@ configuration — the form says so and flags unsaved edits. The endpoint always
 returns HTTP 200; the component maps the stable `code` to a specific message
 (falling back to a generic message on a request-level network failure):
 
-| `VisionTestCode`   | Message shown                                                          |
-| ------------------ | ---------------------------------------------------------------------- |
-| `ok`               | Connection succeeded — the provider accepted the request.              |
-| `not_configured`   | No API key is saved for this provider yet. Save a key first.           |
-| `unauthorized`     | The provider rejected the API key. Check the key and try again.        |
-| `model_not_found`  | The configured model does not exist for this provider. Choose another. |
-| `rate_limited`     | The provider rate-limited the request. Wait a moment and try again.    |
-| `timeout`          | The provider did not respond in time. Try again.                       |
-| `bad_response`     | The provider returned an unexpected response.                          |
-| `network`          | Couldn't reach the provider. Check the connection and try again.       |
-| `server_error`     | The provider had a server error. Try again later.                      |
-| `unknown_provider` | That provider is not available.                                        |
+| `VisionTestCode`   | Message shown                                                                |
+| ------------------ | ---------------------------------------------------------------------------- |
+| `ok`               | Connection succeeded — the provider accepted the request.                    |
+| `not_configured`   | Game recognition isn't configured yet. Save a base URL and an API key first. |
+| `unauthorized`     | The provider rejected the API key. Check the key and try again.              |
+| `model_not_found`  | The configured model does not exist for this provider. Choose another.       |
+| `rate_limited`     | The provider rate-limited the request. Wait a moment and try again.          |
+| `timeout`          | The provider did not respond in time. Try again.                             |
+| `bad_response`     | The provider returned an unexpected response.                                |
+| `network`          | Couldn't reach the provider. Check the connection and try again.             |
+| `server_error`     | The provider had a server error. Try again later.                            |
+| `unknown_provider` | That provider is not available.                                              |
 
 `ok` renders as `role="status"`; any failure renders as `role="alert"` in the
 danger style.
@@ -161,12 +150,14 @@ refresh.
 
 # Manual acceptance script
 
-1. Open `/settings`. The provider select lists Google Gemini, OpenAI, and
-   Custom (OpenAI-compatible); the model is prefilled; the key field is empty;
-   the recommended-default copy names Gemini. Selecting Custom reveals the
-   Base URL field and swaps the model/key hints for the custom-specific ones.
-2. Paste a key, **Save changes** → "Saved. Photo import is enabled." with a link
-   to `/import`. Open `/import`: the gate is gone and the picker is enabled.
+1. Open `/settings`. The provider shows as static text 'Custom
+   (OpenAI-compatible)'; there is no provider select and no
+   recommended-provider paragraph; Base URL, Model and API key fields are
+   visible. Clearing Base URL disables Save and shows 'Enter the base URL
+   before saving.'
+2. Enter a base URL, model and key, **Save changes** → "Saved. Photo import
+   is enabled." with a link to `/import`. Open `/import`: the gate is gone and
+   the picker is enabled.
 3. Reload `/settings`: the key input is empty and shows "A key is saved"; no key
    text appears in the DOM; the request is `PUT /settings/llm` with the key only
    in the JSON body; the console shows no key.
@@ -194,10 +185,8 @@ refresh.
 - Theme settings (ticket 7.3). The language preference is no longer out of
   scope: it lives in the Preferences section of this screen (see
   [Internationalization (PL default, EN)](/i18n.md)).
-- Non-OpenAI-compatible protocols (e.g. Anthropic-native); per-provider key
-  storage for several providers at once; key rotation/audit tooling. The
-  `custom` provider covers any OpenAI-compatible endpoint (see
-  [LLM Settings API](/llm-settings-api.md)).
+- Non-OpenAI-compatible protocols (e.g. Anthropic-native, Gemini-native);
+  several providers at once; key rotation/audit tooling.
 - The full `/platforms` management view (still a placeholder).
 - A frontend test runner; verification is typecheck + lint + build plus the
   manual acceptance script.

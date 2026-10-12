@@ -11,21 +11,19 @@ export const LLM_API_KEY_MAX_LENGTH = 512;
 
 /**
  * Body of `PUT /settings/llm`. `apiKey` is write-only: omitted keeps the
- * stored key when `provider` is unchanged (otherwise the stored key is
- * cleared), `""` clears it, any other value replaces it. It is never
- * echoed back by any endpoint.
+ * stored key (a key stored by a removed provider is never reused), `""`
+ * clears it, any other value replaces it. It is never echoed back by any
+ * endpoint.
  */
 export class PutLlmSettingsDto {
-  @ApiProperty({ enum: [...SUPPORTED_PROVIDER_IDS], example: 'gemini' })
+  @ApiProperty({ enum: [...SUPPORTED_PROVIDER_IDS], example: 'custom' })
   @IsIn([...SUPPORTED_PROVIDER_IDS])
   provider!: VisionProviderId;
 
   @ApiPropertyOptional({
     maxLength: LLM_MODEL_MAX_LENGTH,
-    example: 'gemini-3.8-flash',
-    description:
-      'Omit to keep when the provider is unchanged; reset to the provider ' +
-      'default when the provider changes. Empty clears the override.',
+    example: 'llava:7b',
+    description: 'Omit to keep the stored model. Empty clears the override.',
   })
   @IsOptional()
   @IsString()
@@ -36,8 +34,9 @@ export class PutLlmSettingsDto {
     maxLength: LLM_BASE_URL_MAX_LENGTH,
     example: 'http://localhost:11434/v1',
     description:
-      'Required when provider is "custom" (absolute http(s) URL, trailing / ' +
-      'normalized). Must be omitted/empty for openai/gemini (fixed endpoints).',
+      'Absolute http(s) URL of the OpenAI-compatible endpoint (trailing / ' +
+      'normalized). Required unless a base URL is already stored; omit to ' +
+      'keep it.',
   })
   @IsOptional()
   @IsString()
@@ -47,10 +46,10 @@ export class PutLlmSettingsDto {
   @ApiPropertyOptional({
     writeOnly: true,
     maxLength: LLM_API_KEY_MAX_LENGTH,
-    example: 'AIza...',
+    example: 'sk-...',
     description:
-      'Write-only. Omit to keep when the provider is unchanged; cleared when ' +
-      'the provider changes. Send "" to clear it. Never returned.',
+      'Write-only. Omit to keep the stored key. Send "" to clear it. ' +
+      'Never returned.',
   })
   @IsOptional()
   @IsString()

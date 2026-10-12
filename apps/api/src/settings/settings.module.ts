@@ -12,8 +12,6 @@ import {
   VisionHttpClient,
 } from './vision/vision-http.client';
 import { CustomVisionProvider } from './vision/custom-vision.provider';
-import { GeminiVisionProvider } from './vision/gemini-vision.provider';
-import { OpenAiVisionProvider } from './vision/openai-vision.provider';
 import { VisionProviderRegistry } from './vision/vision-provider.registry';
 import { VisionService } from './vision/vision.service';
 
@@ -38,8 +36,6 @@ import { VisionService } from './vision/vision.service';
     PreferencesService,
     VisionService,
     VisionProviderRegistry,
-    GeminiVisionProvider,
-    OpenAiVisionProvider,
     CustomVisionProvider,
     { provide: VisionHttpClient, useClass: FetchVisionHttpClient },
   ],
