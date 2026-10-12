@@ -30,6 +30,10 @@ export { normalizeTitle } from './title-match';
  * scores at least `CONFIDENT_MATCH_MIN_SCORE`, never treating a version/sequel
  * difference (`Halo` vs `Halo 2`) as a match.
  */
+const IGDB_NO_CANDIDATES_REASON = 'No IGDB game matched the title';
+const IGDB_BELOW_THRESHOLD_REASON =
+  'IGDB returned candidates but none matched the title closely enough';
+
 @Injectable()
 export class IgdbGameCatalogResolver
   extends GameCatalogResolver
@@ -133,8 +137,8 @@ export class IgdbGameCatalogResolver
       // wrongly read as "this game does not exist in IGDB".
       reason:
         games.length === 0
-          ? 'No IGDB game matched the title'
-          : 'IGDB returned candidates but none matched the title closely enough',
+          ? IGDB_NO_CANDIDATES_REASON
+          : IGDB_BELOW_THRESHOLD_REASON,
     };
   }
 }

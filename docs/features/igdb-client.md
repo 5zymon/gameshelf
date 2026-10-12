@@ -250,13 +250,17 @@ every item `transient` for a retryable error and `unrecognized` otherwise).
 
 IGDB stores a game under its full franchise name, so an OCR title can be the
 candidate's tail: `Dawn of War III` vs `Warhammer 40,000: Dawn of War III`. The
-scorer accepts a query that is a whole-token **suffix** of the candidate
-(`SUFFIX_MATCH_SCORE = 0.95`) provided the query has at least two tokens — a
-single generic word (`War`) never latches onto a longer title's tail, and the
-version-token guard runs first, so `Dawn of War II` still scores 0 against
-`Dawn of War III`. A candidate with extra _trailing_ tokens
-(`… Dawn of War II - Chaos Rising`) is not a suffix and stays below the
-threshold.
+scorer accepts a query that is the part of the **raw** candidate name after a
+`: ` / `-` separator (`SUFFIX_MATCH_SCORE = 0.95`) provided the query has at
+least two tokens. The separator is required (checked on the raw name, since
+normalization strips punctuation), so `Super Mario Bros` does not suffix-match
+`New Super Mario Bros`. A single generic word (`War`) never latches onto a
+longer title's tail, and the version-token guard runs first, so `Dawn of War II`
+still scores 0 against `Dawn of War III`. A candidate with extra _trailing_
+tokens (`… Dawn of War II - Chaos Rising`) is not a match and stays below the
+threshold. When two candidates tie at the suffix score,
+`selectConfidentMatch` returns `null` (ambiguous) instead of picking by IGDB
+order; an exact name (1.0) still wins over a prefixed one.
 
 ## Known limitation: cross-system version tokens (m4)
 

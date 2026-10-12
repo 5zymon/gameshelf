@@ -191,11 +191,13 @@ The IGDB source:
   (`title-match.ts`): normalized equality scores 1, otherwise a Levenshtein
   ratio (boosted by containment) must reach `CONFIDENT_MATCH_MIN_SCORE = 0.8`.
   A minor typo such as `Haloo` → `Halo` (0.8) or `Pokeman` → `Pokemon` (0.857)
-  is accepted; a query that is the candidate's whole-token **suffix** — a
-  franchise or edition prefix in front of it, e.g. `Dawn of War III` inside
+  is accepted; a query that follows a `: ` / `-` separator in the candidate
+  name — a franchise prefix, e.g. `Dawn of War III` inside
   `Warhammer 40,000: Dawn of War III` — scores `SUFFIX_MATCH_SCORE = 0.95`. The
-  query must have at least two tokens, so a single generic word (`War`) cannot
-  latch onto the tail of an unrelated title; a title that differs only by an
+  query must have at least two tokens and a separator is required, so a single
+  generic word (`War`) or an unseparated prefix (`New Super Mario Bros`) cannot
+  latch on, and a tie between two such candidates is treated as ambiguous
+  (unrecognized); a title that differs only by an
   installment/version token
   (`Fifa 24` vs `Fifa 23`, `Halo` vs `Halo 2`, `GTA V` vs `GTA IV`) scores 0 and
   is never treated as a typo, so it stays unresolved rather than matching the

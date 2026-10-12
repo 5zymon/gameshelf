@@ -2,8 +2,8 @@
 export const CONFIDENT_MATCH_MIN_SCORE = 0.8;
 
 /**
- * Score for a whole-token suffix match: the query is the candidate's tail
- * behind a franchise/edition prefix (`Dawn of War III` in
+ * Score for a franchise-prefix match: the query is the candidate's tail behind
+ * a `:` / ` - ` separator (`Dawn of War III` in
  * `Warhammer 40,000: Dawn of War III`). Above `CONFIDENT_MATCH_MIN_SCORE`,
  * below an exact equality, so an exact name still ranks first.
  */
@@ -79,29 +79,37 @@ function differsOnlyByVersionToken(a: string, b: string): boolean {
  */
 const SUFFIX_MATCH_MIN_TOKENS = 2;
 
+/** A franchise/subtitle separator in a raw name: `: `, ` - `, ` – `, ` — `. */
+const TITLE_SEPARATOR = /:\s|\s[-–—]\s/g;
+
 /**
- * True when `query` is the candidate's tail on whole-token boundaries, i.e. the
- * candidate is the query behind a franchise/edition prefix. The version-token
- * guard runs before this, so `Halo` still never matches `Halo 2` this way.
+ * True when the raw candidate name is `<prefix><separator><query>`, i.e. the
+ * query is the part after a franchise separator (`Warhammer 40,000: Dawn of
+ * War III`). The separator is required, and is checked on the raw name because
+ * normalization strips punctuation: without it `Super Mario Bros` would match
+ * `New Super Mario Bros`, a different game that merely ends the same way.
  */
-function isSuffixMatch(query: string, candidate: string): boolean {
-  return (
-    query.split(' ').length >= SUFFIX_MATCH_MIN_TOKENS &&
-    candidate.endsWith(` ${query}`)
-  );
+function isFranchisePrefixed(query: string, rawCandidate: string): boolean {
+  if (query.split(' ').length < SUFFIX_MATCH_MIN_TOKENS) return false;
+  for (const separator of rawCandidate.matchAll(TITLE_SEPARATOR)) {
+    const tail = rawCandidate.slice(separator.index + separator[0].length);
+    if (normalizeTitle(tail) === query) return true;
+  }
+  return false;
 }
 
 /** Similarity in [0,1]; 1 = normalized equality, 0 = blank or version-divergent. */
 export function titleSimilarity(query: string, candidate: string): number {
-  return similarity(normalizeTitle(query), normalizeTitle(candidate));
+  return similarity(normalizeTitle(query), candidate);
 }
 
-/** Similarity over already-normalized strings (see `titleSimilarity`). */
-function similarity(a: string, b: string): number {
+/** Similarity of a normalized query against a raw candidate name. */
+function similarity(a: string, rawCandidate: string): number {
+  const b = normalizeTitle(rawCandidate);
   if (a === '' || b === '') return 0;
   if (a === b) return 1;
   if (differsOnlyByVersionToken(a, b)) return 0;
-  if (isSuffixMatch(a, b)) return SUFFIX_MATCH_SCORE;
+  if (isFranchisePrefixed(a, rawCandidate)) return SUFFIX_MATCH_SCORE;
   const maxLen = Math.max(a.length, b.length);
   const edit = 1 - levenshtein(a, b) / maxLen;
   if (a.includes(b) || b.includes(a)) {
@@ -119,18 +127,29 @@ export function rankTitleMatches<T extends { name: string }>(
   return candidates
     .map((game) => ({
       game,
-      score: similarity(normalizedQuery, normalizeTitle(game.name)),
+      score: similarity(normalizedQuery, game.name),
     }))
     .sort((x, y) => y.score - x.score);
 }
 
-/** Best candidate, or null when even the top score is below the threshold. */
+/**
+ * Best candidate, or null when even the top score is below the threshold, or
+ * when several candidates tie on the franchise-prefix score (ambiguous: picking
+ * one by IGDB order could import the wrong game).
+ */
 export function selectConfidentMatch<T extends { name: string }>(
   query: string,
   candidates: readonly T[],
 ): TitleMatch<T> | null {
-  const best = rankTitleMatches(query, candidates)[0];
-  return best !== undefined && best.score >= CONFIDENT_MATCH_MIN_SCORE
-    ? best
-    : null;
+  const [best, runnerUp] = rankTitleMatches(query, candidates);
+  if (best === undefined || best.score < CONFIDENT_MATCH_MIN_SCORE) {
+    return null;
+  }
+  if (
+    best.score === SUFFIX_MATCH_SCORE &&
+    runnerUp?.score === SUFFIX_MATCH_SCORE
+  ) {
+    return null;
+  }
+  return best;
 }

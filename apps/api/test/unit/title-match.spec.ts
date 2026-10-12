@@ -166,6 +166,40 @@ describe('franchise-prefix suffix matching (unit)', () => {
     ).toBeLessThan(CONFIDENT_MATCH_MIN_SCORE);
   });
 
+  it('does not match a different game that merely ends with the query', () => {
+    // No separator -> the suffix rule must not fire (the pre-existing
+    // containment score for a short prefix, e.g. 0.8 here, is unchanged).
+    expect(
+      titleSimilarity('Super Mario Bros', 'New Super Mario Bros'),
+    ).not.toBe(SUFFIX_MATCH_SCORE);
+    expect(
+      titleSimilarity('Final Fantasy VII', 'Dissidia Final Fantasy VII'),
+    ).toBeLessThan(CONFIDENT_MATCH_MIN_SCORE);
+    expect(
+      selectConfidentMatch('Resident Evil 4', [
+        { name: 'Remake Resident Evil 4' },
+      ]),
+    ).toBeNull();
+  });
+
+  it('rejects an ambiguous tie between franchise-prefixed candidates', () => {
+    expect(
+      selectConfidentMatch('Dawn of War III', [
+        { name: 'Warhammer 40,000: Dawn of War III' },
+        { name: 'Other Franchise: Dawn of War III' },
+      ]),
+    ).toBeNull();
+  });
+
+  it('still prefers an exact name over a franchise-prefixed one', () => {
+    const match = selectConfidentMatch('Dawn of War III', [
+      { name: 'Warhammer 40,000: Dawn of War III' },
+      { name: 'Dawn of War III' },
+    ]);
+
+    expect(match?.game.name).toBe('Dawn of War III');
+  });
+
   it('still guards a sequel that differs only by a version token', () => {
     expect(titleSimilarity('Dawn of War II', 'Dawn of War III')).toBe(0);
     expect(
