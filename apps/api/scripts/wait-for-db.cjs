@@ -35,24 +35,23 @@ function isPermanent(err) {
   return PERMANENT_CODES.has(err.code);
 }
 
-let url;
+let opts;
 try {
-  url = new URL(process.env.DATABASE_URL);
+  const url = new URL(process.env.DATABASE_URL);
+  opts = {
+    host: url.hostname,
+    port: Number(url.port) || 3306,
+    user: decodeURIComponent(url.username),
+    password: decodeURIComponent(url.password),
+    database: url.pathname.replace(/^\//, ''),
+    connectTimeout: 3000,
+  };
 } catch (err) {
   process.stderr.write(
     `[wait-for-db] invalid DATABASE_URL (${err.message}); not retrying\n`,
   );
   process.exit(1);
 }
-
-const opts = {
-  host: url.hostname,
-  port: Number(url.port) || 3306,
-  user: decodeURIComponent(url.username),
-  password: decodeURIComponent(url.password),
-  database: url.pathname.replace(/^\//, ''),
-  connectTimeout: 3000,
-};
 
 (async () => {
   const deadline = Date.now() + TIMEOUT_MS;

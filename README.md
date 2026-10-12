@@ -413,21 +413,28 @@ don't need it, you can ignore (or delete) the directory and continue. To
 recover it:
 
 ```bash
-# 1. Start a throwaway mysql:8.4 on the old data dir (localhost-only port).
+# 1. Start a throwaway mysql:8.4 on the old data dir.
 docker run -d --name gs-old-mysql -v "$PWD/data/mysql":/var/lib/mysql \
-  -p 127.0.0.1:3307:3306 mysql:8.4 \
+  mysql:8.4 \
   --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
 
-# 2. Dump the old database (substitute your own -u/-p if you changed them).
+# 2. Wait until it accepts connections (crash recovery on the old data dir
+#    takes a moment; the dump below would otherwise fail with "Can't connect").
+until docker exec gs-old-mysql mysqladmin ping -ugameshelf -pgameshelf --silent; do sleep 2; done
+
+# 3. Dump the old database (substitute your own -u/-p if you changed them).
 docker exec gs-old-mysql mysqldump -ugameshelf -pgameshelf \
   --single-transaction --routines --triggers --no-tablespaces \
   gameshelf > dump.sql
 
-# 3. Stop and remove the throwaway container.
+# 4. Stop and remove the throwaway container.
 docker rm -f gs-old-mysql
 
-# 4. Restore into the running database: drop the (empty, migrated) database,
-#    recreate it, and load the dump (which recreates schema + data).
+# 5. Restore into the running database: stop the app first so the live API
+#    does not hold Prisma pool connections open across the DROP DATABASE,
+#    then drop the (empty, migrated) database, recreate it, and load the dump
+#    (which recreates schema + data).
+docker compose stop api web
 docker compose exec mysql mysql -ugameshelf -pgameshelf -e \
   "DROP DATABASE IF EXISTS gameshelf; CREATE DATABASE gameshelf CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
 docker compose exec -T mysql mysql -ugameshelf -pgameshelf gameshelf < dump.sql

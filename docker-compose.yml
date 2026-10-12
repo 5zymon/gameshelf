@@ -62,6 +62,9 @@ services:
     # deploy` — never `db push`) and exits. A no-op when up to date.
     # Runs the image the `api` service builds (same tag); `pull_policy: never`
     # keeps it on the locally built image instead of trying to pull the tag.
+    # There is no `build:` here, so a standalone `docker compose up migrate`
+    # (or `run migrate`) before `api` has ever been built fails with
+    # "no such image" — run `docker compose up --build` (or `build api`) first.
     image: gameshelf-api:local
     pull_policy: never
     working_dir: /app
