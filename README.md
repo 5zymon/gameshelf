@@ -9,6 +9,42 @@ GameShelf is an npm-workspaces monorepo with two packages:
 | `@gameshelf/api` | `apps/api` | HTTP API built with [NestJS](https://nestjs.com/)  |
 | `@gameshelf/web` | `apps/web` | Frontend built with [Next.js](https://nextjs.org/) |
 
+## Quick start with Docker
+
+The fastest way to run GameShelf: Docker only, no Node.js or `.env` needed.
+
+```bash
+git clone <repo-url> gameshelf && cd gameshelf
+docker compose up --build
+```
+
+The first run builds the API and web images (a few minutes), starts MySQL 8.4,
+applies the committed migrations once, then starts the API and the web app.
+Open <http://localhost:3000>: on a fresh install the app redirects to `/setup`,
+where you create the first account (there is no public signup), and you are
+logged in.
+
+- **Run in the background:** `docker compose up --build -d`; follow logs with
+  `docker compose logs -f api web`.
+- **Stop:** `docker compose down` (data is kept). Start again with
+  `docker compose up -d`.
+- **Your data:** the database lives in `./data/mysql` on the host (gitignored);
+  cached covers live in the `covers` Docker volume. `docker compose down -v`
+  deletes the covers volume; `rm -rf data/mysql` deletes the library.
+- **Configuration:** it works without a `.env`, using local-only defaults. For
+  anything beyond trying it out, create a `.env` next to `docker-compose.yml`
+  and set at least `SESSION_SECRET` (32+ characters), plus `IGDB_CLIENT_ID` /
+  `IGDB_CLIENT_SECRET` for game lookups and photo import (see "External
+  services"). Compose reads `.env` only to fill in its variables — the
+  containers build their own `DATABASE_URL` pointing at the `mysql` service.
+- **Ports:** web `3000` (`WEB_PORT`), API `127.0.0.1:3001` (`API_PORT`, for
+  debugging only), MySQL `127.0.0.1:3306` (`MYSQL_PORT`). Stop `npm run dev`
+  first if it is running; it uses the same ports.
+- **Account recovery:** `docker compose exec api npm run user:passwd -- --email you@example.com`.
+
+Details: [`docs/features/docker-compose.md`](./docs/features/docker-compose.md).
+For development (hot reload, tests), use the Node-based [Setup](#setup) below.
+
 ## Scope
 
 GameShelf is a **single-user, single-origin** app for one operator's own library.
@@ -20,17 +56,19 @@ depends on them**:
   The app runs on one host, reachable at `http://localhost` (or a LAN IP), by its
   operator.
 - **No requirement depends on a container.** `docker-compose.yml` is a
-  _convenience_ that starts a local MySQL. The application has no
-  dependency on Docker or on that file: it needs only a MySQL 8.4 server at
-  `MYSQL_HOST:MYSQL_PORT`.
-  System-installed servers work identically.
+  _convenience_: it runs the whole app for the Docker quick start, and its
+  `mysql` service alone is the dev database for the Node-based flow. The
+  application has no dependency on Docker or on that file: it needs only a
+  MySQL 8.4 server at `MYSQL_HOST:MYSQL_PORT`.
+  System-installed servers work identically. The Docker quick start is a
+  local/LAN setup, not a production deployment.
 
 ## Prerequisites
 
 - **Node.js 24 LTS** (`>=24 <25`) — pinned in `.nvmrc` and `package.json` (`engines.node`).
 - **npm 11+** (ships with Node 24).
 - [nvm](https://github.com/nvm-sh/nvm) (optional but recommended) to select the pinned Node version.
-- **Docker** (optional) — only for the convenience `docker-compose.yml` that starts the dev MySQL. The app itself needs just a MySQL 8.4 server reachable at `MYSQL_HOST:MYSQL_PORT`; system-installed servers work identically.
+- **Docker** (optional) — either for the [Docker quick start](#quick-start-with-docker) (then you need nothing else), or for the `mysql` service that the Node-based flow uses as its dev database. The app itself needs just a MySQL 8.4 server reachable at `MYSQL_HOST:MYSQL_PORT`; system-installed servers work identically.
 
 The root scripts call `concurrently` and the workspace CLIs, so everything runs from the repository root.
 
@@ -642,15 +680,16 @@ for you — it is always a human decision.
 ```
 .
 ├── apps/
-│   ├── api/            # NestJS API
+│   ├── api/            # NestJS API (+ Dockerfile)
 │   │   └── prisma/     # Prisma schema + committed migrations
-│   └── web/            # Next.js frontend
+│   └── web/            # Next.js frontend (+ Dockerfile)
 ├── docs/               # OKF feature documentation bundle
 ├── tsconfig.base.json  # Shared strict TypeScript config
 ├── .husky/             # Git hooks (pre-commit)
 ├── .env.example        # Environment variable template
 ├── docker/             # One-time MySQL init scripts (shadow DB + test DB)
-├── docker-compose.yml    # Local dev MySQL (convenience only)
+├── docker-compose.yml    # Full local stack (Docker quick start); `mysql` alone = dev DB
+├── .dockerignore         # Build context filter for the Dockerfiles
 ├── data/                 # Persistent dev data (gitignored)
 ├── backups/              # Logical MySQL dumps (gitignored)
 ├── .nvmrc              # Pinned Node version
