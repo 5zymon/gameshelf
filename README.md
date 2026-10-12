@@ -247,7 +247,7 @@ The e2e tier is **re-runnable**: before the suite it applies the committed migra
 
 ## CI (GitHub Actions)
 
-[`.github/workflows/ci.yml`](./.github/workflows/ci.yml) runs on **every push and every pull request** (all branches) on an `ubuntu-latest` runner. The single job is named `ci` and gates the run with:
+[`.github/workflows/ci.yml`](./.github/workflows/ci.yml) runs on **pull requests** (any base branch) on an `ubuntu-latest` runner — a plain branch push starts no run, and CI is (re)triggered by the PR including `synchronize` on each new commit. The single job is named `ci` and gates the run with:
 
 | Step                  | Command                    | What it does                                                        |
 | --------------------- | -------------------------- | ------------------------------------------------------------------- |

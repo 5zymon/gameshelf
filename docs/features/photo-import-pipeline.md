@@ -191,7 +191,14 @@ The IGDB source:
   (`title-match.ts`): normalized equality scores 1, otherwise a Levenshtein
   ratio (boosted by containment) must reach `CONFIDENT_MATCH_MIN_SCORE = 0.8`.
   A minor typo such as `Haloo` → `Halo` (0.8) or `Pokeman` → `Pokemon` (0.857)
-  is accepted; a title that differs only by an installment/version token
+  is accepted; a query that follows a `: ` / `-` separator in the candidate
+  name — a franchise prefix, e.g. `Dawn of War III` inside
+  `Warhammer 40,000: Dawn of War III` — scores `SUFFIX_MATCH_SCORE = 0.95`. The
+  query must have at least two tokens and a separator is required, so a single
+  generic word (`War`) or an unseparated prefix (`New Super Mario Bros`) cannot
+  latch on, and a tie between two such candidates is treated as ambiguous
+  (unrecognized); a title that differs only by an
+  installment/version token
   (`Fifa 24` vs `Fifa 23`, `Halo` vs `Halo 2`, `GTA V` vs `GTA IV`) scores 0 and
   is never treated as a typo, so it stays unresolved rather than matching the
   wrong game;
@@ -200,7 +207,11 @@ The IGDB source:
   missing `IGDB_CLIENT_ID`/`IGDB_CLIENT_SECRET`, both raised as
   `IgdbConfigError`) becomes `config_error` and pauses the queue (ticket 3.10,
   [Queue Pause on Configuration Error](/queue-pause-on-config-error.md)); a
-  malformed query becomes `unrecognized`, and no match becomes `unrecognized`.
+  malformed query becomes `unrecognized`, and a no-match becomes `unrecognized`
+  with one of two reasons that name the case:
+  - `No IGDB game matched the title` — IGDB returned no candidates at all;
+  - `IGDB returned candidates but none matched the title closely enough` — a
+    real candidate was rejected by the confidence threshold.
 
 The MobyGames source mirrors this shape: `MobygamesClient` issues one
 `GET /v2/games?title=…&fuzzy=true&limit=10&include=…&api_key=…` per title through

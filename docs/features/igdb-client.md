@@ -246,6 +246,22 @@ request throws so the caller can classify the whole batch (the resolver marks
 every item `transient` for a retryable error and `unrecognized` otherwise).
 `multiqueryGames([])` sends no request.
 
+## Franchise-prefix suffix matches
+
+IGDB stores a game under its full franchise name, so an OCR title can be the
+candidate's tail: `Dawn of War III` vs `Warhammer 40,000: Dawn of War III`. The
+scorer accepts a query that is the part of the **raw** candidate name after a
+`: ` / `-` separator (`SUFFIX_MATCH_SCORE = 0.95`) provided the query has at
+least two tokens. The separator is required (checked on the raw name, since
+normalization strips punctuation), so `Super Mario Bros` does not suffix-match
+`New Super Mario Bros`. A single generic word (`War`) never latches onto a
+longer title's tail, and the version-token guard runs first, so `Dawn of War II`
+still scores 0 against `Dawn of War III`. A candidate with extra _trailing_
+tokens (`… Dawn of War II - Chaos Rising`) is not a match and stays below the
+threshold. When two candidates tie at the suffix score,
+`selectConfidentMatch` returns `null` (ambiguous) instead of picking by IGDB
+order; an exact name (1.0) still wins over a prefixed one.
+
 ## Known limitation: cross-system version tokens (m4)
 
 The version-token guard treats numerals and roman numerals as installment
@@ -273,7 +289,8 @@ phase 1 vs full-field hydration, named/mixed/omitted/legacy attribution, dedupe
 and drop-unknown hydration, multi-chunk input order, escaping, empty input, 429
 retry, non-array error),
 `title-match.spec.ts` (normalization, exact/typo/unrelated similarity,
-sequel/version guards, ranking, confident-match selection),
+franchise-prefix suffix matches, sequel/version guards, ranking,
+confident-match selection),
 `igdb-rate-limiter.spec.ts` (4/s window, 8 concurrent, slot release, bounded
 queue, `activeCount`), `igdb-health.service.spec.ts`,
 `igdb-health.controller.spec.ts`, and `igdb-health.e2e-spec.ts` (unauthenticated

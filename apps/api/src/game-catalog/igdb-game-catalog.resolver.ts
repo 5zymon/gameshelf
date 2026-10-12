@@ -30,6 +30,10 @@ export { normalizeTitle } from './title-match';
  * scores at least `CONFIDENT_MATCH_MIN_SCORE`, never treating a version/sequel
  * difference (`Halo` vs `Halo 2`) as a match.
  */
+const IGDB_NO_CANDIDATES_REASON = 'No IGDB game matched the title';
+const IGDB_BELOW_THRESHOLD_REASON =
+  'IGDB returned candidates but none matched the title closely enough';
+
 @Injectable()
 export class IgdbGameCatalogResolver
   extends GameCatalogResolver
@@ -122,9 +126,20 @@ export class IgdbGameCatalogResolver
     games: readonly IgdbGame[],
   ): CatalogResolution {
     const match = selectConfidentMatch(title, games);
-    return match === null
-      ? { kind: 'unrecognized', reason: 'No IGDB game matched the title' }
-      : { kind: 'matched', candidate: toCandidate(match.game) };
+    if (match !== null) {
+      return { kind: 'matched', candidate: toCandidate(match.game) };
+    }
+    return {
+      kind: 'unrecognized',
+      // Distinguish "IGDB had no answer" from "IGDB answered but nothing was
+      // close enough": the second case means a real candidate was rejected by
+      // the confidence threshold, so "No IGDB game matched the title" would
+      // wrongly read as "this game does not exist in IGDB".
+      reason:
+        games.length === 0
+          ? IGDB_NO_CANDIDATES_REASON
+          : IGDB_BELOW_THRESHOLD_REASON,
+    };
   }
 }
 

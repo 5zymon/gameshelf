@@ -1,6 +1,8 @@
 # GameShelf CI — ticket 0.6
 #
-# Runs on every push and pull request. Gates:
+# Runs on pull requests only. A branch push does not start a run; CI is
+# (re)triggered by the PR itself, including `synchronize` on each new commit
+# pushed to the PR branch. Gates:
 #   install -> prisma generate -> lint -> typecheck -> build
 #   -> test (unit + e2e) -> prisma migrate deploy -> migration drift check
 #
@@ -9,7 +11,6 @@
 name: CI
 
 on:
-  push:
   pull_request:
 
 permissions:
