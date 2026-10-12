@@ -7,11 +7,14 @@ import {
   GAME_CATALOG_SOURCES,
   type GameCatalogSource,
   GameCatalogResolver,
+  type TiedCatalogCandidate,
 } from './game-catalog.resolver';
 
 interface SourceMiss {
   label: string;
   reason: string;
+  /** Tied candidates carried by this source's miss, if it was a tie. */
+  tiedCandidates?: readonly TiedCatalogCandidate[];
 }
 
 /** Aggregated reason emitted only when every source returned `unrecognized`. */
@@ -21,9 +24,20 @@ export function noCatalogSourceMatchedReason(
   if (misses.length === 0) {
     return 'No game catalog source is configured';
   }
-  return `No game matched the title in any source — ${misses
-    .map((miss) => `${miss.label}: ${miss.reason}`)
-    .join('; ')}`;
+  const tied = misses.flatMap((miss) => miss.tiedCandidates ?? []);
+  if (tied.length === 0) {
+    return `No game matched the title in any source — ${misses
+      .map((miss) => `${miss.label}: ${miss.reason}`)
+      .join('; ')}`;
+  }
+  const names = tied.map((entry) => entry.candidate.title);
+  const others = misses.filter((miss) => !miss.tiedCandidates?.length);
+  return (
+    `Multiple candidates matched equally well (${names.join(', ')}) — choose one` +
+    (others.length > 0
+      ? ` — ${others.map((miss) => `${miss.label}: ${miss.reason}`).join('; ')}`
+      : '')
+  );
 }
 
 /**
@@ -56,11 +70,17 @@ export class ChainedGameCatalogResolver extends GameCatalogResolver {
       if (resolution.kind === 'config_error') {
         return resolution;
       }
-      misses.push({ label: source.label, reason: resolution.reason });
+      misses.push({
+        label: source.label,
+        reason: resolution.reason,
+        tiedCandidates: resolution.tiedCandidates,
+      });
     }
+    const tied = misses.flatMap((miss) => miss.tiedCandidates ?? []);
     return {
       kind: 'unrecognized',
       reason: noCatalogSourceMatchedReason(misses),
+      ...(tied.length > 0 && { tiedCandidates: tied }),
     };
   }
 

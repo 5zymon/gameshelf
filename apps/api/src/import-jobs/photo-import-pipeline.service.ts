@@ -22,6 +22,7 @@ import {
 } from './import-pipeline.options';
 import {
   ImportJobsService,
+  toCandidateRecords,
   type ImportBatchOutcome,
   type JobCompletionResult,
   type PipelineJobState,
@@ -305,6 +306,8 @@ export class PhotoImportPipelineService {
           recognizedItemId: item.id,
           rawTitle: item.rawTitle,
           rawPlatform: item.rawPlatform,
+          rawEdition: item.rawEdition,
+          candidates: toCandidateRecords(resolution.tiedCandidates),
           reason: resolution.reason,
         });
         continue;
@@ -318,6 +321,8 @@ export class PhotoImportPipelineService {
           recognizedItemId: item.id,
           rawTitle: item.rawTitle,
           rawPlatform: item.rawPlatform,
+          rawEdition: item.rawEdition,
+          candidates: null,
           reason: PLATFORM_NOT_IN_CATALOG_REASON,
         });
         continue;

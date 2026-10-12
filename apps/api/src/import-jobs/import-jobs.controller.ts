@@ -18,9 +18,11 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiServiceUnavailableResponse,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
+import { GameDetailModel } from '../games/dto/game-response.model';
 import { DismissImportJobDto } from './dto/dismiss-import-job.dto';
 import { DismissUnrecognizedItemDto } from './dto/dismiss-unrecognized-item.dto';
 import { ImportBatchIdParamDto } from './dto/import-batch-id-param.dto';
@@ -33,13 +35,18 @@ import {
   UnrecognizedItemModel,
 } from './dto/import-job-response.model';
 import { ListImportJobsQueryDto } from './dto/list-import-jobs-query.dto';
+import { PickUnrecognizedCandidateDto } from './dto/pick-unrecognized-candidate.dto';
 import { UnrecognizedItemIdParamDto } from './dto/unrecognized-item-id-param.dto';
 import { ImportJobsService } from './import-jobs.service';
+import { UnrecognizedItemPickService } from './unrecognized-item-pick.service';
 
 @ApiTags('import-jobs')
 @Controller('import-jobs')
 export class ImportJobsController {
-  constructor(private readonly importJobsService: ImportJobsService) {}
+  constructor(
+    private readonly importJobsService: ImportJobsService,
+    private readonly pickService: UnrecognizedItemPickService,
+  ) {}
 
   @Get()
   @ApiOperation({
@@ -178,5 +185,39 @@ export class ImportJobsController {
       params.id,
       params.itemId,
     );
+  }
+
+  @Post(':id/unrecognized/:itemId/pick')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Resolve a flagged item by picking one of its tied catalog candidates',
+    description:
+      'Creates the game (platform via the photo, metadata via the catalog) and ' +
+      'marks the item reviewed, like "Add manually". The picked candidate is ' +
+      're-confirmed against a fresh catalog search before any game is written.',
+  })
+  @ApiParam({ name: 'id', type: Number })
+  @ApiParam({ name: 'itemId', type: Number })
+  @ApiOkResponse({ type: GameDetailModel })
+  @ApiBadRequestResponse({
+    description:
+      "The picked candidate is not one of the item's tied candidates",
+  })
+  @ApiNotFoundResponse({
+    description: 'Import job or unrecognized item not found',
+  })
+  @ApiConflictResponse({
+    description:
+      'Item already reviewed, candidate no longer available, or no usable platform',
+  })
+  @ApiServiceUnavailableResponse({
+    description: 'The catalog source is temporarily unavailable',
+  })
+  pick(
+    @Param() params: UnrecognizedItemIdParamDto,
+    @Body() dto: PickUnrecognizedCandidateDto,
+  ): Promise<GameDetailModel> {
+    return this.pickService.pick(params.id, params.itemId, dto);
   }
 }

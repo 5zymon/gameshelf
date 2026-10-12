@@ -133,6 +133,46 @@ export function rankTitleMatches<T extends { name: string }>(
 }
 
 /**
+ * Outcome of ranking candidates against a query:
+ * - `match` — exactly one confident candidate; `match` is the winner;
+ * - `tie` — several candidates tie on the franchise-prefix score; `tied` lists
+ *   them in IGDB (ranked) order and none is auto-picked;
+ * - `none` — the top score is below the confidence threshold (or no candidates).
+ */
+export type TitleMatchOutcome<T> =
+  | { kind: 'match'; match: TitleMatch<T>; ranked: TitleMatch<T>[] }
+  | { kind: 'tie'; tied: TitleMatch<T>[]; ranked: TitleMatch<T>[] }
+  | { kind: 'none'; ranked: TitleMatch<T>[] };
+
+/**
+ * Ranks the candidates and classifies the outcome. Only a franchise-prefix tie
+ * (two or more candidates at exactly `SUFFIX_MATCH_SCORE`) is a `tie`; ties at
+ * 1.0, or Levenshtein ties at the same score, still pick the first candidate as
+ * `match`.
+ */
+export function classifyTitleMatches<T extends { name: string }>(
+  query: string,
+  candidates: readonly T[],
+): TitleMatchOutcome<T> {
+  const ranked = rankTitleMatches(query, candidates);
+  const [best, runnerUp] = ranked;
+  if (best === undefined || best.score < CONFIDENT_MATCH_MIN_SCORE) {
+    return { kind: 'none', ranked };
+  }
+  if (
+    best.score === SUFFIX_MATCH_SCORE &&
+    runnerUp?.score === SUFFIX_MATCH_SCORE
+  ) {
+    return {
+      kind: 'tie',
+      tied: ranked.filter((match) => match.score === SUFFIX_MATCH_SCORE),
+      ranked,
+    };
+  }
+  return { kind: 'match', match: best, ranked };
+}
+
+/**
  * Best candidate, or null when even the top score is below the threshold, or
  * when several candidates tie on the franchise-prefix score (ambiguous: picking
  * one by IGDB order could import the wrong game).
@@ -141,15 +181,6 @@ export function selectConfidentMatch<T extends { name: string }>(
   query: string,
   candidates: readonly T[],
 ): TitleMatch<T> | null {
-  const [best, runnerUp] = rankTitleMatches(query, candidates);
-  if (best === undefined || best.score < CONFIDENT_MATCH_MIN_SCORE) {
-    return null;
-  }
-  if (
-    best.score === SUFFIX_MATCH_SCORE &&
-    runnerUp?.score === SUFFIX_MATCH_SCORE
-  ) {
-    return null;
-  }
-  return best;
+  const outcome = classifyTitleMatches(query, candidates);
+  return outcome.kind === 'match' ? outcome.match : null;
 }

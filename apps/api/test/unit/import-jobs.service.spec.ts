@@ -67,6 +67,7 @@ function createService(): {
   platforms: { createFromImport: jest.Mock };
   identity: { findExisting: jest.Mock };
   maintenance: { removeIfUnreferenced: jest.Mock };
+  preview: { previewUrl: jest.Mock };
 } {
   const mock: ImportJobsPrismaMock = {
     importJob: {
@@ -131,6 +132,11 @@ function createService(): {
   const maintenance = {
     removeIfUnreferenced: jest.fn(() => Promise.resolve()),
   };
+  const preview = {
+    previewUrl: jest.fn((url: string | null) =>
+      url ? '/api/covers/preview?x' : null,
+    ),
+  };
   return {
     service: new ImportJobsService(
       mock as unknown as PrismaService,
@@ -140,6 +146,7 @@ function createService(): {
       platforms as unknown as PlatformsService,
       identity as never,
       maintenance as never,
+      preview as never,
     ),
     mock,
     queue,
@@ -148,6 +155,7 @@ function createService(): {
     platforms,
     identity,
     maintenance,
+    preview,
   };
 }
 
@@ -184,9 +192,23 @@ const ITEM = {
   importJobId: 1,
   rawTitle: 'PlayStaton 5',
   rawPlatform: 'PS4',
+  rawEdition: null,
+  candidates: null,
   reason: 'no candidate passed acceptance',
   createdAt: new Date('2026-01-01T00:00:00.000Z'),
   dismissedAt: null,
+};
+
+/** The read model for `ITEM`: no `rawEdition`, `candidates` as an empty list. */
+const ITEM_MODEL = {
+  id: 5,
+  importJobId: 1,
+  rawTitle: 'PlayStaton 5',
+  rawPlatform: 'PS4',
+  reason: 'no candidate passed acceptance',
+  createdAt: new Date('2026-01-01T00:00:00.000Z'),
+  dismissedAt: null,
+  candidates: [],
 };
 
 describe('ImportJobsService (unit)', () => {
@@ -308,7 +330,44 @@ describe('ImportJobsService (unit)', () => {
         where: { importJobId: 1, dismissedAt: null },
         orderBy: { id: 'asc' },
       });
-      expect(result).toEqual([ITEM]);
+      expect(result).toEqual([ITEM_MODEL]);
+    });
+
+    it('maps stored tied candidates with a preview coverUrl', async () => {
+      mock.importJob.findUnique.mockResolvedValue({ id: 1 });
+      mock.unrecognizedItem.findMany.mockResolvedValue([
+        {
+          ...ITEM,
+          candidates: [
+            {
+              source: 'IGDB',
+              externalId: 18797,
+              title: 'Rise of Nations: Rise of Legends',
+              slug: 'rise-of-nations-rise-of-legends',
+              coverUrl: 'https://images.igdb.com/cover.jpg',
+              score: 0.95,
+            },
+          ],
+        },
+      ]);
+
+      const result = await service.listUnrecognized(1);
+
+      expect(result).toEqual([
+        {
+          ...ITEM_MODEL,
+          candidates: [
+            {
+              source: 'IGDB',
+              externalId: 18797,
+              title: 'Rise of Nations: Rise of Legends',
+              slug: 'rise-of-nations-rise-of-legends',
+              coverUrl: '/api/covers/preview?x',
+              score: 0.95,
+            },
+          ],
+        },
+      ]);
     });
   });
 
@@ -422,14 +481,12 @@ describe('ImportJobsService (unit)', () => {
       const result = await service.dismissUnrecognizedItem(1, 5);
 
       expect(mock.unrecognizedItem.update).not.toHaveBeenCalled();
-      expect(result).toBe(updated);
+      expect(result).toEqual({ ...ITEM_MODEL, dismissedAt });
     });
 
     it('stamps dismissedAt and returns the updated item', async () => {
-      const updated = {
-        ...ITEM,
-        dismissedAt: new Date('2026-01-02T00:00:00.000Z'),
-      };
+      const dismissedAt = new Date('2026-01-02T00:00:00.000Z');
+      const updated = { ...ITEM, dismissedAt };
       mock.unrecognizedItem.findUnique
         .mockResolvedValueOnce({ id: 5, importJobId: 1, dismissedAt: null })
         .mockResolvedValueOnce(updated);
@@ -441,7 +498,7 @@ describe('ImportJobsService (unit)', () => {
         where: { id: 5 },
         data: { dismissedAt: expect.any(Date) as Date },
       });
-      expect(result).toBe(updated);
+      expect(result).toEqual({ ...ITEM_MODEL, dismissedAt });
     });
 
     it('maps P2025 (deleted mid-flight) to 404', async () => {
@@ -865,7 +922,7 @@ describe('ImportJobsService (unit)', () => {
           reason: null,
         },
       });
-      expect(result).toBe(ITEM);
+      expect(result).toEqual(ITEM_MODEL);
     });
 
     it('persists rawPlatform and reason when provided', async () => {
@@ -1724,6 +1781,8 @@ describe('ImportJobsService (unit)', () => {
             recognizedItemId: 2,
             rawTitle: 'Mystery',
             rawPlatform: 'PS4',
+            rawEdition: null,
+            candidates: null,
             reason: 'no match',
           },
         ],
@@ -1739,7 +1798,58 @@ describe('ImportJobsService (unit)', () => {
           importJobId: 5,
           rawTitle: 'Mystery',
           rawPlatform: 'PS4',
+          rawEdition: null,
           reason: 'no match',
+        },
+      });
+    });
+
+    it('writes rawEdition and tied candidates to the unrecognized row', async () => {
+      mock.unrecognizedItem.create.mockResolvedValue({ id: 9 });
+      mock.recognizedItem.updateMany.mockResolvedValue({ count: 1 });
+
+      await service.commitImportBatch(5, {
+        resolved: [],
+        unrecognized: [
+          {
+            recognizedItemId: 2,
+            rawTitle: 'Rise of Legends',
+            rawPlatform: 'PC',
+            rawEdition: 'Gold',
+            candidates: [
+              {
+                source: 'IGDB',
+                externalId: 18797,
+                title: 'Rise of Nations: Rise of Legends',
+                slug: 'rise-of-nations-rise-of-legends',
+                coverUrl: 'https://images.igdb.com/cover.jpg',
+                score: 0.95,
+              },
+            ],
+            reason:
+              'Multiple IGDB candidates matched equally well — choose one',
+          },
+        ],
+        transient: [],
+      });
+
+      expect(mock.unrecognizedItem.create).toHaveBeenCalledWith({
+        data: {
+          importJobId: 5,
+          rawTitle: 'Rise of Legends',
+          rawPlatform: 'PC',
+          rawEdition: 'Gold',
+          candidates: [
+            {
+              source: 'IGDB',
+              externalId: 18797,
+              title: 'Rise of Nations: Rise of Legends',
+              slug: 'rise-of-nations-rise-of-legends',
+              coverUrl: 'https://images.igdb.com/cover.jpg',
+              score: 0.95,
+            },
+          ],
+          reason: 'Multiple IGDB candidates matched equally well — choose one',
         },
       });
     });
@@ -1756,6 +1866,8 @@ describe('ImportJobsService (unit)', () => {
               recognizedItemId: 2,
               rawTitle: 'Mystery',
               rawPlatform: 'PS4',
+              rawEdition: null,
+              candidates: null,
               reason: 'no match',
             },
           ],

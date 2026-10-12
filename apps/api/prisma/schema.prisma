@@ -238,6 +238,13 @@ model UnrecognizedItem {
   importJobId Int      @map("import_job_id")
   rawTitle    String   @map("raw_title") @db.VarChar(255)
   rawPlatform String?  @map("raw_platform") @db.VarChar(255)
+  // The edition read from the photo (card 105): only lives on RecognizedItem,
+  // so it is stored here for the candidate picker to reuse.
+  rawEdition  String?  @map("raw_edition") @db.VarChar(255)
+  // Tied catalog candidates (card 105): [{source, externalId, title, slug,
+  // coverUrl, score}]; null = no tie. coverUrl is the external URL — internal,
+  // never serialized raw.
+  candidates  Json?
   reason      String?  @db.Text
   dismissedAt DateTime? @map("dismissed_at")
   createdAt   DateTime @default(now()) @map("created_at")

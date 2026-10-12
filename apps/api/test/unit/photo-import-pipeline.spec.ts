@@ -362,6 +362,93 @@ describe('PhotoImportPipelineService (unit)', () => {
     expect(h.state.status).toBe('needs_attention');
   });
 
+  it('carries tied candidates and the read edition to the unrecognized record', async () => {
+    const h = createHarness();
+    h.vision.recognize.mockResolvedValue({
+      items: [
+        {
+          title: 'Rise of Legends',
+          edition: 'Gold',
+          platform: 'PC',
+          confidence: 0.9,
+        },
+      ],
+      countVisible: 1,
+    });
+    h.resolver.resolve.mockResolvedValue({
+      kind: 'unrecognized',
+      reason: 'Multiple IGDB candidates matched equally well — choose one',
+      tiedCandidates: [
+        {
+          candidate: {
+            ...candidate('Rise of Nations: Rise of Legends'),
+            externalId: 18797,
+          },
+          score: 0.95,
+        },
+        {
+          candidate: {
+            ...candidate('Apex 2026: Rise of Legends'),
+            externalId: 401727,
+          },
+          score: 0.95,
+        },
+      ],
+    });
+
+    await h.pipeline.run(makeJob());
+
+    const outcome = (
+      h.jobs.commitImportBatch.mock.calls[0] as [number, ImportBatchOutcome]
+    )[1];
+    expect(outcome.unrecognized[0]).toMatchObject({
+      rawTitle: 'Rise of Legends',
+      rawPlatform: 'PC',
+      rawEdition: 'Gold',
+      candidates: [
+        {
+          source: 'IGDB',
+          externalId: 18797,
+          title: 'Rise of Nations: Rise of Legends',
+          slug: null,
+          coverUrl: null,
+          score: 0.95,
+        },
+        {
+          source: 'IGDB',
+          externalId: 401727,
+          title: 'Apex 2026: Rise of Legends',
+          slug: null,
+          coverUrl: null,
+          score: 0.95,
+        },
+      ],
+    });
+  });
+
+  it('leaves candidates null for a plain unrecognized record', async () => {
+    const h = createHarness();
+    h.vision.recognize.mockResolvedValue({
+      items: [recognized('Mystery')],
+      countVisible: 1,
+    });
+    h.resolver.resolve.mockResolvedValue({
+      kind: 'unrecognized',
+      reason: 'No IGDB game matched the title',
+    });
+
+    await h.pipeline.run(makeJob());
+
+    const outcome = (
+      h.jobs.commitImportBatch.mock.calls[0] as [number, ImportBatchOutcome]
+    )[1];
+    expect(outcome.unrecognized[0]).toMatchObject({
+      rawTitle: 'Mystery',
+      rawEdition: null,
+      candidates: null,
+    });
+  });
+
   it('flags an item whose candidate platform is not in the catalog', async () => {
     const h = createHarness();
     h.vision.recognize.mockResolvedValue({

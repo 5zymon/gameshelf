@@ -148,6 +148,9 @@ export interface EnrichCandidateRef {
   externalId: number;
 }
 
+/** Body for POST /import-jobs/:id/unrecognized/:itemId/pick (card 105). */
+export type PickUnrecognizedCandidateRequest = EnrichCandidateRef;
+
 export interface CreateGameRequest {
   title: string;
   platformId: number;
@@ -243,6 +246,17 @@ export interface ImportJob {
   queueState: string | null;
 }
 
+/** One tied catalog candidate offered for a flagged item (card 105). */
+export interface UnrecognizedItemCandidate {
+  source: CatalogSource;
+  externalId: number;
+  title: string;
+  slug: string | null;
+  /** Same-origin signed preview URL; never an external host. */
+  coverUrl: string | null;
+  score: number;
+}
+
 export interface UnrecognizedItem {
   id: number;
   importJobId: number;
@@ -251,6 +265,8 @@ export interface UnrecognizedItem {
   reason: string | null;
   createdAt: string;
   dismissedAt: string | null;
+  /** Empty unless several candidates matched equally well. */
+  candidates: UnrecognizedItemCandidate[];
 }
 
 export interface ImportJobDetail extends ImportJob {

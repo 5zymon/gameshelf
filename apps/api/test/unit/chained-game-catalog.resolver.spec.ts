@@ -82,6 +82,29 @@ describe('noCatalogSourceMatchedReason (unit)', () => {
       'No game matched the title in any source — IGDB: No IGDB game matched the title; MobyGames: No MobyGames game matched the title',
     );
   });
+
+  it('names tied candidates and appends the other sources when a source tied', () => {
+    const tied = [
+      { candidate: candidate('A'), score: 0.95 },
+      { candidate: candidate('B'), score: 0.95 },
+    ];
+    expect(
+      noCatalogSourceMatchedReason([
+        {
+          label: 'IGDB',
+          reason:
+            'Multiple IGDB candidates matched equally well (A, B) — choose one',
+          tiedCandidates: tied,
+        },
+        {
+          label: 'MobyGames',
+          reason: 'No MobyGames game matched the title',
+        },
+      ]),
+    ).toBe(
+      'Multiple candidates matched equally well (A, B) — choose one — MobyGames: No MobyGames game matched the title',
+    );
+  });
 });
 
 describe('ChainedGameCatalogResolver (unit)', () => {
@@ -152,6 +175,61 @@ describe('ChainedGameCatalogResolver (unit)', () => {
     });
     expect(igdb.resolve).toHaveBeenCalledTimes(1);
     expect(fallback.resolve).toHaveBeenCalledTimes(1);
+  });
+
+  it('carries tiedCandidates through when every source misses', async () => {
+    const tied = [
+      { candidate: candidate('A'), score: 0.95 },
+      { candidate: candidate('B'), score: 0.95 },
+    ];
+    const igdb = source(
+      'IGDB',
+      mockResolving({
+        kind: 'unrecognized',
+        reason:
+          'Multiple IGDB candidates matched equally well (A, B) — choose one',
+        tiedCandidates: tied,
+      }),
+    );
+    const fallback = source(
+      'MobyGames',
+      mockResolving(unrecognized('No MobyGames game matched')),
+    );
+    const resolver = new ChainedGameCatalogResolver([igdb, fallback]);
+
+    const result = await resolver.resolve(item('A or B'));
+
+    expect(result).toEqual({
+      kind: 'unrecognized',
+      reason:
+        'Multiple candidates matched equally well (A, B) — choose one — MobyGames: No MobyGames game matched',
+      tiedCandidates: tied,
+    });
+  });
+
+  it('returns the MobyGames match when it matches after an IGDB tie', async () => {
+    const tied = [{ candidate: candidate('A'), score: 0.95 }];
+    const igdb = source(
+      'IGDB',
+      mockResolving({
+        kind: 'unrecognized',
+        reason:
+          'Multiple IGDB candidates matched equally well (A) — choose one',
+        tiedCandidates: tied,
+      }),
+    );
+    const fallback = source(
+      'MobyGames',
+      mockResolving({ kind: 'matched', candidate: candidate('Obscure Gem') }),
+    );
+    const resolver = new ChainedGameCatalogResolver([igdb, fallback]);
+
+    const result = await resolver.resolve(item('Obscure Gem'));
+
+    expect(result).toEqual({
+      kind: 'matched',
+      candidate: expect.objectContaining({ title: 'Obscure Gem' }) as unknown,
+    });
   });
 
   it('short-circuits on the first transient and does not fall through', async () => {

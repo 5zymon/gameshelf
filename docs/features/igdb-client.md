@@ -277,6 +277,23 @@ version token and is not covered by the guard. IGDB's canonical names use a
 space (`Halo 2`, `FIFA 23`), so this is a deliberate, low-risk accepted
 limitation rather than a bug.
 
+# Structured logging
+
+The client emits three debug-level log events (never including raw OCR text,
+tokens, or secrets):
+
+- `igdb_title_resolution` — one per title resolved by the catalog resolver,
+  carrying the outcome (`matched` / `unrecognized` / `transient`), the score,
+  and the reason.
+- `igdb_search` — one per `POST /v4/games` search, carrying the id, name, and
+  score of each returned candidate.
+- `igdb_multiquery` — one per `POST /v4/multiquery` batch, carrying the id and
+  name of each returned candidate (no score, since phase 1 returns ids only).
+
+These events are emitted at `debug` level and are visible only when the Nest
+logger is configured for debug. They are for diagnostics and never appear in
+production logs at the default `log` level.
+
 # Testing
 
 All suites fake the HTTP seam (`IgdbHttpClient`) and make no external call:

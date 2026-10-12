@@ -280,6 +280,40 @@ describe('IgdbClient (unit)', () => {
     expect(gamesRequest?.body).not.toContain('aggregated_rating');
   });
 
+  it('logs an igdb_search debug line with only id/name per result', async () => {
+    const debug = jest
+      .spyOn(Logger.prototype, 'debug')
+      .mockImplementation(() => undefined);
+    const { client } = clientWith(() =>
+      Promise.resolve(
+        httpResponse(200, [
+          { id: 1, name: 'Halo', summary: 'internal summary' },
+          { id: 2, name: 'Halo 2' },
+        ]),
+      ),
+    );
+
+    await client.searchGames('Halo');
+
+    const line = debug.mock.calls
+      .map((call) => String(call[0]))
+      .find((value) => value.includes('igdb_search'));
+    if (line === undefined) {
+      throw new Error('expected an igdb_search debug line');
+    }
+    expect(JSON.parse(line) as Record<string, unknown>).toEqual({
+      event: 'igdb_search',
+      title: 'Halo',
+      results: [
+        { id: 1, name: 'Halo' },
+        { id: 2, name: 'Halo 2' },
+      ],
+    });
+    expect(line).not.toContain('internal summary');
+    expect(line).not.toContain('client-secret');
+    expect(line).not.toContain('token-1');
+  });
+
   it('caches the OAuth token across calls until it expires', async () => {
     const { client, http } = clientWith(() =>
       Promise.resolve(httpResponse(200, [])),
@@ -816,6 +850,44 @@ describe('IgdbClient.multiqueryGames (unit)', () => {
       [{ id: 2, name: 'Doom' }],
       [],
     ]);
+  });
+
+  it('logs an igdb_multiquery debug line with only id/name per result', async () => {
+    const debug = jest
+      .spyOn(Logger.prototype, 'debug')
+      .mockImplementation(() => undefined);
+    const { client } = clientWith(
+      byUrl({
+        [MULTIQUERY_URL]: () =>
+          Promise.resolve(
+            httpResponse(200, [{ name: 'g0', result: [{ id: 1 }] }]),
+          ),
+        [GAMES_URL]: () =>
+          Promise.resolve(
+            httpResponse(200, [
+              { id: 1, name: 'Halo', summary: 'internal summary' },
+            ]),
+          ),
+      }),
+    );
+
+    await client.multiqueryGames(['Halo']);
+
+    const lines = debug.mock.calls
+      .map((call) => String(call[0]))
+      .filter((value) => value.includes('igdb_multiquery'));
+    expect(lines).toHaveLength(1);
+    const line = lines[0];
+    if (line === undefined) {
+      throw new Error('expected an igdb_multiquery debug line');
+    }
+    expect(JSON.parse(line) as Record<string, unknown>).toEqual({
+      event: 'igdb_multiquery',
+      title: 'Halo',
+      results: [{ id: 1, name: 'Halo' }],
+    });
+    expect(line).not.toContain('internal summary');
+    expect(line).not.toContain('client-secret');
   });
 
   it('ignores an unnamed entry in a mixed named/positional response (M1)', async () => {

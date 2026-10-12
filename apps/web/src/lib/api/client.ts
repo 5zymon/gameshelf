@@ -21,6 +21,7 @@ import type {
   LoginRequest,
   LoginResponse,
   MergePlatformRequest,
+  PickUnrecognizedCandidateRequest,
   Platform,
   PlatformSyncResult,
   PreferencesModel,
@@ -200,6 +201,12 @@ export interface ApiClient {
     dismissUnrecognizedItem(
       id: number,
       itemId: number,
+      options?: ApiRequestOptions,
+    ): Promise<UnrecognizedItem>;
+    pickUnrecognizedCandidate(
+      id: number,
+      itemId: number,
+      body: PickUnrecognizedCandidateRequest,
       options?: ApiRequestOptions,
     ): Promise<UnrecognizedItem>;
   };
@@ -399,6 +406,16 @@ export function createApiClient(transport: Transport): ApiClient {
           jsonInit(
             'PATCH',
             { dismissed: true } satisfies DismissUnrecognizedItemRequest,
+            options,
+          ),
+        ),
+      pickUnrecognizedCandidate: (id, itemId, body, options) =>
+        request<UnrecognizedItem>(
+          transport,
+          `/import-jobs/${String(id)}/unrecognized/${String(itemId)}/pick`,
+          jsonInit(
+            'POST',
+            body satisfies PickUnrecognizedCandidateRequest,
             options,
           ),
         ),

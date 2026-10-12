@@ -144,6 +144,12 @@ Each card shows:
   `rawPlatform`/`reason` when present. An item can be **Dismissed**
   (`PATCH /import-jobs/:id/unrecognized/:itemId { dismissed: true }`, removed
   from the list locally) or opened for **Add manually**;
+- **Choose a match** (only when `item.candidates.length > 0`): a disclosure
+  that lists the tied candidates with their cover, title, and source. Each
+  candidate has a **Pick** button that calls
+  `POST /import-jobs/:id/unrecognized/:itemId/pick` with the candidate's
+  `{ source, externalId }`. On success the item is removed from the list and
+  the created game is reported (same "Added …" status as manual add);
 - **Add manually**: a disclosure that mounts the shared `ManualAddForm` inline,
   prefilled with the item's `rawTitle` and the platform resolved by
   `matchPlatformId` (case-insensitive match on platform name or slug; unknown →

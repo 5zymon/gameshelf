@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Logger } from '@nestjs/common';
 import {
   IgdbGameCatalogResolver,
   normalizeTitle,
@@ -152,6 +153,77 @@ describe('IgdbGameCatalogResolver (unit)', () => {
       kind: 'unrecognized',
       reason: 'No IGDB game matched the title',
     });
+  });
+
+  it('reports a franchise-prefix tie with the tied candidates, never auto-picking', async () => {
+    const search = jest.fn<Promise<IgdbGame[]>, [string]>().mockResolvedValue([
+      game({
+        id: 18797,
+        name: 'Rise of Nations: Rise of Legends',
+        cover: { url: '//images.igdb.com/igdb/image/upload/t_thumb/ron.jpg' },
+      }),
+      game({ id: 401728, name: 'Formula 2026: Rise of Legends' }),
+      game({ id: 401727, name: 'Apex 2026: Rise of Legends' }),
+    ]);
+    const resolver = createResolver(search);
+
+    const result = await resolver.resolve(item('Rise of Legends'));
+
+    expect(result.kind).toBe('unrecognized');
+    if (result.kind !== 'unrecognized') return;
+    expect(result.reason).toBe(
+      'Multiple IGDB candidates matched equally well (Rise of Nations: Rise of Legends, Formula 2026: Rise of Legends, Apex 2026: Rise of Legends) — choose one',
+    );
+    expect(
+      result.tiedCandidates?.map((entry) => entry.candidate.externalId),
+    ).toEqual([18797, 401728, 401727]);
+    expect(result.tiedCandidates?.every((entry) => entry.score === 0.95)).toBe(
+      true,
+    );
+    expect(result.tiedCandidates?.[0]?.candidate.coverUrl).toBe(
+      'https://images.igdb.com/igdb/image/upload/t_1080p/ron.jpg',
+    );
+  });
+
+  it('logs one igdb_title_resolution line carrying only id/name/score per candidate', async () => {
+    const debug = jest
+      .spyOn(Logger.prototype, 'debug')
+      .mockImplementation(() => undefined);
+    try {
+      const search = jest
+        .fn<Promise<IgdbGame[]>, [string]>()
+        .mockResolvedValue([
+          game({
+            id: 18797,
+            name: 'Rise of Nations: Rise of Legends',
+            summary: 'secret summary',
+            cover: { url: 'x' },
+          }),
+          game({ id: 401728, name: 'Formula 2026: Rise of Legends' }),
+        ]);
+      const resolver = createResolver(search);
+
+      await resolver.resolve(item('Rise of Legends'));
+
+      const line = debug.mock.calls
+        .map((call) => String(call[0]))
+        .find((value) => value.includes('igdb_title_resolution'));
+      if (line === undefined) {
+        throw new Error('expected an igdb_title_resolution debug line');
+      }
+      const parsed = JSON.parse(line) as Record<string, unknown>;
+      expect(parsed.event).toBe('igdb_title_resolution');
+      expect(parsed.outcome).toBe('tie');
+      expect(parsed.candidates).toHaveLength(2);
+      for (const entry of parsed.candidates as Record<string, unknown>[]) {
+        expect(Object.keys(entry).sort()).toEqual(['id', 'name', 'score']);
+      }
+      expect(line).not.toContain('secret summary');
+      expect(line).not.toContain('cover');
+      expect(line).not.toContain('raw');
+    } finally {
+      debug.mockRestore();
+    }
   });
 
   it('maps a transient IgdbError to a transient resolution', async () => {

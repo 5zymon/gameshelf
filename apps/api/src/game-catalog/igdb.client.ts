@@ -146,7 +146,15 @@ export class IgdbClient implements OnApplicationBootstrap {
     if (!Array.isArray(body)) {
       throw new IgdbError(false, 'IGDB returned an unexpected response');
     }
-    return body.filter(isIgdbGame);
+    const games = body.filter(isIgdbGame);
+    this.logger.debug(
+      JSON.stringify({
+        event: 'igdb_search',
+        title,
+        results: games.map((game) => ({ id: game.id, name: game.name })),
+      }),
+    );
+    return games;
   }
 
   /**
@@ -204,11 +212,21 @@ export class IgdbClient implements OnApplicationBootstrap {
 
     // Rebuild each title's candidates in the phase-1 id order; an id that
     // hydration did not return is dropped (never substitute a different game).
-    return candidateIds.map((ids) =>
+    const result = candidateIds.map((ids) =>
       ids
         .map((id) => gamesById.get(id))
         .filter((game): game is IgdbGame => game !== undefined),
     );
+    result.forEach((games, index) => {
+      this.logger.debug(
+        JSON.stringify({
+          event: 'igdb_multiquery',
+          title: titles[index],
+          results: games.map((game) => ({ id: game.id, name: game.name })),
+        }),
+      );
+    });
+    return result;
   }
 
   /**
