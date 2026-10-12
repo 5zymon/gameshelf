@@ -299,7 +299,6 @@
     }
   },
   "manualAdd": {
-    "eyebrow": "Add",
     "heading": "Add a game",
     "subheading": "Enter a game by hand. Records added here aren’t linked to a game database.",
     "field": {

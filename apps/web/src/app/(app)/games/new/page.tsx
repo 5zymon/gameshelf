@@ -12,9 +12,6 @@ export default async function NewGamePage(): Promise<React.ReactElement> {
   return (
     <section className="space-y-6">
       <header>
-        <p className="text-xs font-medium tracking-widest text-accent-text uppercase">
-          {t('eyebrow')}
-        </p>
         <h1 className="text-[clamp(27px,4.5vw,34px)] leading-[1.15] font-bold tracking-[-0.02em]">
           {t('heading')}
         </h1>
