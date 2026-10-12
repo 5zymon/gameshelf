@@ -65,6 +65,14 @@ need the root `package.json` and `package-lock.json`) and are pinned to
    devDependency) from the API image, and the operator CLIs run through
    `ts-node`.
 
+The API image gates boot on database readiness. Before starting
+`node dist/main`, its CMD runs a small `wait-for-db` script that retries a real
+authenticated `SELECT 1` against `DATABASE_URL` until it succeeds. This makes
+`docker compose restart` safe: unlike `up`, `restart` does not honour
+`depends_on`, so the API can otherwise start before MySQL is ready — and a
+boot-time DB failure leaves its Prisma connection pool stuck, returning 500s
+until the container is restarted again. The gate removes that window.
+
 `.dockerignore` keeps `.env`, `data/`, `.git`, `node_modules` and build output
 out of the context, so no secret or local state ends up in an image.
 
