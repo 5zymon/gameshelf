@@ -4,7 +4,7 @@ title: Photo Import Upload UI
 description: The authenticated /import screen — a drag-and-drop, browse, or paste multi-photo picker with thumbnails, optional per-photo game counts, client-side validation, in-browser HEIC→JPEG conversion, an LLM-readiness gate, and an upload that navigates to the batch progress view.
 tags: [web, import, ui, heic]
 status: draft
-generated: { by: opencode/home-model, at: 2026-10-10T21:00:25Z }
+generated: { by: opencode/home-model, at: 2026-10-12T13:00:00Z }
 ---
 
 # Overview
@@ -83,8 +83,8 @@ initial bundle).
 The page reads `GET /settings/llm` (server-side) and passes a tri-state
 `LlmReadiness` to the form:
 
-- `enabled` — the picker is active; if the provider has a label, a quiet line
-  names it ("Photos are sent to your configured LLM (…)").
+- `enabled` — the picker is active; a quiet line notes that photos are sent
+  to the configured LLM.
 - `disabled` — `importEnabled` is false (no key). The dropzone is visible but
   `aria-disabled`, the file input is disabled, and a `role="status"` explanation
   links to `/settings` and `/games/new`.

@@ -16,12 +16,7 @@ export default async function ImportPage(): Promise<React.ReactElement> {
   try {
     const settings = await getLlmSettings();
     readiness = settings?.importEnabled
-      ? {
-          state: 'enabled',
-          // The registry only ever contains `custom`, so the single entry is
-          // the active provider's label.
-          providerLabel: settings.availableProviders[0]?.label,
-        }
+      ? { state: 'enabled' }
       : { state: 'disabled' };
   } catch {
     readiness = { state: 'unknown' };

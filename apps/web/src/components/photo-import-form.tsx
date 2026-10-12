@@ -62,9 +62,7 @@ function runHeicTask(task: () => Promise<void>): Promise<void> {
 }
 
 export type LlmReadiness =
-  | { state: 'enabled'; providerLabel?: string }
-  | { state: 'disabled' }
-  | { state: 'unknown' };
+  { state: 'enabled' } | { state: 'disabled' } | { state: 'unknown' };
 
 type PhotoStatus = 'converting' | 'ready' | 'error';
 
@@ -400,12 +398,9 @@ export function PhotoImportForm({
         </div>
       )}
 
-      {readiness.state === 'enabled' &&
-        readiness.providerLabel !== undefined && (
-          <p className="text-sm text-muted">
-            {t('providerNotice', { provider: readiness.providerLabel })}
-          </p>
-        )}
+      {readiness.state === 'enabled' && (
+        <p className="text-sm text-muted">{t('providerNotice')}</p>
+      )}
 
       <label
         onDragOver={onDragOver}
