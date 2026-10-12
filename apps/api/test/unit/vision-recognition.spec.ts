@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { GeminiVisionProvider } from '../../src/settings/vision/gemini-vision.provider';
-import { OpenAiVisionProvider } from '../../src/settings/vision/openai-vision.provider';
+import { CustomVisionProvider } from '../../src/settings/vision/custom-vision.provider';
 import {
   VisionHttpClient,
   type VisionHttpResponse,
@@ -31,10 +30,6 @@ function httpResponse(body: unknown): VisionHttpResponse {
   };
 }
 
-function geminiEnvelope(content: string): unknown {
-  return { candidates: [{ content: { parts: [{ text: content }] } }] };
-}
-
 function openAiEnvelope(content: string): unknown {
   return { choices: [{ message: { content } }] };
 }
@@ -52,6 +47,7 @@ const input: VisionRecognitionInput = {
 const config: VisionProviderConfig = {
   apiKey: 'secret',
   model: 'test-model',
+  baseUrl: 'http://localhost:11434/v1',
 };
 
 function parseFixture(name: string) {
@@ -220,48 +216,24 @@ describe('VISION_INSTRUCTION_PROMPT (unit)', () => {
   });
 });
 
-describe.each([
-  [
-    'Gemini',
-    () =>
-      new GeminiVisionProvider(
-        clientReturning(geminiEnvelope(readFixture('valid.txt'))),
-      ),
-  ],
-  [
-    'OpenAI',
-    () =>
-      new OpenAiVisionProvider(
-        clientReturning(openAiEnvelope(readFixture('valid.txt'))),
-      ),
-  ],
-] as const)('%s recognition integration', (_name, factory) => {
+describe('Custom recognition integration', () => {
   it('resolves items plus the advisory count', async () => {
-    const result = await factory().recognize(input, config);
+    const provider = new CustomVisionProvider(
+      clientReturning(openAiEnvelope(readFixture('valid.txt'))),
+    );
+    const result = await provider.recognize(input, config);
 
     expect(result.items).toHaveLength(2);
     expect(result.countVisible).toBe(2);
   });
 });
 
-describe.each([
-  [
-    'Gemini',
-    () =>
-      new GeminiVisionProvider(
-        clientReturning(geminiEnvelope(readFixture('malformed.txt'))),
-      ),
-  ],
-  [
-    'OpenAI',
-    () =>
-      new OpenAiVisionProvider(
-        clientReturning(openAiEnvelope(readFixture('malformed.txt'))),
-      ),
-  ],
-] as const)('%s malformed output', (_name, factory) => {
+describe('Custom malformed output', () => {
   it('rejects with bad_response', async () => {
-    await expect(factory().recognize(input, config)).rejects.toMatchObject({
+    const provider = new CustomVisionProvider(
+      clientReturning(openAiEnvelope(readFixture('malformed.txt'))),
+    );
+    await expect(provider.recognize(input, config)).rejects.toMatchObject({
       code: 'bad_response',
     });
   });

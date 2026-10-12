@@ -19,10 +19,10 @@ export class LlmTestResultModel {
   @ApiProperty({ enum: [...VISION_TEST_CODES], example: 'ok' })
   code!: VisionTestCode;
 
-  @ApiProperty({ enum: [...SUPPORTED_PROVIDER_IDS], example: 'gemini' })
+  @ApiProperty({ enum: [...SUPPORTED_PROVIDER_IDS], example: 'custom' })
   provider!: VisionProviderId;
 
-  @ApiProperty({ example: 'gemini-3.8-flash' })
+  @ApiProperty({ example: 'llava:7b' })
   model!: string;
 
   @ApiProperty({

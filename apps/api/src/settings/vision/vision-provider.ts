@@ -1,19 +1,17 @@
 import { VisionProviderError } from './vision.errors';
 
 /**
- * The three backends GameShelf ships with. The upload/recognition pipeline
- * never names a concrete provider — it goes through `VisionService` and the
- * `VisionProviderRegistry`, so adding a fourth provider needs one new class,
- * one registry line, and one module provider line only. `custom` reuses the
- * shared OpenAI-compatible builder (`openai-compatible.ts`), so it is one new
- * class plus the same two lines.
+ * The single backend GameShelf ships with: `custom`, any OpenAI-compatible
+ * chat-completions endpoint (base URL + model + key). The pipeline never names
+ * a concrete provider — it goes through `VisionService` and the
+ * `VisionProviderRegistry`, so adding another one is one new class, one
+ * registry line, and one module provider line.
  */
-export const SUPPORTED_PROVIDER_IDS = ['gemini', 'openai', 'custom'] as const;
+export const SUPPORTED_PROVIDER_IDS = ['custom'] as const;
 export type VisionProviderId = (typeof SUPPORTED_PROVIDER_IDS)[number];
 
-/** Default models; a runtime setting or `LLM_MODEL` overrides them. */
-export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
-export const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
+/** The provider used when the stored row names no registered provider. */
+export const DEFAULT_PROVIDER_ID: VisionProviderId = 'custom';
 
 /**
  * Hard ceiling on one provider HTTP call. 120 s (was 30 s) leaves room for a
@@ -22,14 +20,8 @@ export const DEFAULT_OPENAI_MODEL = 'gpt-4o-mini';
  */
 export const VISION_REQUEST_TIMEOUT_MS = 120_000;
 
-/**
- * The env var a provider reads its key from when no encrypted DB key is set.
- * Derived from the provider id (`gemini` -> `GEMINI_API_KEY`), so a new
- * provider needs no extra mapping entry.
- */
-export function providerApiKeyEnvVar(id: VisionProviderId): string {
-  return `${id.toUpperCase()}_API_KEY`;
-}
+/** The env var the API key falls back to when no encrypted DB key is set. */
+export const VISION_API_KEY_ENV_VAR = 'CUSTOM_API_KEY';
 
 export interface RecognizedItem {
   title: string;
@@ -59,7 +51,11 @@ export interface VisionRecognitionInput {
 export interface VisionProviderConfig {
   apiKey: string;
   model: string;
-  /** The `custom` provider's base URL (absolute, trailing-slash-normalized). Only set for `custom`. */
+  /**
+   * The OpenAI-compatible base URL (absolute, trailing-slash-normalized).
+   * Always set by `VisionService`; optional only so the provider can defend
+   * against a missing value.
+   */
   baseUrl?: string;
 }
 
@@ -97,9 +93,7 @@ export const VISION_INSTRUCTION_PROMPT =
 
 /**
  * Canonical strict JSON Schema for the `items` value of the full recognition
- * response. Gemini adapts it to the OpenAPI subset with `nullable` instead of
- * `type: [..., "null"]`; the full object schema (`VISION_RECOGNITION_SCHEMA`)
- * adds the advisory count sibling.
+ * response; `VISION_RECOGNITION_SCHEMA` adds the advisory count sibling.
  */
 export const VISION_RESPONSE_SCHEMA = {
   type: 'array',
@@ -118,8 +112,8 @@ export const VISION_RESPONSE_SCHEMA = {
 
 /**
  * Canonical strict JSON Schema for the full recognition response: the item
- * array plus the advisory `count_visible`. OpenAI uses it directly; Gemini
- * adapts it to the OpenAPI subset in `gemini-vision.provider.ts`.
+ * array plus the advisory `count_visible`. Sent directly as the strict
+ * `json_schema` response format by `recognizeOpenAiCompatible`.
  */
 export const VISION_RECOGNITION_SCHEMA = {
   type: 'object',
@@ -211,8 +205,8 @@ function parsePlatformValue(value: unknown): string | null {
 }
 
 /**
- * Validates the model's decoded JSON into `RecognizedItem[]`. Both providers
- * share this so a malformed payload always surfaces as `bad_response` rather
+ * Validates the model's decoded JSON into `RecognizedItem[]`. Every provider
+ * shares this so a malformed payload always surfaces as `bad_response` rather
  * than a downstream crash.
  */
 export function parseRecognizedItems(raw: unknown): RecognizedItem[] {

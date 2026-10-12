@@ -12,11 +12,12 @@ process.env.REDIS_PORT ??= '6379';
 // e2e tier uses its own keyspace on the same Redis, so no dev server needs to
 // be stopped.
 process.env.REDIS_QUEUE_PREFIX = 'bull-e2e';
-// The upload API refuses (503) without an LLM provider key, and writes to an
-// ephemeral directory — give the e2e tier both so it exercises the happy path.
-// The active default provider is Gemini; its key is what gates uploads.
-process.env.GEMINI_API_KEY ??= 'test-llm-key';
-process.env.OPENAI_API_KEY ??= 'test-llm-key';
+// The upload API refuses (503) unless an API key AND a base URL are available.
+// The key comes from env here; specs that upload seed the base URL with
+// `seedLlmSettings`.
+process.env.CUSTOM_API_KEY ??= 'test-llm-key';
+// Deterministic model resolution: a developer `.env` LLM_MODEL must not leak in.
+process.env.LLM_MODEL = '';
 process.env.LLM_SETTINGS_SECRET ??= 'test-llm-settings-secret-0123456789';
 process.env.IMPORT_PHOTOS_DIR = join(tmpdir(), 'gameshelf-import-photos-e2e');
 // Durable cover cache for the e2e tier (the pipeline writes here; the

@@ -70,7 +70,7 @@ export class ImportUploadService {
   ): Promise<StartImportUploadResponseModel> {
     if (!(await this.settings.isConfigured())) {
       throw new ServiceUnavailableException(
-        'Photo import is unavailable: no LLM provider API key is configured (set it in Settings or GEMINI_API_KEY/OPENAI_API_KEY)',
+        'Photo import is unavailable: game recognition is not configured (set the base URL and API key in Settings)',
       );
     }
     if (files.length === 0) {

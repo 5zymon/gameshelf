@@ -559,20 +559,18 @@ optional MobyGames fallback. You obtain all three sets of credentials yourself.
 
 ### LLM (vision) — required for photo import
 
-The active provider/model/key is set **at runtime** through the settings screen
-(`PUT /settings/llm`; the key is stored encrypted at rest) — no env edit or
-restart. The env vars are the **fallback** used only when no key is stored in the
-DB. Key precedence for the active provider: (1) the encrypted `llm_settings` key
-when its provider matches, (2) the provider's env var, (3) none → recognition
-disabled (uploads refused `503`).
+Recognition calls one OpenAI-compatible endpoint, configured **at runtime** in
+Settings (`PUT /settings/llm`) — no env edit or restart:
 
-- **Provider** — `gemini` (default) or `openai`; set at runtime or via
-  `LLM_PROVIDER` when no DB row exists.
-- **Model** — optional `LLM_MODEL` override; blank = provider default.
-- **Key** — `GEMINI_API_KEY` / `OPENAI_API_KEY` (the active provider's key
-  counts); store at runtime or set the env var as fallback.
+- **Base URL** — required; set in Settings only (no env fallback).
+- **Model** — stored in Settings, or the `LLM_MODEL` env override.
+- **Key** — stored encrypted in Settings, or the `CUSTOM_API_KEY` env fallback.
+  Local servers accept any non-empty value.
 - **Encryption secret** — `LLM_SETTINGS_SECRET` derives the AES-256-GCM key for
   the stored key; falls back to `SESSION_SECRET`.
+
+Recognition is enabled only when a base URL and a key are both available;
+otherwise uploads are refused with `503`.
 
 Verify a key with the live test `POST /settings/llm/test`
 (`ok` / `unauthorized` / `not_configured` / …). See
@@ -637,10 +635,8 @@ All variables live in a single root `.env` file (see `.env.example`):
 | `REDIS_URL`                     | `apps/api` | Redis connection string (present for convenience; **not read** by the app — the queue uses `REDIS_HOST`/`REDIS_PORT`)                                                              |
 | `SESSION_SECRET`                | `apps/api` | HMAC-SHA256 key for session tokens (≥32 chars)                                                                                                                                     |
 | `SESSION_TTL_MINUTES`           | `apps/api` | Sliding session lifetime in minutes (default `10080`; no "never")                                                                                                                  |
-| `GEMINI_API_KEY`                | `apps/api` | Gemini API key (fallback when no encrypted DB key is stored)                                                                                                                       |
-| `OPENAI_API_KEY`                | `apps/api` | OpenAI API key (fallback when no encrypted DB key is stored)                                                                                                                       |
-| `LLM_PROVIDER`                  | `apps/api` | Active provider when no DB row exists: `gemini`/`openai` (default `gemini`)                                                                                                        |
-| `LLM_MODEL`                     | `apps/api` | Model override for the active provider (blank = provider default)                                                                                                                  |
+| `CUSTOM_API_KEY`                | `apps/api` | API key for the OpenAI-compatible vision endpoint (fallback when no encrypted DB key is stored)                                                                                    |
+| `LLM_MODEL`                     | `apps/api` | Vision model override when none is stored                                                                                                                                          |
 | `LLM_SETTINGS_SECRET`           | `apps/api` | Key-derivation secret for the stored API key's AES-256-GCM key (falls back to `SESSION_SECRET`)                                                                                    |
 | `ANTHROPIC_API_KEY`             | `apps/api` | Reserved for a future provider; **not read** by the current code                                                                                                                   |
 | `IMPORT_PHOTOS_DIR`             | `apps/api` | Ephemeral upload directory (default `<OS temp>/gameshelf-import-photos`); the pipeline deletes a photo after its job completes and a sweep removes leftovers (see Photo Lifecycle) |

@@ -43,7 +43,7 @@ export class VisionService {
     return provider.recognize(input, {
       apiKey: active.apiKey,
       model: active.model,
-      ...(active.baseUrl !== undefined && { baseUrl: active.baseUrl }),
+      baseUrl: active.baseUrl,
     });
   }
 
@@ -60,7 +60,7 @@ export class VisionService {
         code: 'not_configured',
         provider: settings.provider,
         model: settings.model,
-        message: 'No LLM provider API key is configured',
+        message: 'No LLM base URL or API key is configured',
       };
     }
     const provider = this.registry.get(active.provider);
@@ -70,7 +70,7 @@ export class VisionService {
         {
           apiKey: active.apiKey,
           model: active.model,
-          ...(active.baseUrl !== undefined && { baseUrl: active.baseUrl }),
+          baseUrl: active.baseUrl,
         },
       );
       return {

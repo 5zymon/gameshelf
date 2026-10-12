@@ -6,13 +6,13 @@ import {
 
 /** One selectable backend, so the settings UI can list providers + defaults. */
 export class LlmProviderSummaryModel {
-  @ApiProperty({ enum: [...SUPPORTED_PROVIDER_IDS], example: 'gemini' })
+  @ApiProperty({ enum: [...SUPPORTED_PROVIDER_IDS], example: 'custom' })
   id!: VisionProviderId;
 
-  @ApiProperty({ example: 'Google Gemini' })
+  @ApiProperty({ example: 'Custom (OpenAI-compatible)' })
   label!: string;
 
-  @ApiProperty({ example: 'gemini-3.8-flash' })
+  @ApiProperty({ example: '' })
   defaultModel!: string;
 }
 
@@ -21,17 +21,17 @@ export class LlmProviderSummaryModel {
  * ciphertext) — only whether one is present.
  */
 export class LlmSettingsModel {
-  @ApiProperty({ enum: [...SUPPORTED_PROVIDER_IDS], example: 'gemini' })
+  @ApiProperty({ enum: [...SUPPORTED_PROVIDER_IDS], example: 'custom' })
   provider!: VisionProviderId;
 
-  @ApiProperty({ example: 'gemini-3.8-flash' })
+  @ApiProperty({ example: 'llava:7b' })
   model!: string;
 
   @ApiProperty({
     nullable: true,
     example: 'http://localhost:11434/v1',
     description:
-      "The custom provider's base URL. Null for the built-in providers. " +
+      "The OpenAI-compatible endpoint's base URL; null until one is saved. " +
       'Not a secret — shown in the UI.',
   })
   baseUrl!: string | null;
@@ -44,7 +44,9 @@ export class LlmSettingsModel {
 
   @ApiProperty({
     example: true,
-    description: 'Alias of keyPresent: recognition/upload can run',
+    description:
+      'True when both an API key and a base URL are available: ' +
+      'recognition/upload can run.',
   })
   importEnabled!: boolean;
 

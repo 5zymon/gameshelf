@@ -8,15 +8,15 @@ import { LlmSettingsService } from '../../src/settings/llm-settings.service';
 import { VisionProviderRegistry } from '../../src/settings/vision/vision-provider.registry';
 
 const PROVIDERS = [
-  { id: 'gemini', label: 'Google Gemini', defaultModel: 'gemini-3.8-flash' },
-  { id: 'openai', label: 'OpenAI', defaultModel: 'gpt-4o-mini' },
   { id: 'custom', label: 'Custom (OpenAI-compatible)', defaultModel: '' },
 ] as const;
+
+const URL = 'http://localhost:11434/v1';
 
 function row(overrides: Partial<LlmSetting> = {}): LlmSetting {
   return {
     id: 1,
-    provider: 'gemini',
+    provider: 'custom',
     model: null,
     baseUrl: null,
     apiKeyCiphertext: null,
@@ -77,51 +77,64 @@ function saveArgs(mocks: Mocks): Record<string, unknown> {
 }
 
 describe('LlmSettingsService (unit)', () => {
-  it('getPublic falls back to the provider env key and default model', async () => {
-    const { service } = createService({ GEMINI_API_KEY: 'env-gemini' });
+  it('getPublic falls back to the env key with no base URL', async () => {
+    const { service } = createService({ CUSTOM_API_KEY: 'env-custom' });
 
     await expect(service.getPublic()).resolves.toEqual({
-      provider: 'gemini',
-      model: 'gemini-3.8-flash',
+      provider: 'custom',
+      model: '',
       baseUrl: null,
       keyPresent: true,
-      importEnabled: true,
+      importEnabled: false,
       availableProviders: [
-        {
-          id: 'gemini',
-          label: 'Google Gemini',
-          defaultModel: 'gemini-3.8-flash',
-        },
-        { id: 'openai', label: 'OpenAI', defaultModel: 'gpt-4o-mini' },
         { id: 'custom', label: 'Custom (OpenAI-compatible)', defaultModel: '' },
       ],
       updatedAt: null,
     });
   });
 
-  it('getPublic returns the stored base URL for the custom provider', async () => {
+  it('getPublic returns the stored base URL and enabled import for a configured custom row', async () => {
     const { service, mocks } = createService();
     mocks.findUnique.mockResolvedValue(
-      row({ provider: 'custom', baseUrl: 'http://localhost:11434/v1' }),
+      row({
+        provider: 'custom',
+        baseUrl: URL,
+        apiKeyCiphertext: 'v1:enc:db-key',
+      }),
     );
 
     await expect(service.getPublic()).resolves.toMatchObject({
       provider: 'custom',
-      baseUrl: 'http://localhost:11434/v1',
+      baseUrl: URL,
+      keyPresent: true,
+      importEnabled: true,
     });
   });
 
-  it('getPublic returns a null base URL for the built-in providers', async () => {
-    const { service, mocks } = createService();
-    mocks.findUnique.mockResolvedValue(
-      row({ provider: 'openai', baseUrl: 'http://localhost:11434/v1' }),
-    );
+  it.each(['gemini', 'openai', 'anthropic'])(
+    'getPublic resolves a legacy %s row to custom, unused, not configured',
+    async (id) => {
+      const { service, mocks } = createService();
+      mocks.findUnique.mockResolvedValue(
+        row({
+          provider: id,
+          model: 'old-model',
+          baseUrl: null,
+          apiKeyCiphertext: 'v1:enc:old-key',
+        }),
+      );
 
-    await expect(service.getPublic()).resolves.toMatchObject({
-      provider: 'openai',
-      baseUrl: null,
-    });
-  });
+      await expect(service.getPublic()).resolves.toMatchObject({
+        provider: 'custom',
+        model: '',
+        baseUrl: null,
+        keyPresent: false,
+        importEnabled: false,
+      });
+      await expect(service.resolveActive()).resolves.toBeNull();
+      expect(mocks.decrypt).not.toHaveBeenCalled();
+    },
+  );
 
   it('getPublic reports no key and import disabled when nothing is set', async () => {
     const { service } = createService();
@@ -133,103 +146,105 @@ describe('LlmSettingsService (unit)', () => {
     });
   });
 
-  it('honours LLM_PROVIDER and LLM_MODEL env overrides', async () => {
+  it('ignores LLM_PROVIDER and honours LLM_MODEL + CUSTOM_API_KEY', async () => {
     const { service } = createService({
       LLM_PROVIDER: 'openai',
-      LLM_MODEL: 'gpt-custom',
-      OPENAI_API_KEY: 'env-openai',
+      LLM_MODEL: 'llava:13b',
+      CUSTOM_API_KEY: 'env-custom',
     });
 
     await expect(service.getPublic()).resolves.toMatchObject({
-      provider: 'openai',
-      model: 'gpt-custom',
+      provider: 'custom',
+      model: 'llava:13b',
       keyPresent: true,
     });
   });
 
-  it('prefers the stored row provider/model over env', async () => {
-    const { service, mocks } = createService({
-      LLM_PROVIDER: 'gemini',
-      LLM_MODEL: 'env-model',
-      GEMINI_API_KEY: 'env-gemini',
-    });
+  it('prefers the stored row model over LLM_MODEL', async () => {
+    const { service, mocks } = createService({ LLM_MODEL: 'env-model' });
     mocks.findUnique.mockResolvedValue(
-      row({ provider: 'openai', model: 'stored-model' }),
+      row({ provider: 'custom', model: 'stored-model' }),
     );
 
     await expect(service.getPublic()).resolves.toMatchObject({
-      provider: 'openai',
+      provider: 'custom',
       model: 'stored-model',
     });
   });
 
   it('decrypts the stored key and prefers it over the env key', async () => {
-    const { service, mocks } = createService({ GEMINI_API_KEY: 'env-gemini' });
+    const { service, mocks } = createService({ CUSTOM_API_KEY: 'env-custom' });
     mocks.findUnique.mockResolvedValue(
-      row({ provider: 'gemini', apiKeyCiphertext: 'v1:enc:db-key' }),
+      row({
+        provider: 'custom',
+        baseUrl: URL,
+        apiKeyCiphertext: 'v1:enc:db-key',
+      }),
     );
 
     await expect(service.resolveActive()).resolves.toEqual({
-      provider: 'gemini',
-      model: 'gemini-3.8-flash',
+      provider: 'custom',
+      model: '',
       apiKey: 'db-key',
+      baseUrl: URL,
     });
     expect(mocks.decrypt).toHaveBeenCalledWith('v1:enc:db-key');
   });
 
-  it('ignores a stored key when the row provider is unknown', async () => {
-    const { service, mocks } = createService({ GEMINI_API_KEY: 'env-gemini' });
-    mocks.findUnique.mockResolvedValue(
-      row({ provider: 'anthropic', apiKeyCiphertext: 'v1:enc:db-key' }),
-    );
-
-    await expect(service.resolveActive()).resolves.toMatchObject({
-      provider: 'gemini',
-      apiKey: 'env-gemini',
-    });
-    expect(mocks.decrypt).not.toHaveBeenCalled();
-  });
-
   it('treats a decrypt failure as absent and falls back to env', async () => {
-    const { service, mocks } = createService({ GEMINI_API_KEY: 'env-gemini' });
+    const { service, mocks } = createService({ CUSTOM_API_KEY: 'env-custom' });
     mocks.findUnique.mockResolvedValue(
-      row({ provider: 'gemini', apiKeyCiphertext: 'v1:broken' }),
+      row({ provider: 'custom', baseUrl: URL, apiKeyCiphertext: 'v1:broken' }),
     );
     mocks.decrypt.mockImplementation(() => {
       throw new Error('auth tag mismatch');
     });
 
     await expect(service.resolveActive()).resolves.toMatchObject({
-      apiKey: 'env-gemini',
+      apiKey: 'env-custom',
     });
   });
 
-  it('resolveActive is null and isConfigured false with no key', async () => {
-    const { service } = createService();
+  it('resolveActive is null and isConfigured false with an env key but no base URL', async () => {
+    const { service } = createService({ CUSTOM_API_KEY: 'env-custom' });
 
     await expect(service.resolveActive()).resolves.toBeNull();
     await expect(service.isConfigured()).resolves.toBe(false);
   });
 
-  it('isConfigured is true when the active provider has an env key', async () => {
-    const { service } = createService({ GEMINI_API_KEY: 'env-gemini' });
+  it('resolveActive is null for a custom row with a base URL but no key', async () => {
+    const { service, mocks } = createService();
+    mocks.findUnique.mockResolvedValue(
+      row({ provider: 'custom', baseUrl: URL }),
+    );
+
+    await expect(service.resolveActive()).resolves.toBeNull();
+  });
+
+  it('isConfigured is true with an env key and a custom row base URL', async () => {
+    const { service, mocks } = createService({ CUSTOM_API_KEY: 'env-custom' });
+    mocks.findUnique.mockResolvedValue(
+      row({ provider: 'custom', baseUrl: URL }),
+    );
 
     await expect(service.isConfigured()).resolves.toBe(true);
   });
 
   it('save encrypts the key and upserts the singleton row', async () => {
     const { service, mocks } = createService();
-    mocks.findUnique.mockResolvedValue(
+    mocks.findUnique.mockResolvedValueOnce(null).mockResolvedValueOnce(
       row({
-        provider: 'openai',
-        model: 'gpt-x',
+        provider: 'custom',
+        model: 'llava:7b',
+        baseUrl: URL,
         apiKeyCiphertext: 'v1:enc:new-key',
       }),
     );
 
     const result = await service.save({
-      provider: 'openai',
-      model: 'gpt-x',
+      provider: 'custom',
+      baseUrl: `${URL}/`,
+      model: 'llava:7b',
       apiKey: 'new-key',
     });
 
@@ -238,44 +253,36 @@ describe('LlmSettingsService (unit)', () => {
       where: { id: 1 },
       create: {
         id: 1,
-        provider: 'openai',
-        model: 'gpt-x',
-        baseUrl: null,
+        provider: 'custom',
+        model: 'llava:7b',
+        baseUrl: URL,
         apiKeyCiphertext: 'v1:enc:new-key',
       },
       update: {
-        provider: 'openai',
-        model: 'gpt-x',
-        baseUrl: null,
+        provider: 'custom',
+        model: 'llava:7b',
+        baseUrl: URL,
         apiKeyCiphertext: 'v1:enc:new-key',
       },
     });
-    expect(result).toMatchObject({ provider: 'openai', keyPresent: true });
+    expect(result).toMatchObject({ provider: 'custom', keyPresent: true });
     expect(JSON.stringify(result)).not.toContain('new-key');
   });
 
-  it('save omits apiKey from the update to keep the stored key', async () => {
+  it('save keeps the stored base URL and key when both are omitted', async () => {
     const { service, mocks } = createService();
-    mocks.findUnique.mockResolvedValue(row({ provider: 'gemini' }));
+    mocks.findUnique.mockResolvedValue(
+      row({ provider: 'custom', baseUrl: URL }),
+    );
 
-    await service.save({ provider: 'gemini' });
+    await service.save({ provider: 'custom' });
 
-    expect(mocks.upsert).toHaveBeenCalledWith({
-      where: { id: 1 },
-      create: {
-        id: 1,
-        provider: 'gemini',
-        model: null,
-        baseUrl: null,
-        apiKeyCiphertext: null,
-      },
-      update: { provider: 'gemini', baseUrl: null },
-    });
+    expect(saveArgs(mocks).update).toEqual({ provider: 'custom' });
     expect(mocks.encrypt).not.toHaveBeenCalled();
   });
 
-  it('save clears the previous provider key/model when the provider changes', async () => {
-    const { service, mocks } = createService({ OPENAI_API_KEY: 'env-openai' });
+  it('save resets the legacy row key and model when switching to custom', async () => {
+    const { service, mocks } = createService();
     mocks.findUnique
       .mockResolvedValueOnce(
         row({
@@ -285,27 +292,27 @@ describe('LlmSettingsService (unit)', () => {
         }),
       )
       .mockResolvedValueOnce(
-        row({ provider: 'openai', model: null, apiKeyCiphertext: null }),
+        row({
+          provider: 'custom',
+          model: null,
+          baseUrl: URL,
+          apiKeyCiphertext: null,
+        }),
       );
 
-    const result = await service.save({ provider: 'openai' });
+    await service.save({ provider: 'custom', baseUrl: URL });
 
     expect(saveArgs(mocks).update).toEqual({
-      provider: 'openai',
+      provider: 'custom',
       model: null,
-      baseUrl: null,
+      baseUrl: URL,
       apiKeyCiphertext: null,
     });
     // The previous provider's key must never be decrypted or reused.
     expect(mocks.decrypt).not.toHaveBeenCalled();
-    expect(result).toMatchObject({
-      provider: 'openai',
-      model: 'gpt-4o-mini',
-      keyPresent: true,
-    });
   });
 
-  it('save keeps an explicit key/model when the provider changes', async () => {
+  it('save keeps explicit values when switching from a legacy row', async () => {
     const { service, mocks } = createService();
     mocks.findUnique
       .mockResolvedValueOnce(
@@ -313,35 +320,39 @@ describe('LlmSettingsService (unit)', () => {
       )
       .mockResolvedValueOnce(
         row({
-          provider: 'openai',
-          model: 'gpt-new',
+          provider: 'custom',
+          model: 'llava:7b',
+          baseUrl: URL,
           apiKeyCiphertext: 'v1:enc:new-key',
         }),
       );
 
     await service.save({
-      provider: 'openai',
-      model: 'gpt-new',
+      provider: 'custom',
+      baseUrl: URL,
+      model: 'llava:7b',
       apiKey: 'new-key',
     });
 
     expect(mocks.encrypt).toHaveBeenCalledWith('new-key');
     expect(saveArgs(mocks).update).toEqual({
-      provider: 'openai',
-      model: 'gpt-new',
-      baseUrl: null,
+      provider: 'custom',
+      model: 'llava:7b',
+      baseUrl: URL,
       apiKeyCiphertext: 'v1:enc:new-key',
     });
   });
 
   it('save with an empty apiKey clears the stored key', async () => {
     const { service, mocks } = createService();
+    mocks.findUnique.mockResolvedValue(
+      row({ provider: 'custom', baseUrl: URL }),
+    );
 
-    await service.save({ provider: 'gemini', apiKey: '' });
+    await service.save({ provider: 'custom', apiKey: '' });
 
     expect(saveArgs(mocks).update).toEqual({
-      provider: 'gemini',
-      baseUrl: null,
+      provider: 'custom',
       apiKeyCiphertext: null,
     });
     expect(mocks.encrypt).not.toHaveBeenCalled();
@@ -349,23 +360,28 @@ describe('LlmSettingsService (unit)', () => {
 
   it('save with an empty model clears the override', async () => {
     const { service, mocks } = createService();
+    mocks.findUnique.mockResolvedValue(
+      row({ provider: 'custom', baseUrl: URL, model: 'stored-model' }),
+    );
 
-    await service.save({ provider: 'gemini', model: '' });
+    await service.save({ provider: 'custom', model: '' });
 
     expect(saveArgs(mocks).update).toEqual({
-      provider: 'gemini',
+      provider: 'custom',
       model: null,
-      baseUrl: null,
     });
   });
 
-  it('save rejects an unknown provider', async () => {
-    const { service } = createService();
+  it.each(['bogus', 'gemini', 'openai'])(
+    'save rejects the removed/unknown provider %s',
+    async (id) => {
+      const { service } = createService();
 
-    await expect(
-      service.save({ provider: 'bogus' } as unknown as PutLlmSettingsDto),
-    ).rejects.toBeInstanceOf(BadRequestException);
-  });
+      await expect(
+        service.save({ provider: id } as unknown as PutLlmSettingsDto),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    },
+  );
 
   it('save normalizes the custom base URL (trailing slash stripped)', async () => {
     const { service, mocks } = createService();
@@ -403,6 +419,15 @@ describe('LlmSettingsService (unit)', () => {
     expect(mocks.upsert).not.toHaveBeenCalled();
   });
 
+  it('save rejects custom without a base URL when no row exists', async () => {
+    const { service, mocks } = createService();
+
+    await expect(service.save({ provider: 'custom' })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(mocks.upsert).not.toHaveBeenCalled();
+  });
+
   it('save rejects an empty custom base URL', async () => {
     const { service, mocks } = createService();
 
@@ -430,35 +455,12 @@ describe('LlmSettingsService (unit)', () => {
     expect(mocks.upsert).not.toHaveBeenCalled();
   });
 
-  it('save rejects a base URL for the built-in providers', async () => {
-    const { service, mocks } = createService();
-
-    await expect(
-      service.save({ provider: 'openai', baseUrl: 'http://x/v1' }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    await expect(
-      service.save({ provider: 'gemini', baseUrl: 'http://x/v1' }),
-    ).rejects.toBeInstanceOf(BadRequestException);
-    expect(mocks.upsert).not.toHaveBeenCalled();
-  });
-
-  it('save keeps the stored base URL when custom omits it', async () => {
-    const { service, mocks } = createService();
-    mocks.findUnique.mockResolvedValue(
-      row({ provider: 'custom', baseUrl: 'http://localhost:11434/v1' }),
-    );
-
-    await service.save({ provider: 'custom' });
-
-    expect(saveArgs(mocks).update).toEqual({ provider: 'custom' });
-  });
-
-  it('resolveActive includes the base URL for custom only', async () => {
+  it('resolveActive includes the base URL for the custom provider', async () => {
     const { service, mocks } = createService();
     mocks.findUnique.mockResolvedValue(
       row({
         provider: 'custom',
-        baseUrl: 'http://localhost:11434/v1',
+        baseUrl: URL,
         apiKeyCiphertext: 'v1:enc:custom-key',
       }),
     );
@@ -467,21 +469,7 @@ describe('LlmSettingsService (unit)', () => {
       provider: 'custom',
       model: '',
       apiKey: 'custom-key',
-      baseUrl: 'http://localhost:11434/v1',
-    });
-
-    mocks.findUnique.mockResolvedValue(
-      row({
-        provider: 'openai',
-        baseUrl: 'http://localhost:11434/v1',
-        apiKeyCiphertext: 'v1:enc:openai-key',
-      }),
-    );
-
-    await expect(service.resolveActive()).resolves.toEqual({
-      provider: 'openai',
-      model: 'gpt-4o-mini',
-      apiKey: 'openai-key',
+      baseUrl: URL,
     });
   });
 });
