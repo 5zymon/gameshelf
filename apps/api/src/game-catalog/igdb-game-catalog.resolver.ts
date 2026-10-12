@@ -122,9 +122,20 @@ export class IgdbGameCatalogResolver
     games: readonly IgdbGame[],
   ): CatalogResolution {
     const match = selectConfidentMatch(title, games);
-    return match === null
-      ? { kind: 'unrecognized', reason: 'No IGDB game matched the title' }
-      : { kind: 'matched', candidate: toCandidate(match.game) };
+    if (match !== null) {
+      return { kind: 'matched', candidate: toCandidate(match.game) };
+    }
+    return {
+      kind: 'unrecognized',
+      // Distinguish "IGDB had no answer" from "IGDB answered but nothing was
+      // close enough": the second case means a real candidate was rejected by
+      // the confidence threshold, so "No IGDB game matched the title" would
+      // wrongly read as "this game does not exist in IGDB".
+      reason:
+        games.length === 0
+          ? 'No IGDB game matched the title'
+          : 'IGDB returned candidates but none matched the title closely enough',
+    };
   }
 }
 

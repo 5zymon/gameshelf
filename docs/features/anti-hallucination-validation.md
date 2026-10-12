@@ -59,6 +59,12 @@ preserves each source's label and reason for diagnostics, for example:
 No game matched the title in any source — IGDB: No IGDB game matched the title; MobyGames: No MobyGames game matched the title
 ```
 
+Each source's reason is preserved verbatim; IGDB distinguishes "no candidates
+at all" (`No IGDB game matched the title`) from "candidates returned but none
+cleared the confidence threshold" (`IGDB returned candidates but none matched
+the title closely enough`), so a rejected-but-real candidate is never traced as
+if the game were absent from the database.
+
 With no source configured the reason is `No game catalog source is configured`.
 
 # Unrecognized trace

@@ -1,6 +1,14 @@
 /** A candidate is accepted at or above this similarity. */
 export const CONFIDENT_MATCH_MIN_SCORE = 0.8;
 
+/**
+ * Score for a whole-token suffix match: the query is the candidate's tail
+ * behind a franchise/edition prefix (`Dawn of War III` in
+ * `Warhammer 40,000: Dawn of War III`). Above `CONFIDENT_MATCH_MIN_SCORE`,
+ * below an exact equality, so an exact name still ranks first.
+ */
+export const SUFFIX_MATCH_SCORE = 0.95;
+
 /** Lowercases, strips diacritics/punctuation, and collapses whitespace. */
 export function normalizeTitle(value: string): string {
   return value
@@ -64,6 +72,25 @@ function differsOnlyByVersionToken(a: string, b: string): boolean {
   return strip(a) === strip(b);
 }
 
+/**
+ * Minimum query tokens for the suffix rule. Two tokens keep a single generic
+ * word (`War`) from latching onto the tail of an unrelated title
+ * (`Warhammer 40,000: Dawn of War`).
+ */
+const SUFFIX_MATCH_MIN_TOKENS = 2;
+
+/**
+ * True when `query` is the candidate's tail on whole-token boundaries, i.e. the
+ * candidate is the query behind a franchise/edition prefix. The version-token
+ * guard runs before this, so `Halo` still never matches `Halo 2` this way.
+ */
+function isSuffixMatch(query: string, candidate: string): boolean {
+  return (
+    query.split(' ').length >= SUFFIX_MATCH_MIN_TOKENS &&
+    candidate.endsWith(` ${query}`)
+  );
+}
+
 /** Similarity in [0,1]; 1 = normalized equality, 0 = blank or version-divergent. */
 export function titleSimilarity(query: string, candidate: string): number {
   return similarity(normalizeTitle(query), normalizeTitle(candidate));
@@ -74,6 +101,7 @@ function similarity(a: string, b: string): number {
   if (a === '' || b === '') return 0;
   if (a === b) return 1;
   if (differsOnlyByVersionToken(a, b)) return 0;
+  if (isSuffixMatch(a, b)) return SUFFIX_MATCH_SCORE;
   const maxLen = Math.max(a.length, b.length);
   const edit = 1 - levenshtein(a, b) / maxLen;
   if (a.includes(b) || b.includes(a)) {

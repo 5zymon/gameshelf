@@ -3,6 +3,7 @@ import {
   normalizeTitle,
   rankTitleMatches,
   selectConfidentMatch,
+  SUFFIX_MATCH_SCORE,
   titleSimilarity,
 } from '../../src/game-catalog/title-match';
 
@@ -122,6 +123,54 @@ describe('cross-system version tokens (m4, unit)', () => {
 
   it('never resolves a cross-system numeral as a confident match', () => {
     expect(selectConfidentMatch('GTA 5', [{ name: 'GTA V' }])).toBeNull();
+  });
+});
+
+describe('franchise-prefix suffix matching (unit)', () => {
+  it('accepts the query as a whole-token suffix of the candidate', () => {
+    expect(score('Dawn of War III', 'Warhammer 40,000: Dawn of War III')).toBe(
+      SUFFIX_MATCH_SCORE,
+    );
+    expect(score('Dawn of War II', 'Warhammer 40,000: Dawn of War II')).toBe(
+      SUFFIX_MATCH_SCORE,
+    );
+    expect(
+      titleSimilarity(
+        'Chaos Rising',
+        'Warhammer 40,000: Dawn of War II - Chaos Rising',
+      ),
+    ).toBeGreaterThanOrEqual(CONFIDENT_MATCH_MIN_SCORE);
+  });
+
+  it('selects a franchise-prefixed candidate as a confident match', () => {
+    const match = selectConfidentMatch('Dawn of War III', [
+      { name: 'Warhammer 40,000: Dawn of War III - Limited Edition' },
+      { name: 'Warhammer 40,000: Dawn of War III' },
+    ]);
+
+    expect(match?.game.name).toBe('Warhammer 40,000: Dawn of War III');
+  });
+
+  it('does not match when the candidate has extra trailing tokens', () => {
+    expect(
+      titleSimilarity(
+        'Dawn of War II',
+        'Warhammer 40,000: Dawn of War II - Chaos Rising',
+      ),
+    ).toBeLessThan(CONFIDENT_MATCH_MIN_SCORE);
+  });
+
+  it('does not match a single-token query to a longer tail', () => {
+    expect(
+      titleSimilarity('War', 'Warhammer 40,000: Dawn of War'),
+    ).toBeLessThan(CONFIDENT_MATCH_MIN_SCORE);
+  });
+
+  it('still guards a sequel that differs only by a version token', () => {
+    expect(titleSimilarity('Dawn of War II', 'Dawn of War III')).toBe(0);
+    expect(
+      selectConfidentMatch('Dawn of War II', [{ name: 'Dawn of War III' }]),
+    ).toBeNull();
   });
 });
 

@@ -92,7 +92,27 @@ describe('IgdbGameCatalogResolver (unit)', () => {
 
     expect(result).toEqual({
       kind: 'unrecognized',
-      reason: 'No IGDB game matched the title',
+      reason:
+        'IGDB returned candidates but none matched the title closely enough',
+    });
+  });
+
+  it('matches a franchise-prefixed candidate via a whole-token suffix', async () => {
+    const search = jest
+      .fn<Promise<IgdbGame[]>, [string]>()
+      .mockResolvedValue([
+        game({ id: 18980, name: 'Warhammer 40,000: Dawn of War III' }),
+      ]);
+    const resolver = createResolver(search);
+
+    const result = await resolver.resolve(item('Dawn of War III'));
+
+    expect(result).toEqual({
+      kind: 'matched',
+      candidate: expect.objectContaining({
+        externalId: 18980,
+        title: 'Warhammer 40,000: Dawn of War III',
+      }) as unknown,
     });
   });
 
@@ -117,7 +137,8 @@ describe('IgdbGameCatalogResolver (unit)', () => {
 
     expect(result).toEqual({
       kind: 'unrecognized',
-      reason: 'No IGDB game matched the title',
+      reason:
+        'IGDB returned candidates but none matched the title closely enough',
     });
   });
 
@@ -494,7 +515,8 @@ describe('IgdbGameCatalogResolver.resolveBatch (unit)', () => {
 
     expect(results[0]).toEqual({
       kind: 'unrecognized',
-      reason: 'No IGDB game matched the title',
+      reason:
+        'IGDB returned candidates but none matched the title closely enough',
     });
   });
 
