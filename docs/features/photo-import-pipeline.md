@@ -208,10 +208,14 @@ The IGDB source:
   `IgdbConfigError`) becomes `config_error` and pauses the queue (ticket 3.10,
   [Queue Pause on Configuration Error](/queue-pause-on-config-error.md)); a
   malformed query becomes `unrecognized`, and a no-match becomes `unrecognized`
-  with one of two reasons that name the case:
+  with one of three reasons that name the case:
   - `No IGDB game matched the title` — IGDB returned no candidates at all;
   - `IGDB returned candidates but none matched the title closely enough` — a
-    real candidate was rejected by the confidence threshold.
+    real candidate was rejected by the confidence threshold;
+  - `Multiple IGDB candidates matched equally well (A, B, C) — choose one` —
+    two or more candidates tied at the same score (e.g. two franchise-prefix
+    suffix matches); the item is flagged with its `candidates` array populated
+    so the user can pick one (card 105).
 
 The MobyGames source mirrors this shape: `MobygamesClient` issues one
 `GET /v2/games?title=…&fuzzy=true&limit=10&include=…&api_key=…` per title through
@@ -368,5 +372,5 @@ no vision call because the `vision_completed_at` marker already existed),
 
 - Pipeline integration of batched resolution (`resolveBatch`) is deferred (not
   part of 4.4).
-- Manual item resolution (pick candidate / manual add).
-- Frontend progress/flagged-item views.
+- Frontend progress/flagged-item views (implemented; see
+  [Import Progress UI](/import-progress-ui.md)).

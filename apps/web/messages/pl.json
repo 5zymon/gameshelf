@@ -472,11 +472,16 @@
     "confirmBody": "Opuści listę do weryfikacji i nie da się go przywrócić. Jego rekord zostanie zachowany.",
     "cancel": "Anuluj",
     "added": "Dodano „{title}”. Ta pozycja została oznaczona jako sprawdzona.",
+    "candidatesHeading": "Wybierz dopasowanie",
+    "pick": "Wybierz",
+    "picking": "Wybieranie…",
+    "coverAlt": "Okładka: {title}",
     "error": {
       "retry": "Nie udało się ponowić tego zdjęcia. Sprawdź połączenie i spróbuj ponownie.",
       "dismissPhoto": "Nie udało się odrzucić tego zdjęcia. Sprawdź połączenie i spróbuj ponownie.",
       "dismissItem": "Nie udało się odrzucić tej pozycji. Sprawdź połączenie i spróbuj ponownie.",
-      "processing": "Nie udało się przetworzyć zdjęcia."
+      "processing": "Nie udało się przetworzyć zdjęcia.",
+      "pick": "Nie udało się wybrać tego kandydata. Sprawdź połączenie i spróbuj ponownie."
     }
   },
   "platforms": {

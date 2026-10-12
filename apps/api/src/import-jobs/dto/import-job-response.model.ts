@@ -96,6 +96,36 @@ export class ImportJobModel {
   queueState!: string | null;
 }
 
+/**
+ * One tied catalog candidate offered for a flagged item (card 105). The
+ * `coverUrl` is a same-origin signed preview link, never an external host.
+ */
+export class UnrecognizedItemCandidateModel {
+  @ApiProperty({ enum: ['IGDB', 'MobyGames'], example: 'IGDB' })
+  source!: 'IGDB' | 'MobyGames';
+
+  @ApiProperty({ example: 18797 })
+  externalId!: number;
+
+  @ApiProperty({ example: 'Rise of Nations: Rise of Legends' })
+  title!: string;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 'rise-of-nations-rise-of-legends',
+  })
+  slug!: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'Same-origin signed preview URL; never an external host',
+  })
+  coverUrl!: string | null;
+
+  @ApiProperty({ example: 0.95 })
+  score!: number;
+}
+
 /** One row of `unrecognized_items` — a flagged item with its raw title. */
 export class UnrecognizedItemModel {
   @ApiProperty({ example: 1 })
@@ -129,6 +159,13 @@ export class UnrecognizedItemModel {
     format: 'date-time',
   })
   dismissedAt!: Date | null;
+
+  @ApiProperty({
+    type: [UnrecognizedItemCandidateModel],
+    description:
+      'Tied catalog candidates to choose from; empty unless several candidates matched equally well',
+  })
+  candidates!: UnrecognizedItemCandidateModel[];
 }
 
 /**

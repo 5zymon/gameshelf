@@ -9,9 +9,11 @@ import {
   type GamePlatform,
   type ImportJob,
   type UnrecognizedItem,
+  type UnrecognizedItemCandidate,
 } from '@/lib/api';
 import { api } from '@/lib/api/browser';
 import { ManualAddForm } from '@/components/manual-add-form';
+import { sameOriginPath } from '@/lib/image-url';
 import {
   matchPlatformId,
   needsReview,
@@ -104,6 +106,10 @@ function AttentionCard({
   const [itemsReloadKey, setItemsReloadKey] = useState(0);
   const [itemBusyId, setItemBusyId] = useState<number | null>(null);
   const [addItemId, setAddItemId] = useState<number | null>(null);
+  const [candidateItemId, setCandidateItemId] = useState<number | null>(null);
+  const [pickingCandidateKey, setPickingCandidateKey] = useState<string | null>(
+    null,
+  );
   const [retrying, setRetrying] = useState(false);
   const [dismissing, setDismissing] = useState(false);
   const [confirmingDismiss, setConfirmingDismiss] = useState(false);
@@ -253,6 +259,39 @@ function AttentionCard({
     }
   }
 
+  async function pickCandidate(
+    item: UnrecognizedItem,
+    candidate: UnrecognizedItemCandidate,
+  ): Promise<void> {
+    const key = `${candidate.source}:${String(candidate.externalId)}`;
+    if (pickingCandidateKey !== null) return;
+    setPickingCandidateKey(key);
+    setActionError(null);
+    try {
+      await api.importJobs.pickUnrecognizedCandidate(photo.id, item.id, {
+        source: candidate.source,
+        externalId: candidate.externalId,
+      });
+      setItems(
+        (current) => current?.filter((i) => i.id !== item.id) ?? current,
+      );
+      setCandidateItemId(null);
+      setStatus(t('added', { title: candidate.title }));
+    } catch (caught) {
+      if (isApiError(caught) && caught.status === 401) {
+        router.replace('/login');
+        return;
+      }
+      setActionError(
+        isApiError(caught) && caught.status !== 0
+          ? caught.userMessage
+          : t('error.pick'),
+      );
+    } finally {
+      setPickingCandidateKey(null);
+    }
+  }
+
   async function onItemSaved(
     item: UnrecognizedItem,
     game: GameDetail,
@@ -372,6 +411,74 @@ function AttentionCard({
                         .filter((p): p is string => p !== null && p !== '')
                         .join(' · ')}
                     </p>
+                  )}
+                  {item.candidates.length > 0 && (
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        aria-expanded={candidateItemId === item.id}
+                        disabled={
+                          itemBusyId !== null || pickingCandidateKey !== null
+                        }
+                        onClick={() => {
+                          setCandidateItemId((cur) =>
+                            cur === item.id ? null : item.id,
+                          );
+                          setStatus(null);
+                        }}
+                        className={SMALL_BUTTON}
+                      >
+                        {candidateItemId === item.id
+                          ? t('close')
+                          : t('candidatesHeading')}
+                      </button>
+                      {candidateItemId === item.id && (
+                        <div className="rounded-control border border-edge bg-surface p-3">
+                          <ul className="space-y-2">
+                            {item.candidates.map((candidate) => {
+                              const key = `${candidate.source}:${String(candidate.externalId)}`;
+                              const cover = sameOriginPath(candidate.coverUrl);
+                              const isPicking = pickingCandidateKey === key;
+                              return (
+                                <li
+                                  key={key}
+                                  className="flex items-center gap-3"
+                                >
+                                  {cover !== null && (
+                                    // eslint-disable-next-line @next/next/no-img-element -- API-served same-origin signed preview
+                                    <img
+                                      src={cover}
+                                      alt={t('coverAlt', {
+                                        title: candidate.title,
+                                      })}
+                                      className="aspect-[3/4] w-12 shrink-0 rounded-control border border-edge object-cover"
+                                    />
+                                  )}
+                                  <div className="min-w-0 flex-1 space-y-0.5">
+                                    <p className="truncate text-sm text-ink">
+                                      {candidate.title}
+                                    </p>
+                                    <p className="text-xs text-muted">
+                                      {candidate.source}
+                                    </p>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    disabled={pickingCandidateKey !== null}
+                                    onClick={() => {
+                                      void pickCandidate(item, candidate);
+                                    }}
+                                    className={SMALL_BUTTON}
+                                  >
+                                    {isPicking ? t('picking') : t('pick')}
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
                   )}
                   {addItemId === item.id && (
                     <div className="rounded-control border border-edge bg-surface p-3">

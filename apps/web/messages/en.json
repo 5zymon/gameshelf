@@ -472,11 +472,16 @@
     "confirmBody": "It leaves the review list and can’t be brought back. Its record is kept.",
     "cancel": "Cancel",
     "added": "Added “{title}”. This flagged item is now marked as reviewed.",
+    "candidatesHeading": "Choose a match",
+    "pick": "Pick",
+    "picking": "Picking…",
+    "coverAlt": "Cover for {title}",
     "error": {
       "retry": "We couldn’t retry this photo. Check your connection and try again.",
       "dismissPhoto": "We couldn’t dismiss this photo. Check your connection and try again.",
       "dismissItem": "We couldn’t dismiss this item. Check your connection and try again.",
-      "processing": "The photo could not be processed."
+      "processing": "The photo could not be processed.",
+      "pick": "We couldn’t pick this candidate. Check your connection and try again."
     }
   },
   "platforms": {

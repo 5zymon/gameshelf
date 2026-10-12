@@ -48,17 +48,29 @@ export interface CatalogCandidate {
 /** Which catalog source reported a configuration error (IGDB or MobyGames). */
 export type GameCatalogConfigSource = 'igdb' | 'mobygames';
 
+/** A candidate that tied at the top score; offered to a human, never auto-picked. */
+export interface TiedCatalogCandidate {
+  candidate: CatalogCandidate;
+  score: number;
+}
+
 /**
  * Outcome of validating one recognized title:
  * - `matched` — a candidate passed acceptance;
- * - `unrecognized` — no candidate will ever match (permanent);
+ * - `unrecognized` — no candidate will ever match (permanent); when several
+ *   candidates tied at the top score, `tiedCandidates` carries them for a human
+ *   to choose from (set only on a tie, otherwise absent);
  * - `transient` — the lookup failed and a retry may succeed (e.g. 429);
  * - `config_error` — rejected/absent credentials; the pipeline must stop and
  *   pause, not flag the title.
  */
 export type CatalogResolution =
   | { kind: 'matched'; candidate: CatalogCandidate }
-  | { kind: 'unrecognized'; reason: string }
+  | {
+      kind: 'unrecognized';
+      reason: string;
+      tiedCandidates?: TiedCatalogCandidate[];
+    }
   | { kind: 'transient'; reason: string }
   | { kind: 'config_error'; source: GameCatalogConfigSource; reason: string };
 

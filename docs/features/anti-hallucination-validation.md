@@ -63,7 +63,12 @@ Each source's reason is preserved verbatim; IGDB distinguishes "no candidates
 at all" (`No IGDB game matched the title`) from "candidates returned but none
 cleared the confidence threshold" (`IGDB returned candidates but none matched
 the title closely enough`), so a rejected-but-real candidate is never traced as
-if the game were absent from the database.
+if the game were absent from the database. A tie between two or more candidates
+at the same score (e.g. two franchise-prefix suffix matches at 0.95) is a
+third case: `Multiple IGDB candidates matched equally well (A, B, C) — choose
+one`, and the item's `candidates` array is populated so the user can pick one
+(card 105). A 1.0 exact-name match still wins over a 0.95 prefixed one, so a
+tie only occurs when no candidate is strictly better.
 
 With no source configured the reason is `No game catalog source is configured`.
 

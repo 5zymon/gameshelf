@@ -7,17 +7,20 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import type { Queue } from 'bullmq';
-import { Prisma } from '../generated/prisma/client';
+import { Prisma, type UnrecognizedItem } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
   CatalogCandidate,
   CatalogPlatform,
+  CatalogSource,
+  TiedCatalogCandidate,
 } from '../game-catalog/game-catalog.resolver';
 import {
   GameEnrichmentService,
   toGameCreateData,
 } from '../enrichment/game-enrichment.service';
 import { CoverMaintenanceService } from '../covers/cover-maintenance.service';
+import { CoverPreviewService } from '../covers/cover-preview.service';
 import type { GameIdentity } from '../games/game-identity';
 import { GameIdentityService } from '../games/game-identity.service';
 import { PlatformsService } from '../platforms/platforms.service';
@@ -116,11 +119,84 @@ export interface ResolvedPlatform {
   provenance: PlatformProvenance;
 }
 
+/**
+ * One tied catalog candidate as stored in `UnrecognizedItem.candidates`
+ * (card 105). `coverUrl` is the external URL — internal, never serialized raw.
+ */
+export interface UnrecognizedCandidateRecord {
+  source: CatalogSource;
+  externalId: number;
+  title: string;
+  slug: string | null;
+  coverUrl: string | null;
+  score: number;
+}
+
+/**
+ * Serializes the tied candidates of an `unrecognized` resolution for storage.
+ * Returns `null` (not `[]`) when there is no tie, so the column stays NULL for
+ * every non-tie row and old rows read back as an empty list.
+ */
+export function toCandidateRecords(
+  tied: readonly TiedCatalogCandidate[] | undefined,
+): UnrecognizedCandidateRecord[] | null {
+  if (tied === undefined || tied.length === 0) return null;
+  return tied.map((entry) => ({
+    source: entry.candidate.source,
+    externalId: entry.candidate.externalId,
+    title: entry.candidate.title,
+    slug: entry.candidate.slug ?? null,
+    coverUrl: entry.candidate.coverUrl,
+    score: entry.score,
+  }));
+}
+
+/**
+ * Defensive parser for the stored `candidates` JSON: drops any entry that is
+ * not a well-formed record, so a hand-edited or partially-written row can never
+ * crash the read path. `null`/non-array input yields `[]`.
+ */
+export function parseCandidateRecords(
+  value: Prisma.JsonValue | null,
+): UnrecognizedCandidateRecord[] {
+  if (!Array.isArray(value)) return [];
+  const records: UnrecognizedCandidateRecord[] = [];
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const record = entry as Record<string, unknown>;
+    const source = record.source;
+    const externalId = record.externalId;
+    const title = record.title;
+    const score = record.score;
+    if (
+      (source !== 'IGDB' && source !== 'MobyGames') ||
+      typeof externalId !== 'number' ||
+      typeof title !== 'string' ||
+      typeof score !== 'number'
+    ) {
+      continue;
+    }
+    const slug = record.slug;
+    const coverUrl = record.coverUrl;
+    records.push({
+      source,
+      externalId,
+      title,
+      slug: typeof slug === 'string' ? slug : null,
+      coverUrl: typeof coverUrl === 'string' ? coverUrl : null,
+      score,
+    });
+  }
+  return records;
+}
+
 /** A title that will never match; it becomes an UnrecognizedItem row. */
 export interface UnrecognizedImport {
   recognizedItemId: number;
   rawTitle: string;
   rawPlatform: string | null;
+  rawEdition: string | null;
+  candidates: UnrecognizedCandidateRecord[] | null;
   reason: string;
 }
 
@@ -174,6 +250,7 @@ export class ImportJobsService {
     private readonly platforms: PlatformsService,
     private readonly identity: GameIdentityService,
     private readonly maintenance: CoverMaintenanceService,
+    private readonly preview: CoverPreviewService,
   ) {}
 
   // ---------- read API ----------
@@ -240,7 +317,11 @@ export class ImportJobsService {
         counts.get(job.id) ?? emptyCounts(),
         queueStates.get(job.bullJobId ?? '') ?? null,
       ),
-      { unrecognizedItems: job.unrecognizedItems },
+      {
+        unrecognizedItems: job.unrecognizedItems.map((row) =>
+          this.toUnrecognizedItemModel(row),
+        ),
+      },
     );
   }
 
@@ -250,10 +331,11 @@ export class ImportJobsService {
    */
   async listUnrecognized(jobId: number): Promise<UnrecognizedItemModel[]> {
     await this.assertJobExists(jobId);
-    return this.prisma.unrecognizedItem.findMany({
+    const rows = await this.prisma.unrecognizedItem.findMany({
       where: { importJobId: jobId, dismissedAt: null },
       orderBy: { id: 'asc' },
     });
+    return rows.map((row) => this.toUnrecognizedItemModel(row));
   }
 
   /**
@@ -379,7 +461,7 @@ export class ImportJobsService {
         `Unrecognized item with id ${String(itemId)} not found`,
       );
     }
-    return updated;
+    return this.toUnrecognizedItemModel(updated);
   }
 
   /**
@@ -629,7 +711,7 @@ export class ImportJobsService {
     },
   ): Promise<UnrecognizedItemModel> {
     await this.assertJobExists(jobId);
-    return this.prisma.unrecognizedItem.create({
+    const created = await this.prisma.unrecognizedItem.create({
       data: {
         importJobId: jobId,
         rawTitle: data.rawTitle,
@@ -637,6 +719,7 @@ export class ImportJobsService {
         reason: data.reason ?? null,
       },
     });
+    return this.toUnrecognizedItemModel(created);
   }
 
   // ---------- pipeline state (ticket 3.5) ----------
@@ -1049,6 +1132,10 @@ export class ImportJobsService {
             importJobId: jobId,
             rawTitle: item.rawTitle,
             rawPlatform: item.rawPlatform,
+            rawEdition: item.rawEdition,
+            ...(item.candidates !== null && {
+              candidates: item.candidates as unknown as Prisma.InputJsonValue,
+            }),
             reason: item.reason,
           },
         });
@@ -1213,6 +1300,30 @@ export class ImportJobsService {
         counts.recognizedCount !== row.declaredCount,
       // Redis is never authoritative for a terminal outcome (decision D4).
       queueState: isTerminalImportJobStatus(row.status) ? null : queueState,
+    };
+  }
+
+  /**
+   * Maps a raw `unrecognized_items` row to the read model. Explicit fields only
+   * — the row is never spread, so internal columns (the external `coverUrl`)
+   * cannot leak into a response. Tied-candidate cover URLs are minted as signed,
+   * same-origin preview links on every read.
+   */
+  private toUnrecognizedItemModel(
+    row: UnrecognizedItem,
+  ): UnrecognizedItemModel {
+    return {
+      id: row.id,
+      importJobId: row.importJobId,
+      rawTitle: row.rawTitle,
+      rawPlatform: row.rawPlatform,
+      reason: row.reason,
+      createdAt: row.createdAt,
+      dismissedAt: row.dismissedAt,
+      candidates: parseCandidateRecords(row.candidates).map((record) => ({
+        ...record,
+        coverUrl: this.preview.previewUrl(record.coverUrl),
+      })),
     };
   }
 

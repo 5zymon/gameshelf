@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { RecognizedItem } from '../settings/vision/vision-provider';
 import {
   type CatalogCandidate,
@@ -15,7 +15,11 @@ import {
   type IgdbGame,
   type IgdbMultiplayerMode,
 } from './igdb.client';
-import { rankTitleMatches, selectConfidentMatch } from './title-match';
+import {
+  classifyTitleMatches,
+  rankTitleMatches,
+  type TitleMatchOutcome,
+} from './title-match';
 import { CATALOG_SEARCH_MAX_RESULTS } from './catalog-search.options';
 import { igdbImageUrl } from './igdb-image-url';
 import { IGDB_GALLERY_MAX_IMAGES, IGDB_IMAGE_SIZE } from './igdb.options';
@@ -34,6 +38,17 @@ const IGDB_NO_CANDIDATES_REASON = 'No IGDB game matched the title';
 const IGDB_BELOW_THRESHOLD_REASON =
   'IGDB returned candidates but none matched the title closely enough';
 
+/**
+ * Reason for an IGDB franchise-prefix tie: several candidates scored exactly
+ * `SUFFIX_MATCH_SCORE` at the top, so none is picked automatically. The tied
+ * titles are named so a human can choose. `IGDB_SEARCH_LIMIT` caps the list.
+ */
+export function igdbTieReason(titles: readonly string[]): string {
+  return `Multiple IGDB candidates matched equally well (${titles.join(
+    ', ',
+  )}) — choose one`;
+}
+
 @Injectable()
 export class IgdbGameCatalogResolver
   extends GameCatalogResolver
@@ -41,6 +56,8 @@ export class IgdbGameCatalogResolver
 {
   /** Source label; used in the chain's aggregated reason. */
   readonly label = 'IGDB';
+
+  private readonly logger = new Logger(IgdbGameCatalogResolver.name);
 
   constructor(private readonly igdb: IgdbClient) {
     super();
@@ -125,9 +142,20 @@ export class IgdbGameCatalogResolver
     title: string,
     games: readonly IgdbGame[],
   ): CatalogResolution {
-    const match = selectConfidentMatch(title, games);
-    if (match !== null) {
-      return { kind: 'matched', candidate: toCandidate(match.game) };
+    const outcome = classifyTitleMatches(title, games);
+    this.logResolution(title, outcome);
+    if (outcome.kind === 'match') {
+      return { kind: 'matched', candidate: toCandidate(outcome.match.game) };
+    }
+    if (outcome.kind === 'tie') {
+      return {
+        kind: 'unrecognized',
+        reason: igdbTieReason(outcome.tied.map((match) => match.game.name)),
+        tiedCandidates: outcome.tied.map((match) => ({
+          candidate: toCandidate(match.game),
+          score: match.score,
+        })),
+      };
     }
     return {
       kind: 'unrecognized',
@@ -140,6 +168,38 @@ export class IgdbGameCatalogResolver
           ? IGDB_NO_CANDIDATES_REASON
           : IGDB_BELOW_THRESHOLD_REASON,
     };
+  }
+
+  /**
+   * Debug log for one title resolution. Carries only each candidate's id, name
+   * and score — never the full game or raw payload. Outcome is `matched` for a
+   * match, `tie` for a franchise-prefix tie, and `no_candidates` /
+   * `below_threshold` for the two `none` cases.
+   */
+  private logResolution(
+    title: string,
+    outcome: TitleMatchOutcome<IgdbGame>,
+  ): void {
+    const label =
+      outcome.kind === 'match'
+        ? 'matched'
+        : outcome.kind === 'tie'
+          ? 'tie'
+          : outcome.ranked.length === 0
+            ? 'no_candidates'
+            : 'below_threshold';
+    this.logger.debug(
+      JSON.stringify({
+        event: 'igdb_title_resolution',
+        title,
+        outcome: label,
+        candidates: outcome.ranked.map(({ game, score }) => ({
+          id: game.id,
+          name: game.name,
+          score: Math.round(score * 1000) / 1000,
+        })),
+      }),
+    );
   }
 }
 

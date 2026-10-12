@@ -1,4 +1,5 @@
 import {
+  classifyTitleMatches,
   CONFIDENT_MATCH_MIN_SCORE,
   normalizeTitle,
   rankTitleMatches,
@@ -112,6 +113,54 @@ describe('selectConfidentMatch (unit)', () => {
     expect(
       selectConfidentMatch('Halo', [{ name: 'Halo Combat Evolved' }]),
     ).toBeNull();
+  });
+});
+
+describe('classifyTitleMatches (unit)', () => {
+  it('classifies a franchise-prefix tie, listing the tied names in IGDB order', () => {
+    const outcome = classifyTitleMatches('Rise of Legends', [
+      { name: 'Rise of Nations: Rise of Legends', id: 18797 },
+      { name: 'Formula 2026: Rise of Legends', id: 401728 },
+      { name: 'Apex 2026: Rise of Legends', id: 401727 },
+      { name: 'God of War', id: 1 },
+    ]);
+
+    expect(outcome.kind).toBe('tie');
+    if (outcome.kind !== 'tie') return;
+    expect(outcome.tied.map((match) => match.game.name)).toEqual([
+      'Rise of Nations: Rise of Legends',
+      'Formula 2026: Rise of Legends',
+      'Apex 2026: Rise of Legends',
+    ]);
+    expect(
+      outcome.tied.every((match) => match.score === SUFFIX_MATCH_SCORE),
+    ).toBe(true);
+  });
+
+  it('classifies an exact name beating a suffix as a match', () => {
+    const outcome = classifyTitleMatches('Dawn of War III', [
+      { name: 'Warhammer 40,000: Dawn of War III' },
+      { name: 'Dawn of War III' },
+    ]);
+
+    expect(outcome.kind).toBe('match');
+    if (outcome.kind !== 'match') return;
+    expect(outcome.match.game.name).toBe('Dawn of War III');
+  });
+
+  it('classifies a below-threshold best as none', () => {
+    const outcome = classifyTitleMatches('Halo', [
+      { name: 'Halo Combat Evolved' },
+    ]);
+
+    expect(outcome.kind).toBe('none');
+  });
+
+  it('classifies no candidates as none with an empty ranked list', () => {
+    expect(classifyTitleMatches('Halo', [])).toEqual({
+      kind: 'none',
+      ranked: [],
+    });
   });
 });
 

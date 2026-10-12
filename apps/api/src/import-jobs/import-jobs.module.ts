@@ -11,6 +11,7 @@ import { ImportUploadService } from './import-upload.service';
 import { PhotoImportPipelineService } from './photo-import-pipeline.service';
 import { PhotoStorageService } from './photo-storage.service';
 import { PhotoSweepService } from './photo-sweep.service';
+import { UnrecognizedItemPickService } from './unrecognized-item-pick.service';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { PhotoSweepService } from './photo-sweep.service';
     PhotoStorageService,
     PhotoImportPipelineService,
     PhotoSweepService,
+    UnrecognizedItemPickService,
   ],
   exports: [ImportJobsService, PhotoStorageService, PhotoImportPipelineService],
 })
