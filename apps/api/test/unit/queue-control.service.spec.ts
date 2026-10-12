@@ -1,16 +1,9 @@
-import { Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import type { PrismaService } from '../../src/prisma/prisma.service';
+import type { PhotoImportQueue } from '../../src/queue/photo-import.queue';
 import {
   DEFAULT_PAUSE_REASON,
   QueueControlService,
 } from '../../src/queue/queue-control.service';
-
-interface QueueMock {
-  pause: jest.Mock;
-  resume: jest.Mock;
-  isPaused: jest.Mock;
-}
 
 interface PrismaMock {
   importQueueState: {
@@ -21,14 +14,10 @@ interface PrismaMock {
 
 function createService(): {
   service: QueueControlService;
-  queue: QueueMock;
+  photoQueue: { wake: jest.Mock };
   prisma: PrismaMock;
 } {
-  const queue: QueueMock = {
-    pause: jest.fn(() => Promise.resolve()),
-    resume: jest.fn(() => Promise.resolve()),
-    isPaused: jest.fn(() => Promise.resolve(false)),
-  };
+  const photoQueue = { wake: jest.fn() };
   const prisma: PrismaMock = {
     importQueueState: {
       findUnique: jest.fn(() => Promise.resolve(null)),
@@ -37,21 +26,20 @@ function createService(): {
   };
   return {
     service: new QueueControlService(
-      queue as unknown as Queue,
       prisma as unknown as PrismaService,
+      photoQueue as unknown as PhotoImportQueue,
     ),
-    queue,
+    photoQueue,
     prisma,
   };
 }
 
 describe('QueueControlService (unit)', () => {
-  it('pauseForConfig pauses the queue and upserts the durable reason', async () => {
-    const { service, queue, prisma } = createService();
+  it('pauseForConfig upserts the durable reason and touches no queue', async () => {
+    const { service, photoQueue, prisma } = createService();
 
     await service.pauseForConfig('igdb', 'IGDB rejected the credentials');
 
-    expect(queue.pause).toHaveBeenCalledTimes(1);
     expect(prisma.importQueueState.upsert).toHaveBeenCalledWith({
       where: { id: 1 },
       create: {
@@ -68,14 +56,14 @@ describe('QueueControlService (unit)', () => {
         pausedAt: expect.any(Date) as unknown,
       },
     });
+    expect(photoQueue.wake).not.toHaveBeenCalled();
   });
 
-  it('resume resumes the queue and clears the stored reason', async () => {
-    const { service, queue, prisma } = createService();
+  it('resume clears the stored reason and wakes the worker', async () => {
+    const { service, photoQueue, prisma } = createService();
 
     await service.resume();
 
-    expect(queue.resume).toHaveBeenCalledTimes(1);
     expect(prisma.importQueueState.upsert).toHaveBeenCalledWith({
       where: { id: 1 },
       create: {
@@ -92,12 +80,12 @@ describe('QueueControlService (unit)', () => {
         pausedAt: null,
       },
     });
+    expect(photoQueue.wake).toHaveBeenCalledTimes(1);
   });
 
-  it('getState reports paused with the durable reason from Redis', async () => {
-    const { service, queue, prisma } = createService();
+  it('getState reports paused with the durable reason', async () => {
+    const { service, prisma } = createService();
     const pausedAt = new Date('2026-10-07T00:00:00.000Z');
-    queue.isPaused.mockResolvedValue(true);
     prisma.importQueueState.findUnique.mockResolvedValue({
       id: 1,
       paused: true,
@@ -114,12 +102,29 @@ describe('QueueControlService (unit)', () => {
     });
   });
 
-  it('getState reports not paused when Redis says running even if the row says paused', async () => {
-    const { service, queue, prisma } = createService();
-    queue.isPaused.mockResolvedValue(false);
+  it('getState uses the default reason for a paused row with a null reason', async () => {
+    const { service, prisma } = createService();
     prisma.importQueueState.findUnique.mockResolvedValue({
       id: 1,
       paused: true,
+      reason: null,
+      source: null,
+      pausedAt: null,
+    });
+
+    await expect(service.getState()).resolves.toEqual({
+      paused: true,
+      reason: DEFAULT_PAUSE_REASON,
+      source: null,
+      pausedAt: null,
+    });
+  });
+
+  it('getState reports not paused when the row is running', async () => {
+    const { service, prisma } = createService();
+    prisma.importQueueState.findUnique.mockResolvedValue({
+      id: 1,
+      paused: false,
       reason: 'stale reason',
       source: 'igdb',
       pausedAt: new Date('2026-10-07T00:00:00.000Z'),
@@ -133,45 +138,50 @@ describe('QueueControlService (unit)', () => {
     });
   });
 
-  it('getState falls back to the durable row when isPaused rejects', async () => {
-    const { service, queue, prisma } = createService();
-    const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
-    queue.isPaused.mockRejectedValue(new Error('redis down'));
-    prisma.importQueueState.findUnique.mockResolvedValue({
-      id: 1,
-      paused: true,
-      reason: 'The provider rejected the API key',
-      source: 'llm',
-      pausedAt: null,
-    });
-
-    await expect(service.getState()).resolves.toEqual({
-      paused: true,
-      reason: 'The provider rejected the API key',
-      source: 'llm',
-      pausedAt: null,
-    });
-    expect(warn).toHaveBeenCalled();
-    warn.mockRestore();
-  });
-
-  it('getState uses the default reason when Redis is paused but no row exists', async () => {
-    const { service, queue, prisma } = createService();
-    queue.isPaused.mockResolvedValue(true);
+  it('getState reports not paused when no row exists', async () => {
+    const { service, prisma } = createService();
     prisma.importQueueState.findUnique.mockResolvedValue(null);
 
     await expect(service.getState()).resolves.toEqual({
-      paused: true,
-      reason: DEFAULT_PAUSE_REASON,
+      paused: false,
+      reason: null,
       source: null,
       pausedAt: null,
     });
   });
 
+  describe('isPaused', () => {
+    it('is true for a paused row', async () => {
+      const { service, prisma } = createService();
+      prisma.importQueueState.findUnique.mockResolvedValue({
+        id: 1,
+        paused: true,
+      });
+
+      await expect(service.isPaused()).resolves.toBe(true);
+    });
+
+    it('is false for a running row', async () => {
+      const { service, prisma } = createService();
+      prisma.importQueueState.findUnique.mockResolvedValue({
+        id: 1,
+        paused: false,
+      });
+
+      await expect(service.isPaused()).resolves.toBe(false);
+    });
+
+    it('is false when no row exists', async () => {
+      const { service, prisma } = createService();
+      prisma.importQueueState.findUnique.mockResolvedValue(null);
+
+      await expect(service.isPaused()).resolves.toBe(false);
+    });
+  });
+
   describe('resumeIfPausedBy', () => {
     it('resumes when paused by the matching source', async () => {
-      const { service, queue, prisma } = createService();
-      queue.isPaused.mockResolvedValue(true);
+      const { service, photoQueue, prisma } = createService();
       prisma.importQueueState.findUnique.mockResolvedValue({
         id: 1,
         paused: true,
@@ -181,12 +191,12 @@ describe('QueueControlService (unit)', () => {
       });
 
       await expect(service.resumeIfPausedBy('llm')).resolves.toBe(true);
-      expect(queue.resume).toHaveBeenCalledTimes(1);
+      expect(prisma.importQueueState.upsert).toHaveBeenCalledTimes(1);
+      expect(photoQueue.wake).toHaveBeenCalledTimes(1);
     });
 
     it('does nothing when paused by a different source', async () => {
-      const { service, queue, prisma } = createService();
-      queue.isPaused.mockResolvedValue(true);
+      const { service, photoQueue, prisma } = createService();
       prisma.importQueueState.findUnique.mockResolvedValue({
         id: 1,
         paused: true,
@@ -196,15 +206,15 @@ describe('QueueControlService (unit)', () => {
       });
 
       await expect(service.resumeIfPausedBy('llm')).resolves.toBe(false);
-      expect(queue.resume).not.toHaveBeenCalled();
+      expect(prisma.importQueueState.upsert).not.toHaveBeenCalled();
+      expect(photoQueue.wake).not.toHaveBeenCalled();
     });
 
     it('does nothing when the queue is not paused', async () => {
-      const { service, queue } = createService();
-      queue.isPaused.mockResolvedValue(false);
+      const { service, photoQueue } = createService();
 
       await expect(service.resumeIfPausedBy('llm')).resolves.toBe(false);
-      expect(queue.resume).not.toHaveBeenCalled();
+      expect(photoQueue.wake).not.toHaveBeenCalled();
     });
   });
 });

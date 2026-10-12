@@ -1,9 +1,6 @@
 import type { Server } from 'node:http';
 import { rmSync } from 'node:fs';
-import { getQueueToken } from '@nestjs/bullmq';
-import type { Queue } from 'bullmq';
 import request from 'supertest';
-import { PHOTO_IMPORT_QUEUE } from '../../src/queue/queue.constants';
 import { QueueControlService } from '../../src/queue/queue-control.service';
 import { LlmSettingsService } from '../../src/settings/llm-settings.service';
 import { LlmKeyCryptoService } from '../../src/settings/llm-key-crypto.service';
@@ -12,9 +9,8 @@ import {
   type VisionHttpRequest,
   type VisionHttpResponse,
 } from '../../src/settings/vision/vision-http.client';
-import { PhotoImportHandler } from '../../src/queue/photo-import.handler';
+import { NO_WORKER } from '../helpers/photo-import-queue';
 import { createTestApp, type TestApp } from '../helpers/test-app';
-import { createNoopPhotoImportHandler } from '../helpers/noop-photo-handler';
 import { resetDatabase } from '../helpers/reset';
 import { seedLlmSettings } from '../helpers/seed';
 
@@ -64,18 +60,11 @@ function failure(status: number): VisionHttpResponse {
 describe('LLM settings API (e2e)', () => {
   let test: TestApp;
   let settings: LlmSettingsService;
-  let queue: Queue;
   let postJson: jest.Mock<Promise<VisionHttpResponse>, [VisionHttpRequest]>;
 
   beforeAll(async () => {
-    test = await createTestApp([
-      {
-        provide: PhotoImportHandler,
-        useValue: createNoopPhotoImportHandler(),
-      },
-    ]);
+    test = await createTestApp([NO_WORKER]);
     settings = test.app.get(LlmSettingsService);
-    queue = test.app.get<Queue>(getQueueToken(PHOTO_IMPORT_QUEUE));
     const http = test.app.get(VisionHttpClient);
     postJson = jest.spyOn(http, 'postJson') as unknown as jest.Mock<
       Promise<VisionHttpResponse>,
@@ -85,8 +74,6 @@ describe('LLM settings API (e2e)', () => {
 
   beforeEach(async () => {
     await resetDatabase(test.prisma);
-    // A pause left by a failed test must never leak into the next one.
-    await queue.resume();
     await test.login();
     postJson.mockReset();
   });
@@ -155,11 +142,11 @@ describe('LLM settings API (e2e)', () => {
     await test.app
       .get(QueueControlService)
       .pauseForConfig('llm', 'The provider rejected the API key');
-    expect(await queue.isPaused()).toBe(true);
+    expect(await test.app.get(QueueControlService).isPaused()).toBe(true);
 
     await test.request.put(BASE).send(customBody).expect(200);
 
-    expect(await queue.isPaused()).toBe(false);
+    expect(await test.app.get(QueueControlService).isPaused()).toBe(false);
     const state = await test.prisma.importQueueState.findUnique({
       where: { id: 1 },
     });

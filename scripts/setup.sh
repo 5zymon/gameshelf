@@ -18,22 +18,20 @@ else
   echo "    .env already exists — leaving it untouched."
 fi
 
-echo "==> 3/6 Starting MySQL + Redis"
-docker compose up -d mysql redis
+echo "==> 3/6 Starting MySQL"
+docker compose up -d mysql
 
-echo "==> 4/6 Waiting for healthy services"
+echo "==> 4/6 Waiting for MySQL to become healthy"
 for _ in $(seq 1 60); do
   m="$(docker compose ps --format '{{.Health}}' mysql 2>/dev/null || echo starting)"
-  r="$(docker compose ps --format '{{.Health}}' redis 2>/dev/null || echo starting)"
-  [ "$m" = "healthy" ] && [ "$r" = "healthy" ] && { echo "    Both healthy."; break; }
+  [ "$m" = "healthy" ] && { echo "    MySQL healthy."; break; }
   sleep 2
 done
 
 m="$(docker compose ps --format '{{.Health}}' mysql 2>/dev/null || echo starting)"
-r="$(docker compose ps --format '{{.Health}}' redis 2>/dev/null || echo starting)"
-if [ "$m" != "healthy" ] || [ "$r" != "healthy" ]; then
-  echo "ERROR: MySQL/Redis did not become healthy within 120s." >&2
-  echo "  MySQL: $m  Redis: $r" >&2
+if [ "$m" != "healthy" ]; then
+  echo "ERROR: MySQL did not become healthy within 120s." >&2
+  echo "  MySQL: $m" >&2
   exit 1
 fi
 

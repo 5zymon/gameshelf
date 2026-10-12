@@ -158,7 +158,7 @@ model Game {
   @@map("games")
 }
 
-// One row per uploaded photo (ADR-002: the queue's unit of work is the
+// One row per uploaded photo (ADR-005: the queue's unit of work is the
 // photo). `status` lifecycle (set by the import pipeline, ticket 3.x):
 // queued -> processing -> done | needs_attention | failed; the user may
 // then dismiss a needs_attention/failed job (spec §4.2.4). Kept as a
@@ -187,20 +187,26 @@ model ImportJob {
   enqueuedAt      DateTime? @map("enqueued_at")
   // Set once, inside the same transaction that persists the recognized item
   // rows (ticket 3.5). Non-null means the single vision call already ran, so a
-  // BullMQ retry never repeats it (acceptance criterion).
+  // worker retry never repeats it (acceptance criterion).
   visionCompletedAt DateTime? @map("vision_completed_at")
   // Groups every photo from one upload request (ticket 3.6), so aggregate
   // batch progress (X of Y) is durable and survives a restart.
   batchId         String?   @map("batch_id") @db.VarChar(64)
-  // The BullMQ job currently backing this run (ticket 3.6); refreshed on a
-  // user retry. Supplementary to the durable status, never authoritative.
-  bullJobId       String?   @map("bull_job_id") @db.VarChar(64)
+  // Queue columns (ADR-005): `import_jobs` IS the photo-import queue.
+  // `attempts` counts claims (incremented by the worker's claim); a row is
+  // runnable when status = 'queued' AND next_run_at <= now (NULL = never
+  // runnable, e.g. rows created without `enqueue`); `lease_until` is the
+  // processing lease the stall recovery reclaims once expired.
+  attempts        Int       @default(0)
+  nextRunAt       DateTime? @map("next_run_at")
+  leaseUntil      DateTime? @map("lease_until")
 
   unrecognizedItems UnrecognizedItem[]
   recognizedItems   RecognizedItem[]
 
   @@index([status])
   @@index([batchId])
+  @@index([status, nextRunAt])
   @@map("import_jobs")
 }
 
@@ -311,11 +317,9 @@ model LlmSetting {
   @@map("llm_settings")
 }
 
-// Global photo-import queue pause state (ticket 3.10). Singleton row (`id = 1`).
-// The operational pause lives in Redis (BullMQ `queue.pause()`); this row
-// records WHY so the progress API can report a reason and it survives a
-// restart. `paused` mirrors the last known state for the Redis-unavailable
-// fallback; BullMQ remains authoritative when reachable.
+// Global photo-import queue pause (ticket 3.10, ADR-005). Singleton row
+// (`id = 1`) and the single source of truth: the worker claims nothing while
+// `paused`; `reason`/`source`/`pausedAt` say why.
 model ImportQueueState {
   id        Int       @id @default(autoincrement())
   paused    Boolean   @default(false)

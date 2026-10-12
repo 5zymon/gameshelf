@@ -3,8 +3,6 @@ import { createHash } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import type { Server } from 'node:http';
 import { resolve } from 'node:path';
-import { Queue } from 'bullmq';
-import type { Job } from 'bullmq';
 import sharp from 'sharp';
 import type { Response as SuperAgentResponse } from 'superagent';
 import supertest from 'supertest';
@@ -22,21 +20,15 @@ import type {
 import { GameCatalogResolver } from '../../src/game-catalog/game-catalog.resolver';
 import { PhotoImportHandler } from '../../src/queue/photo-import.handler';
 import { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
-import type { PhotoImportJobData } from '../../src/queue/photo-import.types';
-import { PHOTO_IMPORT_QUEUE } from '../../src/queue/queue.constants';
 import type {
   RecognizedItem,
   VisionRecognitionResult,
 } from '../../src/settings/vision/vision-provider';
 import { VisionService } from '../../src/settings/vision/vision.service';
+import { makeRun } from '../helpers/photo-import-queue';
 import { resetDatabase } from '../helpers/reset';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 
-const connection = {
-  host: process.env.REDIS_HOST ?? 'localhost',
-  port: Number(process.env.REDIS_PORT ?? 6379),
-};
-const queuePrefix = process.env.REDIS_QUEUE_PREFIX ?? 'bull-e2e';
 const E2E_COVERS_DIR_SUFFIX = 'gameshelf-covers-e2e';
 const PLATFORM_IGDB_ID = 167;
 const COVER_URL = 'https://images.igdb.com/igdb/image/upload/t_thumb/halo.jpg';
@@ -71,18 +63,6 @@ function candidate(title: string): CatalogCandidate {
   };
 }
 
-function makeJob(
-  importJobId: number,
-  photoRef: string,
-): Job<PhotoImportJobData> {
-  return {
-    id: `covers-${String(importJobId)}`,
-    attemptsMade: 0,
-    opts: { attempts: 3 },
-    data: { photoRef, importJobId },
-  } as unknown as Job<PhotoImportJobData>;
-}
-
 function imageResponse(body: Buffer): CoverHttpResponse {
   return { ok: true, status: 200, contentType: 'image/jpeg', body };
 }
@@ -102,7 +82,6 @@ function binaryParser(
 describe('Cover cache (e2e)', () => {
   let test: TestApp;
   let app: INestApplication;
-  let queue: Queue;
   let coversDir: string;
   let vision: { recognize: jest.Mock };
   let resolver: { resolve: jest.Mock };
@@ -137,13 +116,10 @@ describe('Cover cache (e2e)', () => {
     ]);
     app = test.app;
     coversDir = app.get(CoverCacheService).directory;
-    queue = new Queue(PHOTO_IMPORT_QUEUE, { connection, prefix: queuePrefix });
   });
 
   beforeEach(async () => {
     await resetDatabase(test.prisma);
-    await queue.obliterate({ force: true });
-    await queue.resume();
     clearCoversDir(coversDir);
     vision.recognize.mockReset();
     vision.recognize.mockResolvedValue({ items: [], countVisible: null });
@@ -152,7 +128,6 @@ describe('Cover cache (e2e)', () => {
   });
 
   afterAll(async () => {
-    await queue.close();
     await app.close();
     clearCoversDir(coversDir);
   });
@@ -190,7 +165,7 @@ describe('Cover cache (e2e)', () => {
 
     const result = await app
       .get(PhotoImportHandler)
-      .handle(makeJob(id, photoRef));
+      .handle(makeRun(id, photoRef));
 
     expect(result).toEqual({
       recognizedCount: 1,
@@ -276,7 +251,7 @@ describe('Cover cache (e2e)', () => {
     });
     coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
 
-    await app.get(PhotoImportHandler).handle(makeJob(id, photoRef));
+    await app.get(PhotoImportHandler).handle(makeRun(id, photoRef));
     const game = await test.prisma.game.findFirstOrThrow();
     const file = (game.coverUrl ?? '').split('/').pop() ?? '';
 
@@ -306,7 +281,7 @@ describe('Cover cache (e2e)', () => {
 
     const result = await app
       .get(PhotoImportHandler)
-      .handle(makeJob(id, photoRef));
+      .handle(makeRun(id, photoRef));
 
     expect(result).toEqual({
       recognizedCount: 1,

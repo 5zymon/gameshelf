@@ -1,7 +1,7 @@
 /**
  * Photo sweep policy (ticket 3.8). Compile-time constants, deliberately not
  * env-driven — same convention as SESSION_CLEANUP_INTERVAL_MS (auth.config.ts).
- * Decision #4: photos are ephemeral. ADR-002: the photo is deleted only once
+ * Decision #4: photos are ephemeral. ADR-005: the photo is deleted only once
  * the job completes, never at first save.
  */
 

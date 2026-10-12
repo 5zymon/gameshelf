@@ -1,5 +1,3 @@
-import type { Job } from 'bullmq';
-import { UnrecoverableError } from 'bullmq';
 import { Logger } from '@nestjs/common';
 import type {
   CatalogCandidate,
@@ -19,9 +17,12 @@ import {
   PLATFORM_NOT_IN_CATALOG_REASON,
 } from '../../src/import-jobs/photo-import-pipeline.service';
 import type { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
-import { RetryableImportError } from '../../src/queue/photo-import.failure';
+import {
+  PermanentImportError,
+  RetryableImportError,
+} from '../../src/queue/photo-import.failure';
 import type { QueueControlService } from '../../src/queue/queue-control.service';
-import type { PhotoImportJobData } from '../../src/queue/photo-import.types';
+import type { PhotoImportRun } from '../../src/queue/photo-import.types';
 import type {
   RecognizedItem,
   VisionRecognitionResult,
@@ -41,7 +42,6 @@ interface Harness {
   }[];
   jobs: {
     getPipelineJob: jest.Mock;
-    findJobIdByPhotoRef: jest.Mock;
     markProcessing: jest.Mock;
     saveRecognition: jest.Mock;
     listPendingRecognizedItems: jest.Mock;
@@ -57,17 +57,13 @@ interface Harness {
   queueControl: { pauseForConfig: jest.Mock };
 }
 
-function makeJob(
-  attemptsMade = 0,
-  attempts = 3,
-  data: Partial<PhotoImportJobData> = {},
-): Job<PhotoImportJobData> {
+function makeRun(attemptsMade = 0, maxAttempts = 3): PhotoImportRun {
   return {
-    id: 'job-1',
-    attemptsMade,
-    opts: { attempts },
-    data: { photoRef: 'photo.png', importJobId: 1, ...data },
-  } as unknown as Job<PhotoImportJobData>;
+    importJobId: 1,
+    photoRef: 'photo.png',
+    attempt: attemptsMade + 1,
+    maxAttempts,
+  };
 }
 
 function recognized(title: string): RecognizedItem {
@@ -124,7 +120,6 @@ function createHarness(): Harness {
 
   const jobs: Harness['jobs'] = {
     getPipelineJob: jest.fn(() => Promise.resolve({ ...state })),
-    findJobIdByPhotoRef: jest.fn(() => Promise.resolve(1)),
     markProcessing: jest.fn(() => {
       state.status = 'processing';
       return Promise.resolve();
@@ -259,7 +254,7 @@ describe('PhotoImportPipelineService (unit)', () => {
       Promise.resolve({ kind: 'matched', candidate: candidate(item.title) }),
     );
 
-    const result = await h.pipeline.run(makeJob());
+    const result = await h.pipeline.run(makeRun());
 
     expect(h.vision.recognize).toHaveBeenCalledTimes(1);
     expect(h.jobs.saveRecognition).toHaveBeenCalledTimes(1);
@@ -287,7 +282,7 @@ describe('PhotoImportPipelineService (unit)', () => {
       Promise.resolve({ kind: 'matched', candidate: candidate(item.title) }),
     );
 
-    await h.pipeline.run(makeJob());
+    await h.pipeline.run(makeRun());
 
     expect(
       h.jobs.commitImportBatch.mock.calls.map(
@@ -314,7 +309,7 @@ describe('PhotoImportPipelineService (unit)', () => {
       });
     });
 
-    await expect(h.pipeline.run(makeJob(0, 3))).rejects.toThrow(
+    await expect(h.pipeline.run(makeRun(0, 3))).rejects.toThrow(
       RetryableImportError,
     );
     expect(h.vision.recognize).toHaveBeenCalledTimes(1);
@@ -325,7 +320,7 @@ describe('PhotoImportPipelineService (unit)', () => {
     expect(h.games.map((game) => game.title).sort()).toEqual(['A', 'C']);
 
     bAttempt = 1;
-    const result = await h.pipeline.run(makeJob(1, 3));
+    const result = await h.pipeline.run(makeRun(1, 3));
 
     expect(h.vision.recognize).toHaveBeenCalledTimes(1);
     expect(h.games.map((game) => game.title).sort()).toEqual(['A', 'B', 'C']);
@@ -344,7 +339,7 @@ describe('PhotoImportPipelineService (unit)', () => {
       reason: 'No IGDB game matched the title',
     });
 
-    const result = await h.pipeline.run(makeJob());
+    const result = await h.pipeline.run(makeRun());
 
     expect(h.games).toHaveLength(0);
     expect(h.unrecognizedRows).toEqual([
@@ -396,7 +391,7 @@ describe('PhotoImportPipelineService (unit)', () => {
       ],
     });
 
-    await h.pipeline.run(makeJob());
+    await h.pipeline.run(makeRun());
 
     const outcome = (
       h.jobs.commitImportBatch.mock.calls[0] as [number, ImportBatchOutcome]
@@ -437,7 +432,7 @@ describe('PhotoImportPipelineService (unit)', () => {
       reason: 'No IGDB game matched the title',
     });
 
-    await h.pipeline.run(makeJob());
+    await h.pipeline.run(makeRun());
 
     const outcome = (
       h.jobs.commitImportBatch.mock.calls[0] as [number, ImportBatchOutcome]
@@ -461,7 +456,7 @@ describe('PhotoImportPipelineService (unit)', () => {
     });
     h.jobs.resolvePlatformId.mockResolvedValue(null);
 
-    const result = await h.pipeline.run(makeJob());
+    const result = await h.pipeline.run(makeRun());
 
     expect(h.games).toHaveLength(0);
     // The platform-seed gap is surfaced for review, never silently dropped,
@@ -491,7 +486,7 @@ describe('PhotoImportPipelineService (unit)', () => {
       provenance: 'catalog',
     });
 
-    await h.pipeline.run(makeJob());
+    await h.pipeline.run(makeRun());
 
     const outcome = (
       h.jobs.commitImportBatch.mock.calls[0] as [number, ImportBatchOutcome]
@@ -517,7 +512,7 @@ describe('PhotoImportPipelineService (unit)', () => {
       provenance: 'photo',
     });
 
-    await h.pipeline.run(makeJob());
+    await h.pipeline.run(makeRun());
 
     const outcome = (
       h.jobs.commitImportBatch.mock.calls[0] as [number, ImportBatchOutcome]
@@ -534,8 +529,8 @@ describe('PhotoImportPipelineService (unit)', () => {
       new VisionProviderError('bad_response'),
     );
 
-    await expect(h.pipeline.run(makeJob(0, 3))).rejects.toThrow(
-      UnrecoverableError,
+    await expect(h.pipeline.run(makeRun(0, 3))).rejects.toThrow(
+      PermanentImportError,
     );
 
     expect(h.jobs.markFailed).toHaveBeenCalledWith(
@@ -553,8 +548,8 @@ describe('PhotoImportPipelineService (unit)', () => {
       new VisionProviderError('unauthorized'),
     );
 
-    await expect(h.pipeline.run(makeJob(0, 3))).rejects.toThrow(
-      UnrecoverableError,
+    await expect(h.pipeline.run(makeRun(0, 3))).rejects.toThrow(
+      PermanentImportError,
     );
 
     expect(h.jobs.markFailed).toHaveBeenCalledWith(
@@ -581,8 +576,8 @@ describe('PhotoImportPipelineService (unit)', () => {
       reason: 'IGDB rejected the credentials',
     });
 
-    await expect(h.pipeline.run(makeJob(0, 3))).rejects.toThrow(
-      UnrecoverableError,
+    await expect(h.pipeline.run(makeRun(0, 3))).rejects.toThrow(
+      PermanentImportError,
     );
 
     expect(h.queueControl.pauseForConfig).toHaveBeenCalledWith(
@@ -614,8 +609,8 @@ describe('PhotoImportPipelineService (unit)', () => {
       reason: 'MobyGames rejected the credentials',
     });
 
-    await expect(h.pipeline.run(makeJob(0, 3))).rejects.toThrow(
-      UnrecoverableError,
+    await expect(h.pipeline.run(makeRun(0, 3))).rejects.toThrow(
+      PermanentImportError,
     );
 
     expect(h.queueControl.pauseForConfig).toHaveBeenCalledWith(
@@ -641,8 +636,8 @@ describe('PhotoImportPipelineService (unit)', () => {
       new VisionProviderError('bad_response'),
     );
 
-    await expect(h.pipeline.run(makeJob(0, 3))).rejects.toThrow(
-      UnrecoverableError,
+    await expect(h.pipeline.run(makeRun(0, 3))).rejects.toThrow(
+      PermanentImportError,
     );
 
     expect(h.queueControl.pauseForConfig).not.toHaveBeenCalled();
@@ -656,8 +651,8 @@ describe('PhotoImportPipelineService (unit)', () => {
     h.queueControl.pauseForConfig.mockRejectedValue(new Error('redis down'));
     const error = jest.spyOn(Logger.prototype, 'error').mockImplementation();
 
-    await expect(h.pipeline.run(makeJob(0, 3))).rejects.toThrow(
-      UnrecoverableError,
+    await expect(h.pipeline.run(makeRun(0, 3))).rejects.toThrow(
+      PermanentImportError,
     );
 
     expect(h.jobs.markFailed).toHaveBeenCalled();
@@ -681,8 +676,8 @@ describe('PhotoImportPipelineService (unit)', () => {
       });
     });
 
-    await expect(h.pipeline.run(makeJob(2, 3))).rejects.toThrow(
-      UnrecoverableError,
+    await expect(h.pipeline.run(makeRun(2, 3))).rejects.toThrow(
+      PermanentImportError,
     );
 
     expect(h.games).toHaveLength(10);
@@ -701,12 +696,12 @@ describe('PhotoImportPipelineService (unit)', () => {
       new VisionProviderError('rate_limited'),
     );
 
-    await expect(h.pipeline.run(makeJob(0, 3))).rejects.toThrow(
+    await expect(h.pipeline.run(makeRun(0, 3))).rejects.toThrow(
       VisionProviderError,
     );
     expect(h.jobs.markFailed).not.toHaveBeenCalled();
 
-    await expect(h.pipeline.run(makeJob(2, 3))).rejects.toThrow(
+    await expect(h.pipeline.run(makeRun(2, 3))).rejects.toThrow(
       VisionProviderError,
     );
     expect(h.jobs.markFailed).toHaveBeenCalledWith(
@@ -723,7 +718,7 @@ describe('PhotoImportPipelineService (unit)', () => {
     h.state.importedCount = 3;
     h.state.unrecognizedCount = 1;
 
-    const result = await h.pipeline.run(makeJob());
+    const result = await h.pipeline.run(makeRun());
 
     expect(result).toEqual({
       recognizedCount: 4,
@@ -733,17 +728,6 @@ describe('PhotoImportPipelineService (unit)', () => {
     expect(h.jobs.markProcessing).not.toHaveBeenCalled();
     expect(h.vision.recognize).not.toHaveBeenCalled();
     expect(h.storage.delete).not.toHaveBeenCalled();
-  });
-
-  it('resolves the job by photoRef when the payload has no importJobId', async () => {
-    const h = createHarness();
-    h.jobs.findJobIdByPhotoRef.mockResolvedValue(null);
-
-    await expect(
-      h.pipeline.run(makeJob(0, 3, { importJobId: undefined })),
-    ).rejects.toThrow(RetryableImportError);
-    expect(h.jobs.findJobIdByPhotoRef).toHaveBeenCalledWith('photo.png');
-    expect(h.jobs.getPipelineJob).not.toHaveBeenCalled();
   });
 
   it('still completes when photo deletion fails', async () => {
@@ -758,7 +742,7 @@ describe('PhotoImportPipelineService (unit)', () => {
     });
     h.storage.delete.mockRejectedValue(new Error('disk full'));
 
-    await expect(h.pipeline.run(makeJob())).resolves.toEqual({
+    await expect(h.pipeline.run(makeRun())).resolves.toEqual({
       recognizedCount: 1,
       importedCount: 1,
       unrecognizedCount: 0,
@@ -780,7 +764,7 @@ describe('PhotoImportPipelineService (unit)', () => {
     );
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
 
-    await expect(h.pipeline.run(makeJob(2, 3))).rejects.toThrow(
+    await expect(h.pipeline.run(makeRun(2, 3))).rejects.toThrow(
       RetryableImportError,
     );
 
@@ -813,7 +797,7 @@ describe('PhotoImportPipelineService (unit)', () => {
     );
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
 
-    await expect(h.pipeline.run(makeJob(0, 3))).rejects.toThrow(
+    await expect(h.pipeline.run(makeRun(0, 3))).rejects.toThrow(
       RetryableImportError,
     );
 
@@ -848,7 +832,7 @@ describe('PhotoImportPipelineService (unit)', () => {
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
 
     // Attempt 1 times out while its only external lookup is still in flight.
-    await expect(h.pipeline.run(makeJob(0, 3))).rejects.toThrow(
+    await expect(h.pipeline.run(makeRun(0, 3))).rejects.toThrow(
       RetryableImportError,
     );
     expect(h.jobs.markFailed).not.toHaveBeenCalled();
@@ -858,7 +842,7 @@ describe('PhotoImportPipelineService (unit)', () => {
     h.resolver.resolve.mockImplementation((item: RecognizedItem) =>
       Promise.resolve({ kind: 'matched', candidate: candidate(item.title) }),
     );
-    await expect(h.pipeline.run(makeJob(1, 3))).resolves.toEqual({
+    await expect(h.pipeline.run(makeRun(1, 3))).resolves.toEqual({
       recognizedCount: 1,
       importedCount: 1,
       unrecognizedCount: 0,
@@ -885,14 +869,13 @@ describe('PhotoImportPipelineService (unit)', () => {
     );
     const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
 
-    await h.pipeline.run(makeJob());
+    await h.pipeline.run(makeRun());
 
     const entry = log.mock.calls
       .map((call) => parseOutcomeLine(call[0]))
       .find((parsed) => parsed !== undefined);
     expect(entry).toMatchObject({
       event: 'photo_import_job',
-      jobId: 'job-1',
       importJobId: 1,
       photoRef: 'photo.png',
       outcome: 'done',
@@ -912,7 +895,7 @@ describe('PhotoImportPipelineService (unit)', () => {
     h.vision.recognize.mockRejectedValue(new VisionProviderError('timeout'));
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
 
-    await expect(h.pipeline.run(makeJob(2, 3))).rejects.toThrow(
+    await expect(h.pipeline.run(makeRun(2, 3))).rejects.toThrow(
       VisionProviderError,
     );
 
@@ -933,7 +916,7 @@ describe('PhotoImportPipelineService (unit)', () => {
     h.state.visionCompletedAt = new Date();
     const log = jest.spyOn(Logger.prototype, 'log').mockImplementation();
 
-    await h.pipeline.run(makeJob());
+    await h.pipeline.run(makeRun());
 
     const entry = log.mock.calls
       .map((call) => parseOutcomeLine(call[0]))
@@ -959,7 +942,7 @@ describe('PhotoImportPipelineService (unit)', () => {
     });
     const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
 
-    await expect(h.pipeline.run(makeJob(0, 3))).rejects.toThrow(
+    await expect(h.pipeline.run(makeRun(0, 3))).rejects.toThrow(
       RetryableImportError,
     );
 
@@ -978,7 +961,6 @@ describe('PhotoImportPipelineService (unit)', () => {
 
   it('formatImportJobOutcome serializes one JSON line and omits an undefined error', () => {
     const line = formatImportJobOutcome({
-      jobId: 'job-1',
       importJobId: 7,
       photoRef: 'p.png',
       outcome: 'done',
@@ -992,7 +974,6 @@ describe('PhotoImportPipelineService (unit)', () => {
 
     expect(JSON.parse(line)).toEqual({
       event: 'photo_import_job',
-      jobId: 'job-1',
       importJobId: 7,
       photoRef: 'p.png',
       outcome: 'done',

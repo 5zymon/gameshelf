@@ -9,15 +9,27 @@ import type { ConfigErrorSource } from './photo-import.types';
 const GENERIC_FAILURE_REASON = 'Photo recognition failed unexpectedly';
 
 /**
- * A pipeline failure that BullMQ should retry: a transient external/DB issue
+ * A pipeline failure the worker should retry: a transient external/DB issue
  * (rate limit, timeout, network blip) rather than a permanent one. Thrown by
- * the pipeline so the processor leaves the job `processing` between attempts
- * and only `markFailed`s on the last attempt.
+ * the pipeline so the worker leaves the row `processing` between attempts and
+ * only `markFailed`s on the last attempt.
  */
 export class RetryableImportError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'RetryableImportError';
+  }
+}
+
+/**
+ * A failure the worker must not retry (ADR-005; replaces BullMQ's
+ * UnrecoverableError). The pipeline already marked the row failed. `cause`
+ * carries the original error for the safe failure reason.
+ */
+export class PermanentImportError extends Error {
+  constructor(message: string, cause?: unknown) {
+    super(message, { cause });
+    this.name = 'PermanentImportError';
   }
 }
 
@@ -65,7 +77,7 @@ const RETRYABLE_VISION_CODES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * True when a BullMQ retry may help. A `RetryableImportError` is always
+ * True when a retry may help. A `RetryableImportError` is always
  * retryable; a `VisionProviderError` only for transient codes.
  */
 export function isRetryableImportError(error: unknown): boolean {

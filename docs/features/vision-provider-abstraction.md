@@ -135,7 +135,7 @@ The prompt requires a list of every distinct game (title, edition, platform,
 confidence) and tells the model not to estimate how many games are in the photo.
 Each provider logs its raw model text once at `Logger.debug` level, truncated by
 `truncateForLog` (cap `RAW_VISION_LOG_LIMIT = 2000` chars); the raw text is
-**never persisted** — no DB write and no addition to the BullMQ job result.
+**never persisted** — no DB write and no addition to the job result.
 
 Malformed output is a boundary concern: the parsers throw only
 `VisionProviderError('bad_response', …)`. Ticket 3.5 catches any error from

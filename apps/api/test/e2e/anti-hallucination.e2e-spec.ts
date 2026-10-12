@@ -1,7 +1,6 @@
 import type { INestApplication } from '@nestjs/common';
 import { existsSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import type { Job } from 'bullmq';
 import { ChainedGameCatalogResolver } from '../../src/game-catalog/chained-game-catalog.resolver';
 import type {
   CatalogResolution,
@@ -11,12 +10,12 @@ import { GameCatalogResolver } from '../../src/game-catalog/game-catalog.resolve
 import { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
 import { PhotoImportHandler } from '../../src/queue/photo-import.handler';
 import { RetryableImportError } from '../../src/queue/photo-import.failure';
-import type { PhotoImportJobData } from '../../src/queue/photo-import.types';
 import type {
   RecognizedItem,
   VisionRecognitionResult,
 } from '../../src/settings/vision/vision-provider';
 import { VisionService } from '../../src/settings/vision/vision.service';
+import { makeRun } from '../helpers/photo-import-queue';
 import { resetDatabase } from '../helpers/reset';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 
@@ -32,20 +31,6 @@ function clearPhotoDir(dir: string): void {
 
 function recognized(title: string): RecognizedItem {
   return { title, edition: null, platform: 'PlayStation 5', confidence: 0.9 };
-}
-
-function makeJob(
-  importJobId: number,
-  photoRef: string,
-  attemptsMade = 0,
-  attempts = 3,
-): Job<PhotoImportJobData> {
-  return {
-    id: `e2e-${String(importJobId)}`,
-    attemptsMade,
-    opts: { attempts },
-    data: { photoRef, importJobId },
-  } as unknown as Job<PhotoImportJobData>;
 }
 
 type ResolveMock = jest.Mock<Promise<CatalogResolution>, [RecognizedItem]>;
@@ -145,7 +130,7 @@ describe('Anti-hallucination validation (e2e)', () => {
 
     const result = await app
       .get(PhotoImportHandler)
-      .handle(makeJob(id, photoRef));
+      .handle(makeRun(id, photoRef));
 
     expect(result).toEqual({
       recognizedCount: 1,
@@ -208,7 +193,7 @@ describe('Anti-hallucination validation (e2e)', () => {
 
     const result = await app
       .get(PhotoImportHandler)
-      .handle(makeJob(id, photoRef));
+      .handle(makeRun(id, photoRef));
 
     expect(result).toEqual({
       recognizedCount: 1,
@@ -246,7 +231,7 @@ describe('Anti-hallucination validation (e2e)', () => {
     });
 
     await expect(
-      app.get(PhotoImportHandler).handle(makeJob(id, photoRef, 0, 3)),
+      app.get(PhotoImportHandler).handle(makeRun(id, photoRef, 0, 3)),
     ).rejects.toThrow(RetryableImportError);
 
     // Not recognized as a permanent miss: no Game, no UnrecognizedItem, and the

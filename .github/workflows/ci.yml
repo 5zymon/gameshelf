@@ -49,20 +49,6 @@ jobs:
           --health-timeout=5s
           --health-retries=20
           --health-start-period=30s
-      # Throwaway Redis for the BullMQ photo-import queue (ADR-002). Pinned
-      # major.minor, with AOF persistence and noeviction as ADR-002 requires.
-      # Same flags as docker-compose.yml so CI exercises the same Redis as dev.
-      redis:
-        image: redis:7.4
-        ports:
-          - 6379:6379
-        command: redis-server --appendonly yes --maxmemory-policy noeviction
-        options: >-
-          --health-cmd="redis-cli ping"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=20
-          --health-start-period=5s
     env:
       # Throwaway credentials — the container is discarded with the run.
       # Same shape as .env.example:35 (explicit ?charset=utf8mb4).
@@ -116,8 +102,6 @@ jobs:
       - name: Test
         env:
           DATABASE_TEST_URL: mysql://gameshelf:gameshelf@127.0.0.1:3306/gameshelf_test?charset=utf8mb4
-          REDIS_HOST: 127.0.0.1
-          REDIS_PORT: 6379
         run: npm run test
 
       # Migration check against a real (throwaway) database:

@@ -131,7 +131,7 @@ Setup:
 
 ```bash
 cp .env.example .env      # fill SESSION_SECRET (>=32 chars), DB; leave CUSTOM_API_KEY commented for step 3
-docker compose up -d mysql redis
+docker compose up -d mysql
 npm run db:deploy
 npm run dev               # API :3001, web :3000
 ```

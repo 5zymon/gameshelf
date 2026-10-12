@@ -1,46 +1,47 @@
-import type { DefaultJobOptions, WorkerOptions } from 'bullmq';
 import {
-  IMPORT_JOB_LOCK_DURATION_MS,
-  IMPORT_JOB_LOCK_RENEW_TIME_MS,
-  IMPORT_JOB_MAX_STALLED_COUNT,
-  IMPORT_JOB_STALLED_INTERVAL_MS,
+  IMPORT_JOB_LEASE_MS,
   IMPORT_MAX_ATTEMPTS,
+  IMPORT_QUEUE_POLL_INTERVAL_MS,
   IMPORT_RETRY_BACKOFF_MS,
+  IMPORT_STALL_CHECK_INTERVAL_MS,
+  IMPORT_WORKER_SHUTDOWN_GRACE_MS,
 } from '../import-jobs/import-pipeline.options';
-import { PHOTO_IMPORT_CONCURRENCY } from './queue.constants';
 
-/**
- * Job options every photo import inherits (ticket 3.7), applied once via
- * `registerQueue`'s `defaultJobOptions` instead of per `add()` call.
- */
-export function photoImportDefaultJobOptions(): DefaultJobOptions {
-  return {
-    attempts: IMPORT_MAX_ATTEMPTS,
-    backoff: { type: 'exponential', delay: IMPORT_RETRY_BACKOFF_MS },
-  };
+/** DI token: tests override it via createTestApp([{ provide, useValue }]). */
+export const PHOTO_IMPORT_QUEUE_OPTIONS = Symbol('PHOTO_IMPORT_QUEUE_OPTIONS');
+
+/** Timings and budget for the in-process MySQL-backed photo-import worker (ADR-005). */
+export interface PhotoImportQueueOptions {
+  /** Start polling on application bootstrap. Specs that only observe enqueueing pass false. */
+  autoStart: boolean;
+  pollIntervalMs: number;
+  leaseMs: number;
+  stallCheckIntervalMs: number;
+  retryBackoffMs: number;
+  maxAttempts: number;
+  shutdownGraceMs: number;
 }
 
 /**
- * Worker options for the single photo-import worker (ticket 3.7).
- *
- * `lockDuration` deliberately exceeds `IMPORT_JOB_TIMEOUT_MS`, so a live job's
- * lock cannot expire mid-flight; a killed worker's lock therefore expires only
- * after the whole timeout has elapsed, and the stalled check re-queues it.
- *
- * `overrides` exists so tests can shrink the timings; production never passes
- * it. The return type omits `connection` because BullMQ 6 requires it on a raw
- * `Worker` but `@Processor` supplies it (Nest's worker-options parameter is
- * `Omit<WorkerOptions, 'connection'> & { connection?: ... }`).
+ * Worker options, applied once at module registration. `overrides` exists so
+ * tests can shrink the timings; production never passes it.
  */
-export function photoImportWorkerOptions(
-  overrides: Partial<WorkerOptions> = {},
-): Omit<WorkerOptions, 'connection'> {
+export function photoImportQueueOptions(
+  overrides: Partial<PhotoImportQueueOptions> = {},
+): PhotoImportQueueOptions {
   return {
-    concurrency: PHOTO_IMPORT_CONCURRENCY,
-    lockDuration: IMPORT_JOB_LOCK_DURATION_MS,
-    lockRenewTime: IMPORT_JOB_LOCK_RENEW_TIME_MS,
-    stalledInterval: IMPORT_JOB_STALLED_INTERVAL_MS,
-    maxStalledCount: IMPORT_JOB_MAX_STALLED_COUNT,
+    autoStart: true,
+    pollIntervalMs: IMPORT_QUEUE_POLL_INTERVAL_MS,
+    leaseMs: IMPORT_JOB_LEASE_MS,
+    stallCheckIntervalMs: IMPORT_STALL_CHECK_INTERVAL_MS,
+    retryBackoffMs: IMPORT_RETRY_BACKOFF_MS,
+    maxAttempts: IMPORT_MAX_ATTEMPTS,
+    shutdownGraceMs: IMPORT_WORKER_SHUTDOWN_GRACE_MS,
     ...overrides,
   };
+}
+
+/** Exponential backoff matching BullMQ's: base · 2^(attemptsMade − 1) → 5 s, 10 s. */
+export function retryDelayMs(attemptsMade: number, baseMs: number): number {
+  return baseMs * 2 ** Math.max(0, attemptsMade - 1);
 }

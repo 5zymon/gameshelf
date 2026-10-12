@@ -40,5 +40,5 @@ The CLI and bootstrap behaviour are specified in the bundle:
 # Notes
 
 - The **durable data directory** check (ADR-001) is a human decision the app cannot perform for you; it is the last row of [Operational checks](../../../README.md#operational-checks).
-- Backups land in `backups/` (gitignored). Never back up `gameshelf_shadow` / `gameshelf_test`, and back up the Redis queue only to preserve in-flight jobs (it is ephemeral by design, ADR-002).
+- Backups land in `backups/` (gitignored). Never back up `gameshelf_shadow` / `gameshelf_test`; import jobs are part of the MySQL backup.
 - A restore loads a dump into a **fresh, empty** `gameshelf` database; the committed Prisma migrations are not needed for a restore because the dump already contains the schema.

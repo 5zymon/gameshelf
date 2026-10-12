@@ -1,14 +1,9 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import {
   BadRequestException,
   Injectable,
-  Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import { randomUUID } from 'node:crypto';
-import type { PhotoImportJobData } from '../queue/photo-import.types';
-import { PHOTO_IMPORT_QUEUE } from '../queue/queue.constants';
 import { LlmSettingsService } from '../settings/llm-settings.service';
 import type { StartImportUploadResponseModel } from './dto/import-upload-response.model';
 import { ImportJobsService } from './import-jobs.service';
@@ -49,19 +44,16 @@ export function parseDeclaredCounts(
 
 /**
  * Accepts a multi-photo upload and returns immediately: every photo is written
- * to ephemeral storage, gets one `queued` `ImportJob` row, and is enqueued as
- * one BullMQ `'photo'` job. No recognition/LLM work happens here.
+ * to ephemeral storage and gets one `queued`, immediately runnable `ImportJob`
+ * row (the row is the queue entry, ADR-005), which wakes the in-process worker.
+ * No recognition/LLM work happens here.
  */
 @Injectable()
 export class ImportUploadService {
-  private readonly logger = new Logger(ImportUploadService.name);
-
   constructor(
     private readonly jobs: ImportJobsService,
     private readonly storage: PhotoStorageService,
     private readonly settings: LlmSettingsService,
-    @InjectQueue(PHOTO_IMPORT_QUEUE)
-    private readonly queue: Queue<PhotoImportJobData>,
   ) {}
 
   async startUpload(
@@ -91,49 +83,15 @@ export class ImportUploadService {
         declaredCount,
         photoRef,
         batchId,
+        enqueue: true,
       });
-      let bullId: string;
-      try {
-        const job = await this.queue.add('photo', {
-          photoRef,
-          declaredCount,
-          importJobId: row.id,
-        });
-        bullId = String(job.id);
-      } catch {
-        await this.jobs.markFailed(row.id, 'Failed to enqueue the import job');
-        throw new ServiceUnavailableException(
-          'Could not enqueue the photo import; please retry',
-        );
-      }
       jobs.push({
         id: row.id,
-        jobId: bullId,
+        jobId: String(row.id),
         status: row.status,
         declaredCount,
       });
-      await this.setBullJobIdSafely(row.id, bullId);
     }
     return { batchId, jobs };
-  }
-
-  /**
-   * Records the BullMQ id on the row so the read API can fetch live state.
-   * Best-effort: a failure here must not fail the upload (the job is already
-   * enqueued and the durable row already exists).
-   */
-  private async setBullJobIdSafely(
-    jobId: number,
-    bullJobId: string,
-  ): Promise<void> {
-    try {
-      await this.jobs.setBullJobId(jobId, bullJobId);
-    } catch (error) {
-      this.logger.warn(
-        `Failed to store BullMQ id for import job ${String(jobId)}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
   }
 }

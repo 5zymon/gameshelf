@@ -1,9 +1,6 @@
-import { getQueueToken } from '@nestjs/bullmq';
 import type { INestApplication } from '@nestjs/common';
 import { existsSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Queue, UnrecoverableError } from 'bullmq';
-import type { Job } from 'bullmq';
 import type {
   CatalogCandidate,
   CatalogResolution,
@@ -14,23 +11,25 @@ import {
   type ImportBatchOutcome,
 } from '../../src/import-jobs/import-jobs.service';
 import { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
+import {
+  PermanentImportError,
+  RetryableImportError,
+} from '../../src/queue/photo-import.failure';
 import { PhotoImportHandler } from '../../src/queue/photo-import.handler';
-import { RetryableImportError } from '../../src/queue/photo-import.failure';
-import type { PhotoImportJobData } from '../../src/queue/photo-import.types';
-import { PHOTO_IMPORT_QUEUE } from '../../src/queue/queue.constants';
+import {
+  PhotoImportQueue,
+  runnableNowData,
+} from '../../src/queue/photo-import.queue';
+import { QueueControlService } from '../../src/queue/queue-control.service';
 import type {
   RecognizedItem,
   VisionRecognitionResult,
 } from '../../src/settings/vision/vision-provider';
 import { VisionService } from '../../src/settings/vision/vision.service';
+import { makeRun } from '../helpers/photo-import-queue';
 import { resetDatabase } from '../helpers/reset';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 
-const connection = {
-  host: process.env.REDIS_HOST ?? 'localhost',
-  port: Number(process.env.REDIS_PORT ?? 6379),
-};
-const queuePrefix = process.env.REDIS_QUEUE_PREFIX ?? 'bull-e2e';
 const E2E_PHOTO_DIR_SUFFIX = 'gameshelf-import-photos-e2e';
 const PLATFORM_IGDB_ID = 167;
 
@@ -98,24 +97,9 @@ function candidate(title: string): CatalogCandidate {
   };
 }
 
-function makeJob(
-  importJobId: number,
-  photoRef: string,
-  attemptsMade = 0,
-  attempts = 3,
-): Job<PhotoImportJobData> {
-  return {
-    id: `e2e-${String(importJobId)}`,
-    attemptsMade,
-    opts: { attempts },
-    data: { photoRef, importJobId },
-  } as unknown as Job<PhotoImportJobData>;
-}
-
 describe('Photo import pipeline (e2e)', () => {
   let test: TestApp;
   let app: INestApplication;
-  let queue: Queue;
   let photoDir: string;
   let vision: { recognize: jest.Mock };
   let resolver: { resolve: jest.Mock };
@@ -137,14 +121,10 @@ describe('Photo import pipeline (e2e)', () => {
     ]);
     app = test.app;
     photoDir = app.get(PhotoStorageService).directory;
-    queue = new Queue(PHOTO_IMPORT_QUEUE, { connection, prefix: queuePrefix });
   });
 
   beforeEach(async () => {
     await resetDatabase(test.prisma);
-    await queue.obliterate({ force: true });
-    // A paused queue must never leak between tests (ticket 3.10).
-    await queue.resume();
     clearPhotoDir(photoDir);
     vision.recognize.mockReset();
     vision.recognize.mockResolvedValue({ items: [], countVisible: null });
@@ -152,7 +132,6 @@ describe('Photo import pipeline (e2e)', () => {
   });
 
   afterAll(async () => {
-    await queue.close();
     await app.close();
     clearPhotoDir(photoDir);
   });
@@ -196,7 +175,7 @@ describe('Photo import pipeline (e2e)', () => {
 
     const result = await app
       .get(PhotoImportHandler)
-      .handle(makeJob(id, photoRef));
+      .handle(makeRun(id, photoRef));
 
     expect(result).toEqual({
       recognizedCount: 12,
@@ -228,8 +207,8 @@ describe('Photo import pipeline (e2e)', () => {
     );
     const handler = app.get(PhotoImportHandler);
 
-    await handler.handle(makeJob(id, photoRef));
-    const second = await handler.handle(makeJob(id, photoRef));
+    await handler.handle(makeRun(id, photoRef));
+    const second = await handler.handle(makeRun(id, photoRef));
 
     expect(await test.prisma.game.count()).toBe(3);
     expect(second).toEqual({
@@ -253,7 +232,7 @@ describe('Photo import pipeline (e2e)', () => {
 
     const result = await app
       .get(PhotoImportHandler)
-      .handle(makeJob(id, photoRef));
+      .handle(makeRun(id, photoRef));
 
     expect(await test.prisma.game.count()).toBe(0);
     expect(await test.prisma.unrecognizedItem.count()).toBe(2);
@@ -295,7 +274,7 @@ describe('Photo import pipeline (e2e)', () => {
     });
 
     await expect(
-      app.get(PhotoImportHandler).handle(makeJob(id, photoRef, 2, 3)),
+      app.get(PhotoImportHandler).handle(makeRun(id, photoRef, 2, 3)),
     ).rejects.toThrow('worker killed mid-job');
 
     // The first batch (10) committed before the failure; the second did not.
@@ -335,7 +314,7 @@ describe('Photo import pipeline (e2e)', () => {
     });
 
     await expect(
-      app.get(PhotoImportHandler).handle(makeJob(id, photoRef, 0, 3)),
+      app.get(PhotoImportHandler).handle(makeRun(id, photoRef, 0, 3)),
     ).rejects.toThrow(RetryableImportError);
 
     const midway = await test.prisma.importJob.findUniqueOrThrow({
@@ -351,7 +330,7 @@ describe('Photo import pipeline (e2e)', () => {
     bAttempt = 1;
     const result = await app
       .get(PhotoImportHandler)
-      .handle(makeJob(id, photoRef, 1, 3));
+      .handle(makeRun(id, photoRef, 1, 3));
 
     expect(vision.recognize).toHaveBeenCalledTimes(1);
     expect(await test.prisma.game.count()).toBe(3);
@@ -370,7 +349,7 @@ describe('Photo import pipeline (e2e)', () => {
       candidate: candidate('Validated Title'),
     });
 
-    await app.get(PhotoImportHandler).handle(makeJob(id, photoRef));
+    await app.get(PhotoImportHandler).handle(makeRun(id, photoRef));
 
     expect(resolver.resolve).toHaveBeenCalledTimes(1);
     const game = await test.prisma.game.findFirstOrThrow();
@@ -397,15 +376,15 @@ describe('Photo import pipeline (e2e)', () => {
     });
 
     await expect(
-      app.get(PhotoImportHandler).handle(makeJob(id, photoRef, 0, 3)),
-    ).rejects.toThrow(UnrecoverableError);
+      app.get(PhotoImportHandler).handle(makeRun(id, photoRef, 0, 3)),
+    ).rejects.toThrow(PermanentImportError);
 
     const job = await test.prisma.importJob.findUniqueOrThrow({
       where: { id },
     });
     expect(job.status).toBe('failed');
     expect(job.errorMessage).toBe('IGDB rejected the credentials');
-    expect(await queue.isPaused()).toBe(true);
+    expect(await app.get(QueueControlService).isPaused()).toBe(true);
     const state = await test.prisma.importQueueState.findUnique({
       where: { id: 1 },
     });
@@ -416,8 +395,8 @@ describe('Photo import pipeline (e2e)', () => {
     expect(await test.prisma.game.count()).toBe(0);
   });
 
-  describe('ticket 3.9 retry-semantics (ADR-002 gaps)', () => {
-    it('processes an enqueued photo through the real BullMQ worker with stubbed vision and catalog', async () => {
+  describe('ticket 3.9 retry-semantics (ADR-005)', () => {
+    it('processes an enqueued photo through the in-process worker with stubbed vision and catalog', async () => {
       const { id, photoRef } = await seedJob();
       vision.recognize.mockResolvedValue({
         items: [recognized('A'), recognized('B')],
@@ -427,12 +406,19 @@ describe('Photo import pipeline (e2e)', () => {
         Promise.resolve({ kind: 'matched', candidate: candidate(item.title) }),
       );
 
-      const appQueue = test.app.get<Queue<PhotoImportJobData>>(
-        getQueueToken(PHOTO_IMPORT_QUEUE),
+      // Make the row runnable and wake the worker (the real enqueue path).
+      await test.prisma.importJob.update({
+        where: { id },
+        data: runnableNowData(),
+      });
+      test.app.get(PhotoImportQueue).wake();
+
+      await waitFor(
+        async () =>
+          (await test.prisma.importJob.findUniqueOrThrow({ where: { id } }))
+            .status === 'done',
+        15_000,
       );
-      const job = await appQueue.add('photo', { photoRef, importJobId: id });
-      await waitFor(async () => (await job.getState()) === 'completed', 15_000);
-      const finished = await appQueue.getJob(String(job.id));
 
       expect(await test.prisma.game.count()).toBe(2);
       expect(
@@ -447,14 +433,11 @@ describe('Photo import pipeline (e2e)', () => {
       expect(row.recognizedCount).toBe(2);
       expect(row.importedCount).toBe(2);
       expect(row.unrecognizedCount).toBe(0);
+      expect(row.attempts).toBe(1);
+      expect(row.leaseUntil).toBeNull();
       expect(existsSync(join(photoDir, photoRef))).toBe(false);
       expect(vision.recognize).toHaveBeenCalledTimes(1);
       expect(resolver.resolve).toHaveBeenCalledTimes(2);
-      expect(finished?.returnvalue).toEqual({
-        recognizedCount: 2,
-        importedCount: 2,
-        unrecognizedCount: 0,
-      });
     }, 20_000);
 
     it('commits the first batch of 10 when a later title fails, out of 20 recognized', async () => {
@@ -479,7 +462,7 @@ describe('Photo import pipeline (e2e)', () => {
       });
 
       await expect(
-        app.get(PhotoImportHandler).handle(makeJob(id, photoRef, 2, 3)),
+        app.get(PhotoImportHandler).handle(makeRun(id, photoRef, 2, 3)),
       ).rejects.toThrow('worker killed mid-job');
 
       // The first batch (10) committed; the second never reached its commit, so
@@ -629,7 +612,7 @@ describe('Photo import pipeline (e2e)', () => {
 
       const result = await app
         .get(PhotoImportHandler)
-        .handle(makeJob(id, photoRef));
+        .handle(makeRun(id, photoRef));
 
       expect(result).toEqual({
         recognizedCount: 12,
@@ -677,7 +660,7 @@ describe('Photo import pipeline (e2e)', () => {
 
       const result = await app
         .get(PhotoImportHandler)
-        .handle(makeJob(id, photoRef));
+        .handle(makeRun(id, photoRef));
 
       expect(result).toEqual({
         recognizedCount: 2,
@@ -708,7 +691,7 @@ describe('Photo import pipeline (e2e)', () => {
 
       const result = await app
         .get(PhotoImportHandler)
-        .handle(makeJob(id, photoRef));
+        .handle(makeRun(id, photoRef));
 
       expect(result).toEqual({
         recognizedCount: 3,
@@ -746,7 +729,7 @@ describe('Photo import pipeline (e2e)', () => {
 
       const result = await app
         .get(PhotoImportHandler)
-        .handle(makeJob(id, photoRef));
+        .handle(makeRun(id, photoRef));
 
       expect(result).toEqual({
         recognizedCount: 2,

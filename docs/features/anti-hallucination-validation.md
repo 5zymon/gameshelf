@@ -46,7 +46,7 @@ either way; see [MobyGames Fallback](/mobygames-fallback.md).
 game". Treating it as a miss would permanently drop a real title while a source
 is merely throttled or down. So the chain returns the first `transient` without
 consulting later sources, and the pipeline leaves the item `pending` and throws
-`RetryableImportError` so BullMQ retries it. Only an `unrecognized` outcome —
+`RetryableImportError` so the worker retries it. Only an `unrecognized` outcome —
 every configured source answered "no candidate" — marks the title permanently
 unrecognized.
 

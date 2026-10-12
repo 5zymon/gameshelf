@@ -1,49 +1,57 @@
 import {
-  IMPORT_JOB_LOCK_DURATION_MS,
-  IMPORT_JOB_LOCK_RENEW_TIME_MS,
-  IMPORT_JOB_MAX_STALLED_COUNT,
-  IMPORT_JOB_STALLED_INTERVAL_MS,
+  IMPORT_JOB_LEASE_MS,
   IMPORT_JOB_TIMEOUT_MS,
   IMPORT_MAX_ATTEMPTS,
+  IMPORT_QUEUE_POLL_INTERVAL_MS,
   IMPORT_RETRY_BACKOFF_MS,
+  IMPORT_STALL_CHECK_INTERVAL_MS,
+  IMPORT_WORKER_SHUTDOWN_GRACE_MS,
 } from '../../src/import-jobs/import-pipeline.options';
-import { PHOTO_IMPORT_CONCURRENCY } from '../../src/queue/queue.constants';
 import {
-  photoImportDefaultJobOptions,
-  photoImportWorkerOptions,
+  photoImportQueueOptions,
+  retryDelayMs,
 } from '../../src/queue/queue.options';
 
 describe('photo-import queue options (unit)', () => {
-  it('defaults jobs to exponential backoff with the configured attempts', () => {
-    expect(photoImportDefaultJobOptions()).toEqual({
-      attempts: IMPORT_MAX_ATTEMPTS,
-      backoff: { type: 'exponential', delay: IMPORT_RETRY_BACKOFF_MS },
+  it('defaults to the pinned constants', () => {
+    expect(photoImportQueueOptions()).toEqual({
+      autoStart: true,
+      pollIntervalMs: IMPORT_QUEUE_POLL_INTERVAL_MS,
+      leaseMs: IMPORT_JOB_LEASE_MS,
+      stallCheckIntervalMs: IMPORT_STALL_CHECK_INTERVAL_MS,
+      retryBackoffMs: IMPORT_RETRY_BACKOFF_MS,
+      maxAttempts: IMPORT_MAX_ATTEMPTS,
+      shutdownGraceMs: IMPORT_WORKER_SHUTDOWN_GRACE_MS,
     });
+    expect(IMPORT_QUEUE_POLL_INTERVAL_MS).toBe(1_000);
+    expect(IMPORT_STALL_CHECK_INTERVAL_MS).toBe(30_000);
+    expect(IMPORT_RETRY_BACKOFF_MS).toBe(5_000);
+    expect(IMPORT_MAX_ATTEMPTS).toBe(3);
+    expect(IMPORT_WORKER_SHUTDOWN_GRACE_MS).toBe(5_000);
   });
 
-  it('configures lock, stall and concurrency for the worker', () => {
-    const options = photoImportWorkerOptions();
-
-    expect(options.concurrency).toBe(PHOTO_IMPORT_CONCURRENCY);
-    expect(options.lockDuration).toBe(IMPORT_JOB_LOCK_DURATION_MS);
-    expect(options.lockRenewTime).toBe(IMPORT_JOB_LOCK_RENEW_TIME_MS);
-    expect(options.stalledInterval).toBe(IMPORT_JOB_STALLED_INTERVAL_MS);
-    expect(options.maxStalledCount).toBe(IMPORT_JOB_MAX_STALLED_COUNT);
+  it('keeps the lease alive past the whole job timeout', () => {
+    // A lease shorter than the permitted job would let the stall recovery pick
+    // the row up mid-flight (duplicate processing).
+    expect(IMPORT_JOB_LEASE_MS).toBeGreaterThan(IMPORT_JOB_TIMEOUT_MS);
   });
 
-  it('keeps the lock alive past the whole job timeout', () => {
-    const options = photoImportWorkerOptions();
+  it('lets tests shrink the timings without dropping the other defaults', () => {
+    const options = photoImportQueueOptions({
+      autoStart: false,
+      pollIntervalMs: 20,
+      leaseMs: 300,
+    });
 
-    // A lock shorter than the permitted job would let a second worker pick the
-    // job up mid-flight (duplicate processing).
-    expect(options.lockDuration).toBeGreaterThan(IMPORT_JOB_TIMEOUT_MS);
-    expect(options.lockRenewTime).toBeLessThan(IMPORT_JOB_LOCK_DURATION_MS);
+    expect(options.autoStart).toBe(false);
+    expect(options.pollIntervalMs).toBe(20);
+    expect(options.leaseMs).toBe(300);
+    expect(options.maxAttempts).toBe(IMPORT_MAX_ATTEMPTS);
   });
 
-  it('lets tests shrink the timings without dropping the pinned concurrency', () => {
-    const options = photoImportWorkerOptions({ lockDuration: 300 });
-
-    expect(options.lockDuration).toBe(300);
-    expect(options.concurrency).toBe(PHOTO_IMPORT_CONCURRENCY);
+  it('computes exponential backoff base · 2^(attemptsMade − 1)', () => {
+    expect(retryDelayMs(1, 5_000)).toBe(5_000);
+    expect(retryDelayMs(2, 5_000)).toBe(10_000);
+    expect(retryDelayMs(0, 5_000)).toBe(5_000);
   });
 });

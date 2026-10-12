@@ -8,6 +8,7 @@ import {
   ConfigurationImportError,
   configErrorSource,
   isRetryableImportError,
+  PermanentImportError,
   photoImportFailureReason,
   RetryableImportError,
 } from '../../src/queue/photo-import.failure';
@@ -168,5 +169,21 @@ describe('isRetryableImportError (unit)', () => {
     expect(
       isRetryableImportError(new VisionProviderError('unauthorized')),
     ).toBe(false);
+  });
+
+  it('treats a PermanentImportError as non-retryable', () => {
+    expect(isRetryableImportError(new PermanentImportError('x'))).toBe(false);
+  });
+});
+
+describe('PermanentImportError (unit)', () => {
+  it('keeps the message, the name and the wrapped cause', () => {
+    const cause = new Error('worker killed mid-job');
+    const error = new PermanentImportError('worker killed mid-job', cause);
+
+    expect(error.message).toBe('worker killed mid-job');
+    expect(error.name).toBe('PermanentImportError');
+    expect(error.cause).toBe(cause);
+    expect(error).toBeInstanceOf(Error);
   });
 });

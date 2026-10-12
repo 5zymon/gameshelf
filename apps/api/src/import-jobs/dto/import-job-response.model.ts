@@ -62,13 +62,6 @@ export class ImportJobModel {
   })
   batchId!: string | null;
 
-  @ApiPropertyOptional({
-    nullable: true,
-    description: 'BullMQ job id backing this run (refreshed on retry)',
-    example: '17',
-  })
-  bullJobId!: string | null;
-
   @ApiProperty({
     description: 'Unresolved titles (recognized, neither imported nor flagged)',
     example: 1,
@@ -86,14 +79,6 @@ export class ImportJobModel {
     example: false,
   })
   declaredCountMismatch!: boolean;
-
-  @ApiPropertyOptional({
-    nullable: true,
-    description:
-      'Raw BullMQ state; null when terminal/unknown/Redis unavailable',
-    example: 'active',
-  })
-  queueState!: string | null;
 }
 
 /**
@@ -218,13 +203,6 @@ export class ImportJobDetailModel {
   })
   batchId!: string | null;
 
-  @ApiPropertyOptional({
-    nullable: true,
-    description: 'BullMQ job id backing this run (refreshed on retry)',
-    example: '17',
-  })
-  bullJobId!: string | null;
-
   @ApiProperty({
     description: 'Unresolved titles (recognized, neither imported nor flagged)',
     example: 1,
@@ -242,14 +220,6 @@ export class ImportJobDetailModel {
     example: false,
   })
   declaredCountMismatch!: boolean;
-
-  @ApiPropertyOptional({
-    nullable: true,
-    description:
-      'Raw BullMQ state; null when terminal/unknown/Redis unavailable',
-    example: 'active',
-  })
-  queueState!: string | null;
 
   @ApiProperty({ type: [UnrecognizedItemModel] })
   unrecognizedItems!: UnrecognizedItemModel[];

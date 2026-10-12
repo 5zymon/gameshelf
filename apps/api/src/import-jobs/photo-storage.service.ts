@@ -22,7 +22,7 @@ import {
 /**
  * Writes uploaded photos to an ephemeral directory (never a served gallery).
  * The returned value is the bare filename stored in `ImportJob.photoRef`; the
- * worker resolves it against the same directory (ADR-002: the worker shares
+ * worker resolves it against the same directory (ADR-005: the worker shares
  * the API's local filesystem).
  */
 @Injectable()

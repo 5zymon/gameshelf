@@ -1,16 +1,18 @@
 ---
 type: Feature
 title: Photo Import Pipeline
-description: The BullMQ worker's per-photo pipeline — one vision call, external validation, per-batch MySQL transactions, retry-only-unresolved, and photo deletion after completion.
-tags: [import, worker, bullmq, igdb, vision]
+description: The in-process MySQL-backed worker's per-photo pipeline — one vision call, external validation, per-batch MySQL transactions, retry-only-unresolved, and photo deletion after completion.
+tags: [import, worker, mysql-queue, igdb, vision]
 status: draft
 generated: { by: opencode/home-model, at: 2026-10-10T19:55:01Z }
 ---
 
 # Overview
 
-This is the ADR-002 unit of work: what actually happens to one uploaded photo
-after [Import Photo Upload API](/import-upload-api.md) queues it. The BullMQ
+This is the ADR-005 unit of work: what actually happens to one uploaded photo
+after [Import Photo Upload API](/import-upload-api.md) queues it. The in-process
+`PhotoImportWorker` claims an `import_jobs` row
+([ADR-005 — MySQL Photo-import Queue](/adr-005-mysql-photo-import-queue.md)) and
 `PhotoImportHandler` delegates to `PhotoImportPipelineService`, which:
 
 1. calls the vision provider **once** for the photo;
@@ -46,7 +48,7 @@ deleted game).
 # Algorithm
 
 ```
-jobId    = payload.importJobId ?? lookup by photoRef
+jobId    = run.importJobId
 state    = getPipelineJob(jobId)          # terminal -> return stored counts
 markProcessing(jobId)
 outcome  = 'failed'
@@ -70,13 +72,13 @@ catch error:
   counts = summarizeRecognizedItems()            # partial work so far (pending counts as recognized)
   if configErrorSource(error) != null:           # rejected/absent LLM or IGDB credential (3.10)
       markFailed(reason, counts); pauseForConfig(source, reason)
-      throw UnrecoverableError
+      throw PermanentImportError
   if not retryable OR last attempt: markFailed(reason, counts); outcome = 'failed'
   else: outcome = 'retry_scheduled'
-  throw error (UnrecoverableError when permanent)
+  throw error (PermanentImportError when permanent)
 finally:
   log one JSON line: formatImportJobOutcome(
-      { jobId, importJobId, photoRef, outcome, ...counts,
+      { importJobId, photoRef, outcome, ...counts,
         durationMs, visionDurationMs, attempt, maxAttempts [, error] })
 ```
 
@@ -125,24 +127,24 @@ Key properties:
   `RetryableImportError`: it schedules a retry instead of permanently failing a
   job that is actually succeeding.
 - **Retry-only-unresolved.** A transient external failure (IGDB 429/timeout/
-  network) makes the pipeline throw `RetryableImportError`; the job row stays
-  `processing` and BullMQ retries. On re-entry only `pending` items are
+  network) makes the pipeline throw `RetryableImportError`; the row is re-queued
+  with backoff by the worker. On re-entry only `pending` items are
   queried, and the vision marker prevents a second vision call.
 - **Failure counters.** A permanent failure (or the last attempt) persists the
   counters reached so far: `markFailed` receives the same three counts as
   `markCompleted`, computed by `summarizeRecognizedItems` (pending items count
   as recognized). A job whose first batch committed and whose later batch
   failed therefore still reports its imports instead of showing 0.
-- **Permanent failures stop BullMQ.** A non-retryable error is re-thrown as
-  BullMQ's `UnrecoverableError` after `markFailed`, so BullMQ does not schedule
-  the remaining attempts. A `RetryableImportError` is re-thrown unchanged so
-  retries proceed.
+- **Permanent failures stop the worker's retries.** A non-retryable error is
+  re-thrown as `PermanentImportError` after `markFailed`, so the worker fails the
+  row immediately instead of scheduling the remaining attempts. A
+  `RetryableImportError` is re-thrown unchanged so retries proceed.
 - **Configuration errors pause the queue.** A rejected/absent LLM or IGDB
   credential (ticket 3.10) is a distinct `config_error` outcome, not an ordinary
   permanent failure: `resolveBatch` throws `ConfigurationImportError` **before**
   committing the batch, `run` marks the current photo `failed`, calls
   `QueueControlService.pauseForConfig(source, reason)`, and throws
-  `UnrecoverableError`. The single queue is left paused so no further photo
+  `PermanentImportError`. The single queue is left paused so no further photo
   starts, and `configErrorSource()` makes the error non-retryable. See
   [Queue Pause on Configuration Error](/queue-pause-on-config-error.md).
 - **Photo lifecycle.** The photo is deleted after the job reaches a terminal
@@ -158,9 +160,9 @@ Key properties:
   is cancelled at the abort boundary, so it cannot start another external
   lookup, a second vision call, or commit another batch while the retry runs.
   An overlapping stalled re-delivery across two workers is out of scope:
-  concurrency is pinned to 1 (`PHOTO_IMPORT_CONCURRENCY`) and
-  `lockDuration > jobTimeout`, so a live attempt holds its lock for the whole
-  permitted run.
+  concurrency is pinned to 1 (`PHOTO_IMPORT_CONCURRENCY`) and the lease exceeds
+  the job timeout (`IMPORT_JOB_LEASE_MS > IMPORT_JOB_TIMEOUT_MS`), so a live
+  attempt holds its lease for the whole permitted run.
 
 # External validation
 
@@ -291,49 +293,92 @@ ticket 4.4).
 
 # Retry configuration
 
-Job defaults come from the registered queue's `defaultJobOptions`
-(`photoImportDefaultJobOptions()`): BullMQ `attempts: 3` and exponential
-`backoff` (`IMPORT_RETRY_BACKOFF_MS = 5000` → 5 s, then 10 s). Worker options
-(`photoImportWorkerOptions()`, ticket 3.7) bound each attempt:
+The in-process worker's timings and budget come from compile-time constants in
+`import-pipeline.options.ts`, wrapped once into `PhotoImportQueueOptions`
+(`photoImportQueueOptions()`), which is injected under the `PHOTO_IMPORT_QUEUE_OPTIONS`
+token (tests override it to shrink the timings):
 
-| Setting                | Value                 | Constant                         |
-| ---------------------- | --------------------- | -------------------------------- |
-| Concurrency            | 1 (ADR-002)           | `PHOTO_IMPORT_CONCURRENCY`       |
-| Attempts               | 3 total               | `IMPORT_MAX_ATTEMPTS`            |
-| Backoff                | exponential, base 5 s | `IMPORT_RETRY_BACKOFF_MS`        |
-| Per-job timeout        | 420 s                 | `IMPORT_JOB_TIMEOUT_MS`          |
-| Lock duration          | 480 s (> timeout)     | `IMPORT_JOB_LOCK_DURATION_MS`    |
-| Lock renew time        | 240 s                 | `IMPORT_JOB_LOCK_RENEW_TIME_MS`  |
-| Stalled-check interval | 30 s                  | `IMPORT_JOB_STALLED_INTERVAL_MS` |
-| Max stalled recoveries | 2                     | `IMPORT_JOB_MAX_STALLED_COUNT`   |
+| Setting              | Value                 | Constant                          |
+| -------------------- | --------------------- | --------------------------------- |
+| Concurrency          | 1 (ADR-005)           | `PHOTO_IMPORT_CONCURRENCY`        |
+| Attempts             | 3 total               | `IMPORT_MAX_ATTEMPTS`             |
+| Backoff              | exponential, base 5 s | `IMPORT_RETRY_BACKOFF_MS`         |
+| Per-job timeout      | 420 s                 | `IMPORT_JOB_TIMEOUT_MS`           |
+| Lease                | 480 s (> timeout)     | `IMPORT_JOB_LEASE_MS`             |
+| Stall-check interval | 30 s                  | `IMPORT_STALL_CHECK_INTERVAL_MS`  |
+| Poll interval        | 1 s                   | `IMPORT_QUEUE_POLL_INTERVAL_MS`   |
+| Shutdown grace       | 5 s                   | `IMPORT_WORKER_SHUTDOWN_GRACE_MS` |
 
-The **lock outlives the whole permitted job** (`lockDuration > jobTimeout`), so a
-live worker cannot lose its lock mid-job and a second worker can never process
-the same job concurrently. A killed worker's lock stops being renewed and expires
-after at most `lockDuration`; the next stalled check moves the job back to
-`waiting` and re-runs it (recovery within roughly
-`lockDuration + stalledInterval`). Because the pipeline is idempotent, the re-run
-never duplicates a saved game or a second vision call. These settings are
-compile-time constants, not environment variables.
+The worker polls every second and claims the oldest due row in one transaction:
 
-The pipeline marks a job `failed` only on a non-retryable error or on the last
-attempt; until then it stays `processing`. A non-retryable error is re-thrown as
-BullMQ `UnrecoverableError` so BullMQ stops immediately; a `RetryableImportError`
-is re-thrown unchanged so the remaining attempts run. Either way the failure path
-persists the counters reached so far. On timeout the attempt is cancelled
-(`AbortController`) rather than merely abandoned, and `commitImportBatch`
-refuses to write once the job is terminal, so a retry that starts during the
-backoff cannot collide with the previous attempt. `markCompleted` and
-`markFailed` write conditionally from `queued`/`processing` only, so a late
-writer cannot clobber a newer terminal status.
+```sql
+SELECT id FROM import_jobs
+WHERE status = 'queued' AND next_run_at <= now
+ORDER BY id
+LIMIT 1
+FOR UPDATE SKIP LOCKED
+```
+
+The claim marks the row `processing`, increments `attempts` and sets
+`lease_until = now + 480 s`. The **lease outlives the whole permitted job**
+(`IMPORT_JOB_LEASE_MS > IMPORT_JOB_TIMEOUT_MS`), so a live attempt never looks
+stalled and a second claim can never take the same row. There is no renewal: a
+killed worker's lease simply expires, and the stall recovery (on boot and every
+30 s) re-queues the row — recovery within roughly the lease plus the stall-check
+interval. Because the pipeline is idempotent, the re-run never duplicates a saved
+game or a second vision call. **A stalled attempt consumes an attempt**: if the
+row has attempts left it is re-queued with the backoff delay, and once
+`attempts` reaches `IMPORT_MAX_ATTEMPTS` it is marked `failed` with the reason
+`Photo import was interrupted and ran out of attempts`.
+
+The pipeline marks a row `failed` only on a non-retryable error or on the last
+attempt; while a retry is pending the row is `queued` with `next_run_at` in the
+future. A non-retryable error is re-thrown as `PermanentImportError` so the
+worker fails the row immediately; a `RetryableImportError` is re-thrown unchanged
+so the remaining attempts run. Either way the failure path persists the counters
+reached so far. On timeout the attempt is cancelled (`AbortController`) rather
+than merely abandoned, and `commitImportBatch` refuses to write once the row is
+terminal, so a retry that starts during the backoff cannot collide with the
+previous attempt. `markCompleted` and `markFailed` write conditionally from
+`queued`/`processing` only, so a late writer cannot clobber a newer terminal
+status.
 
 A **user-initiated retry** (`POST /import-jobs/:id/retry`, ticket 3.6) resets
-the same failed row to `queued` and enqueues a fresh BullMQ unit with the same
-`importJobId`, so it re-enters exactly this pipeline. It reuses the
-retry-only-unresolved path unchanged: the `vision_completed_at` marker skips a
-second vision call and only `pending` titles are re-resolved, which is why a
-retry never duplicates an already-saved game. See
+the same failed row to `queued` and makes it runnable again — `attempts` is reset
+to 0, `next_run_at` to now — and then wakes the worker, so it re-enters exactly
+this pipeline. It reuses the retry-only-unresolved path unchanged: the
+`vision_completed_at` marker skips a second vision call and only `pending` titles
+are re-resolved, which is why a retry never duplicates an already-saved game. See
 [Import Jobs API](/import-jobs-api.md) for the endpoint contract.
+
+# Queue health
+
+`GET /health/queue` (unauthenticated, `@Public()`) reports the in-process
+worker's readiness and the durable job counts from one `GROUP BY status` over
+`import_jobs`:
+
+```json
+{
+  "status": "ok",
+  "queue": "photo-import",
+  "concurrency": 1,
+  "workerReady": true,
+  "counts": {
+    "queued": 0,
+    "processing": 1,
+    "done": 12,
+    "needs_attention": 1,
+    "failed": 0,
+    "dismissed": 0
+  }
+}
+```
+
+`workerReady` is `true` once the worker has started polling. A failure while
+reading the counts returns `503` with a fixed message (the cause is logged
+server-side), so the endpoint never leaks internals. See the
+[Operator Runbook](/references/runbook.md) and the root `README.md`
+("Operational checks").
 
 # Structured logging
 
@@ -345,7 +390,6 @@ for `failed` / `retry_scheduled`), produced by the pure
 ```json
 {
   "event": "photo_import_job",
-  "jobId": "12",
   "importJobId": 7,
   "photoRef": "….png",
   "outcome": "done",
@@ -359,14 +403,15 @@ for `failed` / `retry_scheduled`), produced by the pure
 }
 ```
 
-Fields: `jobId`, `importJobId`, `photoRef`, `outcome`
+Fields: `importJobId`, `photoRef`, `outcome`
 (`done` | `needs_attention` | `already_terminal` | `retry_scheduled` | `failed`),
 the three counts, `durationMs` (whole attempt), `visionDurationMs` (wall time of
 the single vision call this attempt made — present even when the call threw, so a
 `timeout` shows how long the provider actually ran; omitted when the attempt made
 no vision call because the `vision_completed_at` marker already existed),
-`attempt`, `maxAttempts`, and `error` on a failure/retry. The worker's own
-`onFailed` handler still logs the error stack for a failed job.
+`attempt`, `maxAttempts`, and `error` on a failure/retry. The worker itself logs
+one `warn` line per failed attempt and how it settled it (`retry in N ms`, or
+`failed permanently` / `after N attempts`).
 
 # Out of scope
 

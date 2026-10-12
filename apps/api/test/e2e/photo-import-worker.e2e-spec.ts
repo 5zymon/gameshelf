@@ -1,184 +1,387 @@
-import { Queue, Worker } from 'bullmq';
+import type { INestApplication } from '@nestjs/common';
+import { rmSync } from 'node:fs';
+import { resolve } from 'node:path';
+import type {
+  CatalogCandidate,
+  CatalogResolution,
+} from '../../src/game-catalog/game-catalog.resolver';
+import { GameCatalogResolver } from '../../src/game-catalog/game-catalog.resolver';
+import { ImportJobsService } from '../../src/import-jobs/import-jobs.service';
+import { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
 import {
-  photoImportDefaultJobOptions,
-  photoImportWorkerOptions,
-} from '../../src/queue/queue.options';
-import { PHOTO_IMPORT_QUEUE } from '../../src/queue/queue.constants';
+  PermanentImportError,
+  RetryableImportError,
+} from '../../src/queue/photo-import.failure';
+import { PhotoImportHandler } from '../../src/queue/photo-import.handler';
+import {
+  PhotoImportQueue,
+  runnableNowData,
+} from '../../src/queue/photo-import.queue';
+import type { PhotoImportJobResult } from '../../src/queue/photo-import.types';
+import type {
+  RecognizedItem,
+  VisionRecognitionResult,
+} from '../../src/settings/vision/vision-provider';
+import { VisionService } from '../../src/settings/vision/vision.service';
+import {
+  NO_WORKER,
+  queueOptions,
+  waitFor,
+} from '../helpers/photo-import-queue';
+import { resetDatabase } from '../helpers/reset';
+import { createTestApp, type TestApp } from '../helpers/test-app';
+
+const E2E_PHOTO_DIR_SUFFIX = 'gameshelf-import-photos-e2e';
+const PLATFORM_IGDB_ID = 167;
+
+/** Result a stubbed handler reports: nothing recognized, nothing imported. */
+const OK_RESULT: PhotoImportJobResult = {
+  recognizedCount: 0,
+  importedCount: 0,
+  unrecognizedCount: 0,
+};
+
+function clearPhotoDir(dir: string): void {
+  if (!resolve(dir).endsWith(E2E_PHOTO_DIR_SUFFIX)) {
+    throw new Error(`Refusing to delete photo directory "${dir}"`);
+  }
+  rmSync(dir, { recursive: true, force: true });
+}
+
+function recognized(title: string): RecognizedItem {
+  return { title, edition: null, platform: 'PlayStation 5', confidence: 0.9 };
+}
+
+const EXTERNAL_IDS_BY_TITLE = new Map<string, number>();
 
 /**
- * The connection and key prefix used by this suite's raw producer/worker pair.
- * The `bull-e2e` prefix (test/setup-env.ts) keeps it in its own Redis keyspace,
- * matching the other queue e2e specs.
+ * Deterministic, unique-per-title external id: a real catalog returns one
+ * record per game, so differently-titled fixtures must not share an
+ * `externalId` (the shared identity rule would otherwise link them).
  */
-const connection = {
-  host: process.env.REDIS_HOST ?? 'localhost',
-  port: Number(process.env.REDIS_PORT ?? 6379),
-  maxRetriesPerRequest: null,
-};
-const queuePrefix = process.env.REDIS_QUEUE_PREFIX ?? 'bull-e2e';
+function externalIdFor(title: string): number {
+  const existing = EXTERNAL_IDS_BY_TITLE.get(title);
+  if (existing !== undefined) return existing;
+  const id = EXTERNAL_IDS_BY_TITLE.size + 1;
+  EXTERNAL_IDS_BY_TITLE.set(title, id);
+  return id;
+}
 
-function rawQueue(): Queue {
-  return new Queue(PHOTO_IMPORT_QUEUE, {
-    connection,
-    prefix: queuePrefix,
-  });
+function candidate(title: string): CatalogCandidate {
+  return {
+    externalId: externalIdFor(title),
+    title,
+    releaseYear: 2001,
+    publisher: 'Sony Interactive Entertainment',
+    genre: 'Action',
+    playerCount: null,
+    coverUrl: null,
+    images: [],
+    platforms: [
+      { igdbId: PLATFORM_IGDB_ID, name: 'PlayStation 5', abbreviation: 'PS5' },
+    ],
+    source: 'IGDB',
+    raw: { title },
+  };
 }
 
 async function delay(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function waitFor(
-  predicate: () => boolean | Promise<boolean>,
-  timeoutMs: number,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (await predicate()) {
-      return;
-    }
-    await delay(50);
-  }
-  throw new Error(`condition not met within ${String(timeoutMs)}ms`);
-}
-
 describe('Photo import worker (e2e)', () => {
-  const openWorkers: Worker[] = [];
-  const openQueues: Queue[] = [];
-  let releaseGate: () => void = () => undefined;
+  const openApps: INestApplication[] = [];
+  let test: TestApp;
 
-  function trackWorker(worker: Worker): Worker {
-    openWorkers.push(worker);
-    return worker;
-  }
+  beforeAll(async () => {
+    test = await createTestApp([NO_WORKER]);
+  });
 
-  function trackQueue(queue: Queue): Queue {
-    openQueues.push(queue);
-    return queue;
-  }
+  afterAll(async () => {
+    clearPhotoDir(test.app.get(PhotoStorageService).directory);
+    await test.app.close();
+  });
 
   beforeEach(async () => {
-    releaseGate = () => undefined;
-    const queue = new Queue(PHOTO_IMPORT_QUEUE, {
-      connection,
-      prefix: queuePrefix,
-    });
-    await queue.obliterate({ force: true });
-    await queue.close();
-  }, 30_000);
+    await resetDatabase(test.prisma);
+  });
 
   afterEach(async () => {
-    // Unblock any processor still awaiting the gate before closing.
-    releaseGate();
-    while (openWorkers.length > 0) {
-      const worker = openWorkers.pop();
-      if (worker) {
-        await worker.close(true);
-      }
-    }
-    while (openQueues.length > 0) {
-      const queue = openQueues.pop();
-      if (queue) {
-        await queue.close();
-      }
+    while (openApps.length > 0) {
+      await openApps.pop()?.close();
     }
   }, 30_000);
 
-  it('backs off exponentially between retries rather than firing immediately', async () => {
-    const queue = trackQueue(rawQueue());
+  it('backs off exponentially between retries (base 5 s shrunk to 150 ms)', async () => {
     const starts: number[] = [];
-    const worker = trackWorker(
-      new Worker(
-        PHOTO_IMPORT_QUEUE,
-        () => {
-          starts.push(Date.now());
-          if (starts.length < 3) {
-            return Promise.reject(new Error('transient failure'));
-          }
-          return Promise.resolve({ ok: true });
-        },
-        { connection, prefix: queuePrefix },
-      ),
-    );
-    await worker.waitUntilReady();
-
-    await queue.add(
-      'photo',
-      { photoRef: 'backoff' },
+    const app = await createTestApp([
       {
-        ...photoImportDefaultJobOptions(),
-        backoff: { type: 'exponential', delay: 150 },
+        provide: PhotoImportHandler,
+        useValue: {
+          handle: jest.fn((): Promise<PhotoImportJobResult> => {
+            starts.push(Date.now());
+            if (starts.length < 3) {
+              return Promise.reject(new RetryableImportError('transient'));
+            }
+            return Promise.resolve(OK_RESULT);
+          }),
+        },
       },
-    );
+      queueOptions({ retryBackoffMs: 150, pollIntervalMs: 20 }),
+    ]);
+    openApps.push(app.app);
+
+    const row = await test.prisma.importJob.create({
+      data: { status: 'queued', photoRef: 'backoff', ...runnableNowData() },
+    });
 
     await waitFor(() => starts.length >= 3, 15_000);
 
-    expect(starts).toHaveLength(3);
     const [first, second, third] = starts;
     if (first === undefined || second === undefined || third === undefined) {
       throw new Error('expected three worker starts');
     }
     const gap1 = second - first;
     const gap2 = third - second;
-    // Exponential: delay·2^(attemptsMade−1) → ~150 ms then ~300 ms.
+    // Exponential: delay·2^(attemptsMade−1) → ~150 ms then ~300 ms, plus one
+    // poll interval (20 ms) of scheduling slack each.
     expect(gap1).toBeGreaterThanOrEqual(130);
     expect(gap2).toBeGreaterThanOrEqual(280);
     expect(gap2).toBeGreaterThan(gap1);
+
+    const stored = await test.prisma.importJob.findUniqueOrThrow({
+      where: { id: row.id },
+    });
+    expect(stored.status).toBe('processing');
+    expect(stored.attempts).toBe(3);
   }, 30_000);
 
-  it('recovers a killed worker\u2019s job instead of leaving it active', async () => {
-    const queue = trackQueue(rawQueue());
-    const workerOptions = photoImportWorkerOptions({
-      lockDuration: 300,
-      lockRenewTime: 150,
-      stalledInterval: 50,
-      maxStalledCount: 2,
+  it('fails after exactly 3 attempts and stops retrying', async () => {
+    const handler = {
+      handle: jest.fn((): Promise<PhotoImportJobResult> =>
+        Promise.reject(new RetryableImportError('transient')),
+      ),
+    };
+    const app = await createTestApp([
+      { provide: PhotoImportHandler, useValue: handler },
+      queueOptions({ retryBackoffMs: 150, pollIntervalMs: 20 }),
+    ]);
+    openApps.push(app.app);
+
+    const row = await test.prisma.importJob.create({
+      data: { status: 'queued', photoRef: 'exhaust', ...runnableNowData() },
     });
 
-    let release: () => void = () => undefined;
-    const gate = new Promise<void>((resolve) => {
-      release = resolve;
+    await waitFor(() => handler.handle.mock.calls.length >= 3, 15_000);
+    await waitFor(
+      async () =>
+        (
+          await test.prisma.importJob.findUniqueOrThrow({
+            where: { id: row.id },
+          })
+        ).status === 'failed',
+      15_000,
+    );
+    await delay(700);
+
+    expect(handler.handle).toHaveBeenCalledTimes(3);
+    const stored = await test.prisma.importJob.findUniqueOrThrow({
+      where: { id: row.id },
     });
-    releaseGate = release;
-
-    // Worker A picks up the job and blocks forever; its lock stops renewing as
-    // soon as it is force-closed.
-    const workerA = trackWorker(
-      new Worker(
-        PHOTO_IMPORT_QUEUE,
-        async () => {
-          await gate;
-          return { ok: true };
-        },
-        { connection, prefix: queuePrefix, ...workerOptions },
-      ),
-    );
-    await workerA.waitUntilReady();
-
-    const job = await queue.add('photo', { photoRef: 'killed' });
-    await waitFor(async () => (await job.getState()) === 'active', 10_000);
-
-    // Force close skips `whenCurrentJobsFinished` and stops the lock manager, so
-    // the lock is not renewed and expires after `lockDuration`.
-    await workerA.close(true);
-
-    // Worker B starts, notices the stalled job and re-runs it to completion.
-    let processedByB = 0;
-    const workerB = trackWorker(
-      new Worker(
-        PHOTO_IMPORT_QUEUE,
-        () => {
-          processedByB += 1;
-          return Promise.resolve({ ok: true });
-        },
-        { connection, prefix: queuePrefix, ...workerOptions },
-      ),
-    );
-    await workerB.waitUntilReady();
-
-    await waitFor(async () => (await job.getState()) === 'completed', 20_000);
-
-    expect(processedByB).toBe(1);
-    expect(await job.getState()).not.toBe('active');
+    expect(stored.status).toBe('failed');
+    expect(stored.errorMessage).toBe('transient');
   }, 30_000);
+
+  it('fails once and never retries a permanent error', async () => {
+    const handler = {
+      handle: jest.fn((): Promise<PhotoImportJobResult> =>
+        Promise.reject(new PermanentImportError('bad', new Error('bad'))),
+      ),
+    };
+    const app = await createTestApp([
+      { provide: PhotoImportHandler, useValue: handler },
+      queueOptions({ retryBackoffMs: 150, pollIntervalMs: 20 }),
+    ]);
+    openApps.push(app.app);
+
+    const row = await test.prisma.importJob.create({
+      data: { status: 'queued', photoRef: 'permanent', ...runnableNowData() },
+    });
+
+    await waitFor(
+      async () =>
+        (
+          await test.prisma.importJob.findUniqueOrThrow({
+            where: { id: row.id },
+          })
+        ).status === 'failed',
+      5_000,
+    );
+    await delay(700);
+
+    expect(handler.handle).toHaveBeenCalledTimes(1);
+    const stored = await test.prisma.importJob.findUniqueOrThrow({
+      where: { id: row.id },
+    });
+    expect(stored.status).toBe('failed');
+    expect(stored.errorMessage).toBe('Photo recognition failed unexpectedly');
+    expect(stored.leaseUntil).toBeNull();
+  }, 30_000);
+
+  it("recovers a killed worker's job with no duplicate games and no second vision call", async () => {
+    const titles = Array.from(
+      { length: 12 },
+      (_unused, index) => `G${String(index)}`,
+    );
+
+    await test.prisma.platform.create({
+      data: {
+        name: 'PlayStation 5',
+        slug: 'playstation-5',
+        igdbId: PLATFORM_IGDB_ID,
+      },
+    });
+    const photoRef = await test.app.get(PhotoStorageService).store({
+      originalname: 'shelf.png',
+      mimetype: 'image/png',
+      buffer: Buffer.from('not-a-real-image'),
+    } as Express.Multer.File);
+
+    // App A: vision sees 12 titles, resolves G0..G9 and blocks forever on G10.
+    const visionA = {
+      recognize: jest.fn((): Promise<VisionRecognitionResult> =>
+        Promise.resolve({ items: titles.map(recognized), countVisible: 12 }),
+      ),
+    };
+    let rejectGate: (error: Error) => void = () => undefined;
+    const gate = new Promise<never>((_resolve, reject) => {
+      rejectGate = reject;
+    });
+    // Mark the gate as handled so an early failure cannot surface an unhandled
+    // rejection; the resolver still receives the original promise.
+    void gate.catch(() => undefined);
+    const resolverA = {
+      resolve: jest.fn((item: RecognizedItem): Promise<CatalogResolution> => {
+        if (item.title === 'G10') return gate;
+        return Promise.resolve({
+          kind: 'matched',
+          candidate: candidate(item.title),
+        });
+      }),
+    };
+
+    const appA = await createTestApp([
+      { provide: VisionService, useValue: visionA },
+      { provide: GameCatalogResolver, useValue: resolverA },
+      queueOptions({
+        leaseMs: 300,
+        stallCheckIntervalMs: 50,
+        shutdownGraceMs: 0,
+        pollIntervalMs: 20,
+      }),
+    ]);
+    const queueA = appA.app.get(PhotoImportQueue);
+
+    try {
+      const row = await appA.app.get(ImportJobsService).createJob({
+        photoRef,
+        enqueue: true,
+      });
+
+      // The first batch (10) committed; the attempt is now parked on G10.
+      await waitFor(
+        async () => (await appA.prisma.game.count()) === 10,
+        15_000,
+      );
+
+      // "Kill" the worker: close app A while the attempt is still blocked.
+      await appA.app.close();
+
+      const killed = await test.prisma.importJob.findUniqueOrThrow({
+        where: { id: row.id },
+      });
+      expect(killed.status).toBe('processing');
+      expect(killed.attempts).toBe(1);
+      expect(killed.leaseUntil).not.toBeNull();
+
+      // App B: fresh worker/vision/resolver. It must recover the expired lease
+      // and finish only the two titles that were still pending.
+      const visionB = {
+        recognize: jest.fn((): Promise<VisionRecognitionResult> =>
+          Promise.resolve({ items: [], countVisible: null }),
+        ),
+      };
+      const resolvedB: string[] = [];
+      const resolverB = {
+        resolve: jest.fn((item: RecognizedItem): Promise<CatalogResolution> => {
+          resolvedB.push(item.title);
+          return Promise.resolve({
+            kind: 'matched',
+            candidate: candidate(item.title),
+          });
+        }),
+      };
+      const appB = await createTestApp([
+        { provide: VisionService, useValue: visionB },
+        { provide: GameCatalogResolver, useValue: resolverB },
+        queueOptions({
+          leaseMs: 300,
+          stallCheckIntervalMs: 50,
+          // No `shutdownGraceMs: 0` here: app B is not the killed worker, and
+          // `close()` must let its in-flight poll query finish before Prisma is
+          // disconnected. With grace 0 the abandoned `claimNext`/`isPaused`
+          // completes after `$disconnect()` and reopens the driver pool, which
+          // then keeps Jest alive ("did not exit").
+          pollIntervalMs: 20,
+          retryBackoffMs: 150,
+        }),
+      ]);
+      openApps.push(appB.app);
+
+      await waitFor(
+        async () =>
+          (
+            await appB.prisma.importJob.findUniqueOrThrow({
+              where: { id: row.id },
+            })
+          ).status === 'done',
+        20_000,
+      );
+
+      expect(await appB.prisma.game.count()).toBe(12);
+      for (const title of titles) {
+        expect(await appB.prisma.game.count({ where: { title } })).toBe(1);
+      }
+      // `visionCompletedAt` was already set, so the recovered attempt reuses it.
+      expect(visionB.recognize).not.toHaveBeenCalled();
+      expect(resolverB.resolve).toHaveBeenCalledTimes(2);
+      expect([...resolvedB].sort()).toEqual(['G10', 'G11']);
+
+      const recovered = await appB.prisma.importJob.findUniqueOrThrow({
+        where: { id: row.id },
+      });
+      expect(recovered.attempts).toBe(2);
+    } finally {
+      // Unwind app A's abandoned attempt. Rejecting the gate makes the attempt
+      // finish its post-failure bookkeeping, which reconnects the Prisma client
+      // `app.close()` disconnected. Wait for its last DB call
+      // (`PhotoImportQueue.release`) and then close that connection so the
+      // process can exit.
+      let releaseDone: () => void = () => undefined;
+      const released = new Promise<void>((resolve) => {
+        releaseDone = resolve;
+      });
+      const originalRelease = queueA.release.bind(queueA);
+      jest
+        .spyOn(queueA, 'release')
+        .mockImplementation(async (id: number): Promise<void> => {
+          await originalRelease(id);
+          releaseDone();
+        });
+
+      rejectGate(new Error('worker killed mid-job'));
+      await released;
+      await appA.prisma.$disconnect();
+    }
+  }, 40_000);
 });

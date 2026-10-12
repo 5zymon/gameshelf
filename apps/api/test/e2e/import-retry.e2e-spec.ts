@@ -1,6 +1,5 @@
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { Queue } from 'bullmq';
 import type {
   CatalogCandidate,
   CatalogResolution,
@@ -8,17 +7,11 @@ import type {
 import { GameCatalogResolver } from '../../src/game-catalog/game-catalog.resolver';
 import { ImportJobsService } from '../../src/import-jobs/import-jobs.service';
 import { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
-import { PHOTO_IMPORT_QUEUE } from '../../src/queue/queue.constants';
 import type { RecognizedItem } from '../../src/settings/vision/vision-provider';
 import { VisionService } from '../../src/settings/vision/vision.service';
 import { resetDatabase } from '../helpers/reset';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 
-const connection = {
-  host: process.env.REDIS_HOST ?? 'localhost',
-  port: Number(process.env.REDIS_PORT ?? 6379),
-};
-const queuePrefix = process.env.REDIS_QUEUE_PREFIX ?? 'bull-e2e';
 const E2E_PHOTO_DIR_SUFFIX = 'gameshelf-import-photos-e2e';
 const PLATFORM_IGDB_ID = 167;
 
@@ -75,7 +68,6 @@ function candidate(title: string): CatalogCandidate {
 
 describe('Import retry (e2e)', () => {
   let test: TestApp;
-  let queue: Queue;
   let photoDir: string;
   let importJobs: ImportJobsService;
   let vision: { recognize: jest.Mock };
@@ -98,12 +90,10 @@ describe('Import retry (e2e)', () => {
     ]);
     importJobs = test.app.get(ImportJobsService);
     photoDir = test.app.get(PhotoStorageService).directory;
-    queue = new Queue(PHOTO_IMPORT_QUEUE, { connection, prefix: queuePrefix });
   });
 
   beforeEach(async () => {
     await resetDatabase(test.prisma);
-    await queue.obliterate({ force: true });
     clearPhotoDir(photoDir);
     vision.recognize.mockReset();
     vision.recognize.mockResolvedValue({ items: [], countVisible: null });
@@ -112,7 +102,6 @@ describe('Import retry (e2e)', () => {
   });
 
   afterAll(async () => {
-    await queue.close();
     await test.app.close();
     clearPhotoDir(photoDir);
   });
@@ -245,7 +234,8 @@ describe('Import retry (e2e)', () => {
       where: { id: job.id },
     });
     expect(row.status).toBe('queued');
-    expect(await queue.getWaitingCount()).toBe(0);
+    expect(row.nextRunAt).toBeNull();
+    expect(row.attempts).toBe(0);
   });
 
   it('returns 404 for an unknown job', async () => {

@@ -2,7 +2,7 @@
 type: Feature
 title: Queue Pause on Configuration Error
 description: A rejected/absent LLM, IGDB, or MobyGames credential fails the current photo, durably pauses the single photo-import queue, surfaces the pause on batch progress, and resumes explicitly or when the LLM key is saved.
-tags: [import, worker, bullmq, igdb, mobygames, vision, reliability]
+tags: [import, worker, mysql-queue, igdb, mobygames, vision, reliability]
 status: draft
 generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-07T07:30:00Z }
 ---
@@ -17,8 +17,8 @@ configuration error **stop the queue at the first photo**:
 
 1. the **current** photo fails (with the config reason stored on the job);
 2. a **durable pause reason** is written to `import_queue_state`;
-3. the single BullMQ `photo-import` queue is **paused**, so no further photo
-   starts;
+3. the single photo-import queue is **paused** (the worker claims nothing while
+   `import_queue_state.paused` is true), so no further photo starts;
 4. the pause and its reason are exposed on the batch-progress API;
 5. the operator can **resume** explicitly (`POST /import-jobs/resume`) or by
    saving an LLM key (`PUT /settings/llm`).
@@ -75,8 +75,9 @@ In `PhotoImportPipelineService`:
   re-resolved on a later retry and are never duplicated.
 - The `run` catch classifies with `configErrorSource(error)`; on a config error
   it marks the current job `failed`, calls `pauseForConfigErrorSafely` (a
-  best-effort pause that never masks the original error), and throws BullMQ
-  `UnrecoverableError` so no further attempt is scheduled.
+  best-effort pause that never masks the original error), and throws
+  `PermanentImportError` so the worker fails the row immediately and no further
+  attempt is scheduled.
 - Ordinary permanent failures (`bad_response`, malformed query, …) keep their
   existing behaviour and never pause the queue.
 
@@ -85,17 +86,18 @@ In `PhotoImportPipelineService`:
 `QueueControlService` (global, exported by `QueueModule`) owns the operational
 pause:
 
-| Method                           | Behaviour                                                                                                                                                                            |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `pauseForConfig(source, reason)` | `queue.pause()` + upsert the singleton `import_queue_state` row (`id = 1`, `paused`, `reason`, `source`, `pausedAt`).                                                                |
-| `resume()`                       | `queue.resume()` + clear the row. Idempotent.                                                                                                                                        |
-| `resumeIfPausedBy(source)`       | Resume only when currently paused **for that source**; returns whether it did.                                                                                                       |
-| `getState()`                     | `paused` comes from BullMQ `isPaused()` (Redis, 2 s timeout `QUEUE_PAUSE_TIMEOUT_MS`); the row supplies `reason`/`source`/`pausedAt`, and is the fallback when Redis is unreachable. |
+| Method                           | Behaviour                                                                                                                                                        |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `pauseForConfig(source, reason)` | Upsert the singleton `import_queue_state` row (`id = 1`, `paused`, `reason`, `source`, `pausedAt`). No queue call — the worker reads the row before every claim. |
+| `resume()`                       | Clear the row (`paused = false`, `reason`/`source`/`pausedAt` null) and wake the worker. Idempotent.                                                             |
+| `resumeIfPausedBy(source)`       | Resume only when currently paused **for that source**; returns whether it did.                                                                                   |
+| `getState()`                     | Read the row: `paused`, `reason`, `source`, `pausedAt`; a missing or running row reports not paused.                                                             |
+| `isPaused()`                     | `import_queue_state.paused` (default `false`). The worker checks it before every claim.                                                                          |
 
-Redis is authoritative for whether the queue is paused; the durable row records
-**why** so the reason survives a restart and is still reportable if Redis cannot
-be reached. The queue is not auto-resumed on boot — a still-broken configuration
-would immediately re-fail.
+MySQL `import_queue_state` is the **single source of truth** (ADR-005): both
+whether the queue is paused and why come from it, so the state survives a restart
+and there is no separate queue flag to fall back to or desync. The queue is not
+auto-resumed on boot — a still-broken configuration would immediately re-fail.
 
 # API surface
 
@@ -111,8 +113,8 @@ gains:
 ```
 
 `pauseReason` falls back to the default
-`Photo import is paused until the configuration is fixed` when Redis reports a
-pause but no durable row exists.
+`Photo import is paused until the configuration is fixed` when the row says
+paused but records no reason.
 
 `POST /import-jobs/resume` returns `ImportQueueStateModel`
 (`{ paused, reason, source, pausedAt }`) and is idempotent: resuming a running
@@ -131,8 +133,9 @@ never fails the settings write. See [LLM Settings API](/llm-settings-api.md).
 'pending' })` claim rolls a batch back instead of duplicating a `Game`. A
   config error is thrown **before** `commitImportBatch`, so nothing from the
   failing batch is committed.
-- **No auto-resume on boot.** Restarting the API re-creates the BullMQ queue
-  but does not resume it and does not replay. The operator resumes explicitly
+- **No auto-resume on boot.** Restarting the API keeps the pause — it lives in
+  the durable `import_queue_state` row, and boot neither resets it nor replays
+  anything. The operator resumes explicitly
   (`POST /import-jobs/resume`) after fixing an IGDB env issue, or the queue
   resumes when a key is saved (`PUT /settings/llm`, source `llm`).
 

@@ -107,13 +107,13 @@ Unlike `IgdbRateLimiter` there is **no queue-full rejection**: a task that would
 breach either window **waits** (its `schedule()` promise stays pending) until the
 oldest start leaves the window, then fires. The client therefore has **no
 internal 429 retry loop** — the budget is enforced client-side, so a 429 becomes
-a retryable `MobygamesError` that BullMQ's outer job retry handles. A request is
+a retryable `MobygamesError` that the worker's job-level retry handles. A request is
 never fired and then retried on 429. The limiter cancels its pending wake-up on
 `OnModuleDestroy`.
 
 Consequence: a fallback-heavy import that must wait for the hourly budget can
 exceed the per-job timeout (`IMPORT_JOB_TIMEOUT_MS = 420 s`). With
-`IMPORT_MAX_ATTEMPTS = 3` and the BullMQ exponential backoff (base
+`IMPORT_MAX_ATTEMPTS = 3` and the worker's exponential backoff (base
 `IMPORT_RETRY_BACKOFF_MS = 5 s`), the total retry horizon is only ~21 minutes
 (≈ 3 × 420 s job time plus the 5 s/10 s backoffs), while a saturated 720 req/h
 budget can make the limiter wait up to ~1 hour for a slot. Under sustained
@@ -142,7 +142,7 @@ Two distinct failure cases are handled differently:
 | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `MOBYGAMES_API_KEY` absent/blank       | The fallback is **not registered**. The chain is `[igdb]`; a title IGDB misses becomes `unrecognized` with an IGDB-only reason. No `config_error`, no pause, no failed job.                                                                         |
 | Key present but rejected (`401`/`403`) | `MobygamesConfigError` → `{ kind: 'config_error', source: 'mobygames' }` → the chain short-circuits → the pipeline throws `ConfigurationImportError('mobygames', …)` and **pauses the queue**, exactly like a broken IGDB credential (ticket 3.10). |
-| Present, `429` / `5xx` / network       | `transient` → the item stays `pending` and BullMQ retries.                                                                                                                                                                                          |
+| Present, `429` / `5xx` / network       | `transient` → the item stays `pending` and the worker retries.                                                                                                                                                                                      |
 | Present, `200`, no confident match     | `unrecognized` → fall through to the end of the chain; the aggregated reason lists both sources.                                                                                                                                                    |
 
 Because an absent key means the source is literally absent, the chain reports

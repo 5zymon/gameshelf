@@ -9,10 +9,11 @@ generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T15:00:00Z }
 
 # Overview
 
-Decision #4 (photos are ephemeral) plus ADR-002 ordering: a retry may still
-need the image, so a photo is never deleted at first save, only once the job is
-no longer going to run. This document is the single lifecycle reference; the
-upload side is [Import Photo Upload API](/import-upload-api.md), the worker is
+Decision #4 (photos are ephemeral) plus ADR-005 ordering (superseding ADR-002):
+a retry may still need the image, so a photo is never deleted at first save,
+only once the job is no longer going to run. This document is the single
+lifecycle reference; the upload side is
+[Import Photo Upload API](/import-upload-api.md), the worker is
 [Photo Import Pipeline](/photo-import-pipeline.md), and the durable records are
 [Import Jobs API](/import-jobs-api.md).
 
@@ -116,8 +117,9 @@ fails an abandoned job.
 - **No endpoint serves processed photos as a gallery.** There is no static
   mount, no `sendFile`/`StreamableFile`, and no gallery route; plausible URLs
   return `404` (regression-tested).
-- **The lifecycle matches decision #4 and ADR-002.** A photo is never deleted
-  at first save, only once the job is no longer going to run.
+- **The lifecycle matches decision #4 and ADR-005 (superseding ADR-002).** A
+  photo is never deleted at first save, only once the job is no longer going to
+  run.
 
 # Out of scope
 
