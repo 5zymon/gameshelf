@@ -1,7 +1,6 @@
 import type { INestApplication } from '@nestjs/common';
 import { readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import type { Job } from 'bullmq';
 import { ChainedGameCatalogResolver } from '../../src/game-catalog/chained-game-catalog.resolver';
 import { GameCatalogResolver } from '../../src/game-catalog/game-catalog.resolver';
 import { IgdbGameCatalogResolver } from '../../src/game-catalog/igdb-game-catalog.resolver';
@@ -14,12 +13,12 @@ import {
 import { CoverCacheService } from '../../src/covers/cover-cache.service';
 import { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
 import { PhotoImportHandler } from '../../src/queue/photo-import.handler';
-import type { PhotoImportJobData } from '../../src/queue/photo-import.types';
 import type {
   RecognizedItem,
   VisionRecognitionResult,
 } from '../../src/settings/vision/vision-provider';
 import { VisionService } from '../../src/settings/vision/vision.service';
+import { makeRun } from '../helpers/photo-import-queue';
 import { resetDatabase } from '../helpers/reset';
 import { seedPlatform } from '../helpers/seed';
 import { createTestApp, type TestApp } from '../helpers/test-app';
@@ -55,20 +54,6 @@ function mobyGameFixture(): MobygameGame {
 
 function recognized(title: string, platform: string | null): RecognizedItem {
   return { title, edition: null, platform, confidence: 0.9 };
-}
-
-function makeJob(
-  importJobId: number,
-  photoRef: string,
-  attemptsMade = 0,
-  attempts = 3,
-): Job<PhotoImportJobData> {
-  return {
-    id: `e2e-${String(importJobId)}`,
-    attemptsMade,
-    opts: { attempts },
-    data: { photoRef, importJobId },
-  } as unknown as Job<PhotoImportJobData>;
 }
 
 /** The call order of a mock's first invocation, asserting it was called. */
@@ -181,7 +166,7 @@ describe('Catalog validation sequence (e2e)', () => {
 
     const result = await app
       .get(PhotoImportHandler)
-      .handle(makeJob(id, photoRef));
+      .handle(makeRun(id, photoRef));
 
     expect(result).toEqual({
       recognizedCount: 1,
@@ -232,7 +217,7 @@ describe('Catalog validation sequence (e2e)', () => {
 
     const result = await app
       .get(PhotoImportHandler)
-      .handle(makeJob(id, photoRef));
+      .handle(makeRun(id, photoRef));
 
     expect(result).toEqual({
       recognizedCount: 1,
@@ -264,7 +249,7 @@ describe('Catalog validation sequence (e2e)', () => {
 
     const result = await app
       .get(PhotoImportHandler)
-      .handle(makeJob(id, photoRef));
+      .handle(makeRun(id, photoRef));
 
     expect(result).toEqual({
       recognizedCount: 1,

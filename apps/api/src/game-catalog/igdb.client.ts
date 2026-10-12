@@ -352,7 +352,7 @@ export class IgdbClient implements OnApplicationBootstrap {
   /**
    * Sends one request through the central limiter, retrying a 429 up to
    * `IGDB_MAX_ATTEMPTS` times with bounded backoff. On exhaustion the
-   * retryable `IgdbError` propagates so BullMQ's outer retry still applies.
+   * retryable `IgdbError` propagates so the worker's outer retry still applies.
    * `classify` maps a final non-2xx status to an error; token-endpoint callers
    * pass `igdbTokenErrorFromStatus` so rejected credentials become config
    * errors instead of permanent request errors.

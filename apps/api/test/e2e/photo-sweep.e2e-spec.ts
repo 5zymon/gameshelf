@@ -1,21 +1,13 @@
 import type { INestApplication } from '@nestjs/common';
 import { existsSync, rmSync, utimesSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Queue } from 'bullmq';
-import { PhotoImportHandler } from '../../src/queue/photo-import.handler';
-import { PHOTO_IMPORT_QUEUE } from '../../src/queue/queue.constants';
 import { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
 import { PHOTO_SWEEP_ABANDONED_REASON } from '../../src/import-jobs/photo-sweep.options';
 import { PhotoSweepService } from '../../src/import-jobs/photo-sweep.service';
-import { createNoopPhotoImportHandler } from '../helpers/noop-photo-handler';
+import { NO_WORKER } from '../helpers/photo-import-queue';
 import { resetDatabase } from '../helpers/reset';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 
-const connection = {
-  host: process.env.REDIS_HOST ?? 'localhost',
-  port: Number(process.env.REDIS_PORT ?? 6379),
-};
-const queuePrefix = process.env.REDIS_QUEUE_PREFIX ?? 'bull-e2e';
 const E2E_PHOTO_DIR_SUFFIX = 'gameshelf-import-photos-e2e';
 
 function clearPhotoDir(dir: string): void {
@@ -33,34 +25,25 @@ const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 describe('Photo sweep (e2e)', () => {
   let test: TestApp;
   let app: INestApplication;
-  let queue: Queue;
   let photoDir: string;
   let storage: PhotoStorageService;
   let sweep: PhotoSweepService;
 
   beforeAll(async () => {
-    test = await createTestApp([
-      {
-        provide: PhotoImportHandler,
-        useValue: createNoopPhotoImportHandler(),
-      },
-    ]);
+    test = await createTestApp([NO_WORKER]);
     app = test.app;
     storage = app.get(PhotoStorageService);
     photoDir = storage.directory;
     sweep = app.get(PhotoSweepService);
-    queue = new Queue(PHOTO_IMPORT_QUEUE, { connection, prefix: queuePrefix });
   });
 
   beforeEach(async () => {
     await resetDatabase(test.prisma);
-    await queue.obliterate({ force: true });
     clearPhotoDir(photoDir);
     await test.login();
   });
 
   afterAll(async () => {
-    await queue.close();
     await app.close();
     clearPhotoDir(photoDir);
   });
@@ -197,29 +180,25 @@ describe('Photo sweep (e2e)', () => {
       completedAt: new Date(Date.now() - THREE_DAYS_MS),
     });
 
-    // Pause the worker so the re-enqueued unit stays `queued` while we sweep.
-    await queue.pause();
-    try {
-      const retry = await test.request.post(`/import-jobs/${String(id)}/retry`);
-      expect(retry.status).toBe(202);
+    // The worker is off in this spec, so the re-enqueued row stays `queued`.
+    const retry = await test.request.post(`/import-jobs/${String(id)}/retry`);
+    expect(retry.status).toBe(202);
 
-      const queued = await test.prisma.importJob.findUniqueOrThrow({
-        where: { id },
-      });
-      expect(queued.status).toBe('queued');
-      expect(queued.enqueuedAt).not.toBeNull();
+    const queued = await test.prisma.importJob.findUniqueOrThrow({
+      where: { id },
+    });
+    expect(queued.status).toBe('queued');
+    expect(queued.enqueuedAt).not.toBeNull();
+    expect(queued.nextRunAt).not.toBeNull();
 
-      await sweep.sweep();
+    await sweep.sweep();
 
-      expect(existsSync(join(photoDir, photoRef))).toBe(true);
-      const row = await test.prisma.importJob.findUniqueOrThrow({
-        where: { id },
-      });
-      expect(row.status).toBe('queued');
-      expect(row.photoRef).toBe(photoRef);
-    } finally {
-      await queue.resume();
-    }
+    expect(existsSync(join(photoDir, photoRef))).toBe(true);
+    const row = await test.prisma.importJob.findUniqueOrThrow({
+      where: { id },
+    });
+    expect(row.status).toBe('queued');
+    expect(row.photoRef).toBe(photoRef);
   });
 
   it('fails and deletes a queued job abandoned past the window', async () => {

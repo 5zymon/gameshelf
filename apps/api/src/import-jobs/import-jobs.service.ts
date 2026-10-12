@@ -1,12 +1,8 @@
-import { InjectQueue } from '@nestjs/bullmq';
 import {
   ConflictException,
   Injectable,
-  Logger,
   NotFoundException,
-  ServiceUnavailableException,
 } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import { Prisma, type UnrecognizedItem } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import type {
@@ -29,9 +25,8 @@ import {
   findPlatformMatch,
   normalizePlatformName,
 } from '../platforms/platform-match';
-import type { PhotoImportJobData } from '../queue/photo-import.types';
 import { RetryableImportError } from '../queue/photo-import.failure';
-import { PHOTO_IMPORT_QUEUE } from '../queue/queue.constants';
+import { PhotoImportQueue, runnableNowData } from '../queue/photo-import.queue';
 import { QueueControlService } from '../queue/queue-control.service';
 import { ListImportJobsQueryDto } from './dto/list-import-jobs-query.dto';
 import {
@@ -42,15 +37,11 @@ import {
   ListImportJobsResponseModel,
   UnrecognizedItemModel,
 } from './dto/import-job-response.model';
-import {
-  isTerminalImportJobStatus,
-  mergeImportJobStatus,
-} from './import-job-status';
-import { IMPORT_QUEUE_STATE_TIMEOUT_MS } from './import-pipeline.options';
+import { isTerminalImportJobStatus } from './import-job-status';
 import type { PhotoSweepOwner } from './photo-sweep.options';
 
 /**
- * ADR-002 job result contract: the three counts the processor reports.
+ * ADR-005 job result contract: the three counts the processor reports.
  * The service computes `done` vs `needs_attention` from them (spec §4.2.4);
  * the processor (ticket 3.5) only reports numbers.
  */
@@ -220,7 +211,6 @@ interface ImportJobRow {
   declaredCount: number | null;
   photoRef: string | null;
   batchId: string | null;
-  bullJobId: string | null;
   recognizedCount: number;
   importedCount: number;
   unrecognizedCount: number;
@@ -239,12 +229,9 @@ export interface JobProgressCounts {
 
 @Injectable()
 export class ImportJobsService {
-  private readonly logger = new Logger(ImportJobsService.name);
-
   constructor(
     private readonly prisma: PrismaService,
-    @InjectQueue(PHOTO_IMPORT_QUEUE)
-    private readonly queue: Queue<PhotoImportJobData>,
+    private readonly photoQueue: PhotoImportQueue,
     private readonly queueControl: QueueControlService,
     private readonly enrichment: GameEnrichmentService,
     private readonly platforms: PlatformsService,
@@ -278,19 +265,8 @@ export class ImportJobsService {
       this.prisma.importJob.count({ where }),
     ]);
     const counts = await this.progressCountsFor(items);
-    // Terminal rows are never fetched from Redis (decision D4): their durable
-    // status is the record and `queueState` stays null.
-    const queueStates = await this.readQueueStates(
-      items
-        .filter((row) => !isTerminalImportJobStatus(row.status))
-        .map((row) => row.bullJobId),
-    );
     const mapped = items.map((row) =>
-      this.toJobModel(
-        row,
-        counts.get(row.id) ?? emptyCounts(),
-        queueStates.get(row.bullJobId ?? '') ?? null,
-      ),
+      this.toJobModel(row, counts.get(row.id) ?? emptyCounts()),
     );
     return {
       items: mapped,
@@ -308,15 +284,8 @@ export class ImportJobsService {
       throw new NotFoundException(`Import job with id ${String(id)} not found`);
     }
     const counts = await this.progressCountsFor([job]);
-    const queueStates = isTerminalImportJobStatus(job.status)
-      ? new Map<string, string>()
-      : await this.readQueueStates([job.bullJobId]);
     return Object.assign(
-      this.toJobModel(
-        job,
-        counts.get(job.id) ?? emptyCounts(),
-        queueStates.get(job.bullJobId ?? '') ?? null,
-      ),
+      this.toJobModel(job, counts.get(job.id) ?? emptyCounts()),
       {
         unrecognizedItems: job.unrecognizedItems.map((row) =>
           this.toUnrecognizedItemModel(row),
@@ -465,8 +434,9 @@ export class ImportJobsService {
   }
 
   /**
-   * Retry a failed run **in place** (ticket 3.6): the same `import_jobs` row
-   * is reset to `queued` and a NEW BullMQ unit re-enters the pipeline.
+   * Retry a failed run **in place** (ticket 3.6): the same `import_jobs` row is
+   * reset to `queued` and made runnable immediately (attempt budget reset to 0),
+   * then the in-process worker is woken.
    *
    * Idempotency comes from the pipeline itself: `visionCompletedAt` prevents a
    * second vision call, `listPendingRecognizedItems` re-runs only `pending`
@@ -495,6 +465,7 @@ export class ImportJobsService {
     if (job.photoRef === null) {
       throw new ConflictException('This import has no photo to re-process');
     }
+    const now = new Date();
     const reset = await this.prisma.importJob.updateMany({
       where: { id, status: 'failed', photoRef: { not: null } },
       data: {
@@ -503,7 +474,8 @@ export class ImportJobsService {
         completedAt: null,
         // Re-anchor the sweep: this run is active again, so it must not be
         // treated as an abandonment merely because `createdAt` is old.
-        enqueuedAt: new Date(),
+        enqueuedAt: now,
+        ...runnableNowData(now),
       },
     });
     if (reset.count !== 1) {
@@ -520,46 +492,7 @@ export class ImportJobsService {
         `Import job ${String(id)} is no longer failed`,
       );
     }
-    let bullJobId: string;
-    try {
-      const bull = await this.queue.add('photo', {
-        photoRef: job.photoRef,
-        declaredCount: job.declaredCount,
-        importJobId: id,
-      });
-      bullJobId = String(bull.id);
-    } catch {
-      // Secondary failure (the row may already have moved on): the intended
-      // outcome is still the 503 below, so a failed markFailed must not turn
-      // this into a 500.
-      try {
-        await this.markFailed(id, 'Failed to enqueue the import job');
-      } catch (error) {
-        this.logger.warn(
-          `Failed to mark import job ${String(id)} failed after an enqueue error: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        );
-      }
-      throw new ServiceUnavailableException(
-        'Could not enqueue the import retry; please retry',
-      );
-    }
-    // Best-effort, separate from the fatal enqueue above: the BullMQ unit is
-    // already committed, so a failed id write only loses the live-state link
-    // and must not force the row back to `failed` or return a 503.
-    try {
-      await this.prisma.importJob.update({
-        where: { id },
-        data: { bullJobId },
-      });
-    } catch (error) {
-      this.logger.warn(
-        `Failed to store BullMQ id for import job ${String(id)}: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
+    this.photoQueue.wake();
     return this.findOne(id);
   }
 
@@ -585,34 +518,30 @@ export class ImportJobsService {
     declaredCount?: number | null;
     photoRef?: string | null;
     batchId?: string | null;
+    /** Make the row immediately runnable (ADR-005) and wake the worker. */
+    enqueue?: boolean;
   }): Promise<ImportJobRow> {
-    return this.prisma.importJob.create({
+    const now = new Date();
+    const row = await this.prisma.importJob.create({
       data: {
         status: 'queued',
         declaredCount: data.declaredCount ?? null,
         photoRef: data.photoRef ?? null,
         batchId: data.batchId ?? null,
         // The sweep's abandonment anchor (ticket 3.8): a fresh run is active.
-        enqueuedAt: new Date(),
+        enqueuedAt: now,
+        ...(data.enqueue === true ? runnableNowData(now) : {}),
       },
     });
+    if (data.enqueue === true) {
+      this.photoQueue.wake();
+    }
+    return row;
   }
 
   /**
-   * Stores the BullMQ job id currently backing this run (ticket 3.6), so the
-   * read API can fetch its live queue state. Best-effort: the caller treats a
-   * failure here as non-fatal (the durable row is already the record).
-   */
-  async setBullJobId(jobId: number, bullJobId: string): Promise<void> {
-    await this.prisma.importJob.update({
-      where: { id: jobId },
-      data: { bullJobId },
-    });
-  }
-
-  /**
-   * queued|processing -> processing (idempotent on processing: a BullMQ
-   * retry re-enters the processor without clobbering state).
+   * queued|processing -> processing (idempotent on processing: the worker's
+   * claim already set it).
    */
   async markProcessing(jobId: number): Promise<void> {
     await this.assertTransition(jobId, ['queued', 'processing']);
@@ -701,7 +630,7 @@ export class ImportJobsService {
     return this.reloadJobRow(jobId);
   }
 
-  /** Incremental trace write per flagged item (ADR-002 retry semantics). */
+  /** Incremental trace write per flagged item (ADR-005 retry semantics). */
   async addUnrecognizedItem(
     jobId: number,
     data: {
@@ -739,16 +668,6 @@ export class ImportJobsService {
         unrecognizedCount: true,
       },
     });
-  }
-
-  /** Resolves the legacy (no `importJobId` in the payload) photoRef path. */
-  async findJobIdByPhotoRef(photoRef: string): Promise<number | null> {
-    const job = await this.prisma.importJob.findFirst({
-      where: { photoRef },
-      orderBy: { id: 'desc' },
-      select: { id: true },
-    });
-    return job?.id ?? null;
   }
 
   /**
@@ -1155,43 +1074,6 @@ export class ImportJobsService {
   // ---------- helpers ----------
 
   /**
-   * Best-effort live BullMQ states for the given ids (ticket 3.6). A Redis
-   * error or a slow response yields an empty map: the durable MySQL status is
-   * the record, the queue state is only a supplementary signal.
-   */
-  async readQueueStates(
-    bullJobIds: (string | null)[],
-  ): Promise<Map<string, string>> {
-    const ids = [
-      ...new Set(bullJobIds.filter((v): v is string => typeof v === 'string')),
-    ];
-    if (ids.length === 0) {
-      return new Map();
-    }
-    try {
-      const results = await this.withTimeout(
-        Promise.allSettled(
-          ids.map(async (bullId) => {
-            const job = await this.queue.getJob(bullId);
-            if (!job) return null;
-            return [bullId, await job.getState()] as const;
-          }),
-        ),
-        IMPORT_QUEUE_STATE_TIMEOUT_MS,
-      );
-      const states = new Map<string, string>();
-      for (const result of results) {
-        if (result.status === 'fulfilled' && result.value !== null) {
-          states.set(result.value[0], result.value[1]);
-        }
-      }
-      return states;
-    } catch {
-      return new Map();
-    }
-  }
-
-  /**
    * Live counts from `recognized_items` for a set of jobs, in one query.
    * `pending` is tracked separately so the read API can report unresolved
    * titles even before the job is terminal.
@@ -1270,15 +1152,14 @@ export class ImportJobsService {
   }
 
   /**
-   * Builds the read model for one row: merges the durable status with the live
-   * queue state, and derives the review flags from the counts.
+   * Builds the read model for one row: the durable status is the record, and
+   * the review flags are derived from the counts.
    */
   private toJobModel(
     row: ImportJobRow,
     counts: JobProgressCounts,
-    queueState: string | null,
   ): ImportJobModel {
-    const status = mergeImportJobStatus(row.status, queueState);
+    const status = row.status;
     return {
       id: row.id,
       status,
@@ -1291,15 +1172,12 @@ export class ImportJobsService {
       createdAt: row.createdAt,
       completedAt: row.completedAt,
       batchId: row.batchId,
-      bullJobId: row.bullJobId,
       pendingCount: counts.pendingCount,
       needsAttention: status === 'needs_attention',
       declaredCountMismatch:
         isTerminalImportJobStatus(row.status) &&
         row.declaredCount !== null &&
         counts.recognizedCount !== row.declaredCount,
-      // Redis is never authoritative for a terminal outcome (decision D4).
-      queueState: isTerminalImportJobStatus(row.status) ? null : queueState,
     };
   }
 
@@ -1325,26 +1203,6 @@ export class ImportJobsService {
         coverUrl: this.preview.previewUrl(record.coverUrl),
       })),
     };
-  }
-
-  /** Rejects after `timeoutMs`; clears the timer on settle (no dangling handle). */
-  private async withTimeout<T>(
-    promise: Promise<T>,
-    timeoutMs: number,
-  ): Promise<T> {
-    let timer: NodeJS.Timeout | undefined;
-    try {
-      return await Promise.race([
-        promise,
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            reject(new Error('Redis did not respond in time'));
-          }, timeoutMs);
-        }),
-      ]);
-    } finally {
-      if (timer !== undefined) clearTimeout(timer);
-    }
   }
 
   private async assertJobExists(jobId: number): Promise<void> {

@@ -12,9 +12,10 @@ generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-06T13:30:00Z }
 `POST /import/upload` is how photos enter the import pipeline. One request
 accepts many photos, optionally with a per-photo declared item count, and
 returns immediately: the request only validates, writes the photos to
-ephemeral storage, records one `queued` import run per photo, and enqueues one
-background job per photo. No recognition / LLM / external work happens inline —
-that is the queue's job (ADR-002), and the API never blocks on it.
+ephemeral storage, records one `queued` import run per photo, and makes each row
+runnable and wakes the in-process worker. No recognition / LLM / external work
+happens inline — that is the worker's job (ADR-005), and the API never blocks on
+it.
 
 The endpoint owns the _creation_ half of the import lifecycle; the durable
 records it produces are read back through the
@@ -60,7 +61,8 @@ cookie is required; an unauthenticated request is `401`).
 ```
 
 `id` is the persisted `import_jobs` row (poll it via
-`GET /import-jobs/:id`); `jobId` is the BullMQ job id; `status` is always
+`GET /import-jobs/:id`); `jobId` is `String(id)` — the row itself is the queue
+entry (ADR-005); `status` is always
 `queued` on this path. `batchId` groups every photo from this request: poll
 `GET /import-jobs/batches/:batchId` for aggregate progress (X of Y) or filter
 the list with `GET /import-jobs?batchId=` — see
@@ -80,12 +82,11 @@ the list with `GET /import-jobs?batchId=` — see
    random UUID filename (extension derived from the mimetype).
 4. **Job row.** One `import_jobs` row per photo with `status = 'queued'`,
    `photo_ref` set to the stored filename, and the request's one `batch_id`.
-5. **Enqueue.** One BullMQ job per photo on the `photo-import` queue, named
-   `photo`, with payload `{ photoRef, declaredCount, importJobId }` and
-   `attempts: 3` + exponential backoff (the worker retries transient failures).
-   See [Photo Import Pipeline](/photo-import-pipeline.md). The BullMQ id is
-   stored on the row (`bull_job_id`) best-effort, so the read API can report
-   live queue state.
+5. **Enqueue.** The row is created **runnable** (`next_run_at = now`,
+   `attempts = 0`) and the in-process worker is woken, so it starts without
+   waiting for the next poll. There is no separate queue write and no
+   `bull_job_id`: the row itself is the queue entry (ADR-005). See
+   [Photo Import Pipeline](/photo-import-pipeline.md).
 6. **Return** the batch id and created ids immediately (`202`).
 
 # Ephemeral storage

@@ -100,7 +100,7 @@ connecting to it, so a redirect cannot escape the allowlist.
 
 # Background retry
 
-Per ADR-002 ("One BullMQ queue") there is **no** second queue. A
+Per ADR-005 (one photo-import queue) there is **no** second queue. A
 `CoverSweepService` runs on an `@Interval` (default 15 min, overridable with
 `COVER_RETRY_SWEEP_INTERVAL_MS`, batch `COVER_RETRY_BATCH_SIZE` = 50) and calls
 `CoverRecoveryService.retryMissing()`, which retries games left with
@@ -193,4 +193,4 @@ See the root `README.md` and `.env.example`.
 - The catalog grid UI and `<img>` wiring (ticket 5.2).
 - Backfilling covers for rows created before this feature (only rows with a
   `sourceCoverUrl` can be repaired; older rows need re-enrichment).
-- A second BullMQ queue for retries (ADR-002).
+- A second queue for retries (ADR-005).

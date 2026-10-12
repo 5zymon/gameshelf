@@ -55,8 +55,8 @@ export async function countDevData(
  *
  * Kept: `users` and `sessions` (the operator stays logged in), `llm_settings`
  * (the encrypted provider key/config; wiping it blocks photo imports), the
- * `import_queue_state` row (Redis/BullMQ is authoritative for the pause, so
- * resetting only the DB row would make the two disagree), and canonical /
+ * `import_queue_state` row (the durable pause, ADR-005; clearing jobs must not
+ * silently resume a queue paused for a config error), and canonical /
  * user-confirmed platforms (re-syncing the IGDB list costs API calls).
  *
  * Children are deleted first, following `test/helpers/reset.ts`.

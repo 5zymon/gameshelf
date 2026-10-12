@@ -1,29 +1,21 @@
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { Queue } from 'bullmq';
-import type { Job } from 'bullmq';
 import { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
 import { PhotoImportHandler } from '../../src/queue/photo-import.handler';
 import type {
-  PhotoImportJobData,
   PhotoImportJobResult,
+  PhotoImportRun,
 } from '../../src/queue/photo-import.types';
-import { PHOTO_IMPORT_QUEUE } from '../../src/queue/queue.constants';
+import { waitFor } from '../helpers/photo-import-queue';
 import { resetDatabase } from '../helpers/reset';
 import { seedLlmSettings } from '../helpers/seed';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 
-const connection = {
-  host: process.env.REDIS_HOST ?? 'localhost',
-  port: Number(process.env.REDIS_PORT ?? 6379),
-};
-const queuePrefix = process.env.REDIS_QUEUE_PREFIX ?? 'bull-e2e';
 const E2E_PHOTO_DIR_SUFFIX = 'gameshelf-import-photos-e2e';
 
 interface ImportJobBody {
   id: number;
   status: string;
-  queueState: string | null;
   batchId: string | null;
 }
 
@@ -38,13 +30,12 @@ function clearPhotoDir(dir: string): void {
   rmSync(dir, { recursive: true, force: true });
 }
 
-describe('Import live queue state (e2e)', () => {
+describe('Import durable processing state (e2e)', () => {
   let test: TestApp;
-  let queue: Queue;
   let photoDir: string;
-  let receivedResolve!: (job: Job<PhotoImportJobData>) => void;
+  let receivedResolve!: (run: PhotoImportRun) => void;
   let releaseResolve!: () => void;
-  const received = new Promise<Job<PhotoImportJobData>>((done) => {
+  const received = new Promise<PhotoImportRun>((done) => {
     receivedResolve = done;
   });
   let gate: Promise<void>;
@@ -54,8 +45,8 @@ describe('Import live queue state (e2e)', () => {
       releaseResolve = done;
     });
     const handler = {
-      handle: jest.fn(async (job: Job<PhotoImportJobData>) => {
-        receivedResolve(job);
+      handle: jest.fn(async (run: PhotoImportRun) => {
+        receivedResolve(run);
         await gate;
         const result: PhotoImportJobResult = {
           recognizedCount: 0,
@@ -69,25 +60,22 @@ describe('Import live queue state (e2e)', () => {
       { provide: PhotoImportHandler, useValue: handler },
     ]);
     photoDir = test.app.get(PhotoStorageService).directory;
-    queue = new Queue(PHOTO_IMPORT_QUEUE, { connection, prefix: queuePrefix });
   });
 
   beforeEach(async () => {
     await resetDatabase(test.prisma);
     await seedLlmSettings(test.prisma);
-    await queue.obliterate({ force: true });
     clearPhotoDir(photoDir);
     await test.login();
   });
 
   afterAll(async () => {
     releaseResolve();
-    await queue.close();
     await test.app.close();
     clearPhotoDir(photoDir);
   });
 
-  it('reports the live BullMQ state while the durable row is still queued', async () => {
+  it('exposes a durable processing state with no Redis-backed queue fields', async () => {
     const upload = await test.request
       .post('/import/upload')
       .attach('files', Buffer.from('not-a-real-image'), {
@@ -106,17 +94,18 @@ describe('Import live queue state (e2e)', () => {
     }
     expect(uploadBody.batchId).toEqual(expect.any(String));
 
-    // The worker has picked the job up and is blocked inside the handler.
-    await received;
+    // The worker claimed the row and is blocked inside the handler.
+    const run = await received;
+    expect(run.importJobId).toBe(uploadedJob.id);
+    expect(run.attempt).toBe(1);
 
     const detail = await test.request.get(
       `/import-jobs/${String(uploadedJob.id)}`,
     );
     expect(detail.status).toBe(200);
-    expect(detail.body).toMatchObject({
-      status: 'processing',
-      queueState: 'active',
-    });
+    expect(detail.body).toMatchObject({ status: 'processing' });
+    expect(detail.body).not.toHaveProperty('queueState');
+    expect(detail.body).not.toHaveProperty('bullJobId');
 
     const list = (await test.request.get('/import-jobs'))
       .body as ImportJobsListBody;
@@ -124,17 +113,32 @@ describe('Import live queue state (e2e)', () => {
     if (listed === undefined) {
       throw new Error('list returned no items');
     }
-    expect(listed).toMatchObject({
-      status: 'processing',
-      queueState: 'active',
-    });
+    expect(listed).toMatchObject({ status: 'processing' });
+    expect(listed).not.toHaveProperty('queueState');
+    expect(listed).not.toHaveProperty('bullJobId');
 
-    // Redis is supplementary: the durable row is still queued.
+    // The claim itself is durable: the DB row is `processing` with a lease.
     const row = await test.prisma.importJob.findUniqueOrThrow({
       where: { id: uploadedJob.id },
     });
-    expect(row.status).toBe('queued');
+    expect(row.status).toBe('processing');
+    expect(row.attempts).toBe(1);
+    expect(row.leaseUntil).not.toBeNull();
+    const lease = row.leaseUntil;
+    if (lease === null) {
+      throw new Error('expected the claim to hold a lease');
+    }
+    expect(lease.getTime()).toBeGreaterThan(Date.now());
 
     releaseResolve();
-  });
+    await waitFor(
+      async () =>
+        (
+          await test.prisma.importJob.findUniqueOrThrow({
+            where: { id: uploadedJob.id },
+          })
+        ).leaseUntil === null,
+      15_000,
+    );
+  }, 30_000);
 });

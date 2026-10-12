@@ -227,7 +227,7 @@ Setup:
 
 ```bash
 cp .env.example .env      # SESSION_SECRET (>=32 chars), DB; then save the LLM base URL + key in /settings
-docker compose up -d mysql redis
+docker compose up -d mysql
 npm run db:deploy
 npm run dev               # API :3001, web :3000
 ```

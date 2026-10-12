@@ -81,7 +81,7 @@ export function isMobygamesConfigured(config: ConfigService): boolean {
  * Minimal MobyGames v2 client: one `/v2/games` title search, routed through the
  * central `MobygamesRateLimiter` (1 req/s, 720 req/h). There is deliberately no
  * internal 429 retry: the budget is enforced client-side, so a 429 becomes a
- * retryable `MobygamesError` that BullMQ retries — a request is never fired and
+ * retryable `MobygamesError` that the worker retries — a request is never fired and
  * then retried on 429. The API key (a query parameter) is never included in an
  * error message.
  */

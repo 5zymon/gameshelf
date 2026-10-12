@@ -8,10 +8,10 @@
  */
 export const IMPORT_BATCH_SIZE = 10;
 
-/** BullMQ `attempts`: one initial run plus two retries. */
+/** Queue attempts: one initial run plus two retries. */
 export const IMPORT_MAX_ATTEMPTS = 3;
 
-/** Exponential backoff base between BullMQ attempts. */
+/** Exponential backoff base between attempts. */
 export const IMPORT_RETRY_BACKOFF_MS = 5000;
 
 /**
@@ -24,46 +24,35 @@ export const IMPORT_MIN_CONFIDENCE = 0;
 export const IGDB_REQUEST_TIMEOUT_MS = 5000;
 
 /**
- * How long the read API waits for BullMQ state (ticket 3.6) before falling
- * back to the durable MySQL status. Redis being slow/down must never hang a
- * read request.
- */
-export const IMPORT_QUEUE_STATE_TIMEOUT_MS = 2_000;
-
-/**
  * Hard ceiling on one photo-import job (ticket 3.7): one vision call
  * (`VISION_REQUEST_TIMEOUT_MS = 120 s`) plus the per-title IGDB lookups. Since
  * ticket 4.1 those lookups go through one central rate limiter (4 req/s, 8
  * concurrent), which paces requests beyond the window (≈250 ms each in the
  * worst case), and each request has an `IGDB_REQUEST_TIMEOUT_MS` (5 s) ceiling. IGDB 429s are retried
  * internally up to `IGDB_MAX_ATTEMPTS = 3` with exponential backoff (base
- * 500 ms, cap 5 s), while timeouts/5xx/network failures remain BullMQ's
- * responsibility. A realistic shelf (≤ ~50 titles) worst-cases at
- * ~120 s + 50 × (5 s + 250 ms limiter pacing) ≈ 383 s; 420 s bounds it with
+ * 500 ms, cap 5 s), while timeouts/5xx/network failures remain the queue's
+ * responsibility (worker retry). A realistic shelf (≤ ~50 titles) worst-cases
+ * at ~120 s + 50 × (5 s + 250 ms limiter pacing) ≈ 383 s; 420 s bounds it with
  * headroom. A job that exceeds this is treated as transient and retried.
  */
 export const IMPORT_JOB_TIMEOUT_MS = 420_000;
 
 /**
- * BullMQ lock lifetime for one photo-import job (ticket 3.7). MUST exceed
- * `IMPORT_JOB_TIMEOUT_MS`: a lock shorter than the job would let a second
- * worker pick the job up while the first still runs (duplicate processing).
- * 480 s > the 420 s timeout.
+ * Lease lifetime for one photo-import attempt (ADR-005). MUST exceed
+ * `IMPORT_JOB_TIMEOUT_MS`: a lease shorter than the job would let the stall
+ * recovery re-queue the row while the first attempt still runs (duplicate
+ * processing). 480 s > the 420 s timeout. No renewal.
  */
-export const IMPORT_JOB_LOCK_DURATION_MS = 480_000;
+export const IMPORT_JOB_LEASE_MS = 480_000;
+
+/** How often the worker reclaims processing rows whose lease expired. */
+export const IMPORT_STALL_CHECK_INTERVAL_MS = 30_000;
+
+/** How often the in-process worker polls for a due `queued` row. */
+export const IMPORT_QUEUE_POLL_INTERVAL_MS = 1_000;
 
 /**
- * How often the live worker renews its lock. Default is half the lock
- * duration; kept explicit (240 s) and asserted `< lockDuration`.
+ * How long shutdown waits for the in-flight attempt before returning. The
+ * attempt's lease stays set, so stall recovery reclaims it after the next boot.
  */
-export const IMPORT_JOB_LOCK_RENEW_TIME_MS = 240_000;
-
-/** How often the worker checks for stalled (lock-expired) jobs. */
-export const IMPORT_JOB_STALLED_INTERVAL_MS = 30_000;
-
-/**
- * Recoveries allowed before a job is failed: a killed worker's job is moved
- * back to `waiting` (and re-run) up to this many times, so a single crash is
- * recovered rather than left `active` forever.
- */
-export const IMPORT_JOB_MAX_STALLED_COUNT = 2;
+export const IMPORT_WORKER_SHUTDOWN_GRACE_MS = 5_000;

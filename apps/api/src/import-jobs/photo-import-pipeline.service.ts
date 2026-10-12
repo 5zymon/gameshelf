@@ -1,15 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { UnrecoverableError, type Job } from 'bullmq';
 import { GameCatalogResolver } from '../game-catalog/game-catalog.resolver';
 import type {
   ConfigErrorSource,
-  PhotoImportJobData,
+  PhotoImportJobResult,
+  PhotoImportRun,
 } from '../queue/photo-import.types';
-import type { PhotoImportJobResult } from '../queue/photo-import.types';
 import {
   ConfigurationImportError,
   configErrorSource,
   isRetryableImportError,
+  PermanentImportError,
   RetryableImportError,
   photoImportFailureReason,
 } from '../queue/photo-import.failure';
@@ -51,9 +51,8 @@ export type PhotoImportOutcome =
 
 /** A single structured per-job log entry (ticket 3.7). */
 export interface PhotoImportOutcomeLog {
-  jobId: string | number | undefined;
   importJobId: number | null;
-  photoRef: string;
+  photoRef: string | null;
   outcome: PhotoImportOutcome;
   recognizedCount: number;
   importedCount: number;
@@ -99,20 +98,20 @@ const TERMINAL_STATUSES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * The real ADR-002 unit of work (ticket 3.5): recognises one photo, validates
+ * The real ADR-005 unit of work (ticket 3.5): recognises one photo, validates
  * each title against the external catalog, and saves confirmed games per
  * batch, incrementally and idempotently.
  *
  * Invariants (acceptance criteria):
- * - the vision provider is called **once** per job — the
+ * - the vision provider is called **once** per run — the
  *   `visionCompletedAt` marker + a transaction make `saveRecognition`
  *   one-shot;
  * - each batch commits in its own transaction, so a mid-job kill leaves the
  *   earlier batches persisted;
  * - saving is keyed on the recognized-item `pending` status, so re-running a
- *   job never duplicates catalog rows;
+ *   run never duplicates catalog rows;
  * - a transient external failure throws `RetryableImportError`, the row stays
- *   `processing`, and BullMQ retries only the still-pending titles;
+ *   `processing`, and the worker retries only the still-pending titles;
  * - the photo is deleted only after `markCompleted` succeeds.
  */
 @Injectable()
@@ -127,23 +126,19 @@ export class PhotoImportPipelineService {
     private readonly queueControl: QueueControlService,
   ) {}
 
-  async run(job: Job<PhotoImportJobData>): Promise<PhotoImportJobResult> {
+  async run(run: PhotoImportRun): Promise<PhotoImportJobResult> {
     const startedAt = Date.now();
-    let importJobId: number | null = job.data.importJobId ?? null;
+    const importJobId = run.importJobId;
     let outcome: PhotoImportOutcome = 'failed';
     let counts: JobCompletionResult = EMPTY_COUNTS;
     let errorMessage: string | undefined;
     const timings: PipelineTimings = {};
     try {
-      const jobId =
-        importJobId ?? (await this.jobs.findJobIdByPhotoRef(job.data.photoRef));
-      if (jobId === null) {
-        throw new RetryableImportError('Import job not found for this photo');
-      }
-      importJobId = jobId;
-      const state = await this.jobs.getPipelineJob(jobId);
+      const state = await this.jobs.getPipelineJob(importJobId);
       if (state === null) {
-        throw new RetryableImportError(`Import job ${String(jobId)} not found`);
+        throw new RetryableImportError(
+          `Import job ${String(importJobId)} not found`,
+        );
       }
       if (TERMINAL_STATUSES.has(state.status)) {
         counts = toResult(state);
@@ -151,43 +146,43 @@ export class PhotoImportPipelineService {
         return counts;
       }
 
-      await this.jobs.markProcessing(jobId);
+      await this.jobs.markProcessing(importJobId);
       const controller = new AbortController();
       try {
         const completed = await this.withJobTimeout(controller, () =>
-          this.processJob(jobId, state, controller.signal, timings),
+          this.processJob(importJobId, state, controller.signal, timings),
         );
         counts = completed.result;
         outcome = completed.status === 'done' ? 'done' : 'needs_attention';
         return completed.result;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        const isLastAttempt = job.attemptsMade + 1 >= (job.opts.attempts ?? 1);
+        const isLastAttempt = run.attempt >= run.maxAttempts;
         const retryable = isRetryableImportError(error);
         const configSource = configErrorSource(error);
-        counts = (await this.summarizeSafely(jobId)) ?? counts;
+        counts = (await this.summarizeSafely(importJobId)) ?? counts;
         if (configSource !== null) {
           // Config error: fail the current photo, pause the queue, never retry.
           outcome = 'failed';
-          await this.markFailedSafely(jobId, error, counts);
+          await this.markFailedSafely(importJobId, error, counts);
           await this.pauseForConfigErrorSafely(
             configSource,
             photoImportFailureReason(error),
           );
-          throw new UnrecoverableError(message);
+          throw new PermanentImportError(message, error);
         }
         if (!retryable || isLastAttempt) {
           outcome = 'failed';
-          await this.markFailedSafely(jobId, error, counts);
+          await this.markFailedSafely(importJobId, error, counts);
         } else {
           outcome = 'retry_scheduled';
         }
         if (!retryable) {
-          // A permanent error must stop BullMQ immediately. Re-throwing the
+          // A permanent error must stop the worker immediately. Re-throwing the
           // ordinary error would schedule the remaining attempts; each would
           // re-enter, hit the `failed` short-circuit and report `completed`,
-          // leaving BullMQ's job completed while the DB row is failed.
-          throw new UnrecoverableError(message);
+          // leaving the worker's attempt completed while the DB row is failed.
+          throw new PermanentImportError(message, error);
         }
         throw error;
       }
@@ -196,15 +191,14 @@ export class PhotoImportPipelineService {
       throw error;
     } finally {
       this.logJobOutcome({
-        jobId: job.id,
         importJobId,
-        photoRef: job.data.photoRef,
+        photoRef: run.photoRef,
         outcome,
         ...counts,
         durationMs: Date.now() - startedAt,
         visionDurationMs: timings.visionDurationMs,
-        attempt: job.attemptsMade + 1,
-        maxAttempts: job.opts.attempts ?? 1,
+        attempt: run.attempt,
+        maxAttempts: run.maxAttempts,
         error: errorMessage,
       });
     }

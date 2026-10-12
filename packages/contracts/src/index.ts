@@ -239,11 +239,9 @@ export interface ImportJob {
   createdAt: string;
   completedAt: string | null;
   batchId: string | null;
-  bullJobId: string | null;
   pendingCount: number;
   needsAttention: boolean;
   declaredCountMismatch: boolean;
-  queueState: string | null;
 }
 
 /** One tied catalog candidate offered for a flagged item (card 105). */
@@ -318,6 +316,7 @@ export interface ImportQueueState {
 
 export interface ImportUploadJob {
   id: number;
+  /** Equals String(id): the import_jobs row is the queue entry (ADR-005). */
   jobId: string;
   status: string;
   declaredCount: number | null;

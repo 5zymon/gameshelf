@@ -1,12 +1,9 @@
 import type { Server } from 'node:http';
-import { getQueueToken } from '@nestjs/bullmq';
 import { ConflictException, NotFoundException } from '@nestjs/common';
-import type { Queue } from 'bullmq';
 import request from 'supertest';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 import { resetDatabase } from '../helpers/reset';
 import { ImportJobsService } from '../../src/import-jobs/import-jobs.service';
-import { PHOTO_IMPORT_QUEUE } from '../../src/queue/queue.constants';
 import { QueueControlService } from '../../src/queue/queue-control.service';
 
 interface UnrecognizedItemBody {
@@ -25,14 +22,12 @@ interface ImportJobBody {
   declaredCount: number | null;
   photoRef: string | null;
   batchId: string | null;
-  bullJobId: string | null;
   recognizedCount: number;
   importedCount: number;
   unrecognizedCount: number;
   pendingCount: number;
   needsAttention: boolean;
   declaredCountMismatch: boolean;
-  queueState: string | null;
   errorMessage: string | null;
   createdAt: string;
   completedAt: string | null;
@@ -67,20 +62,16 @@ interface ImportJobsListBody {
 describe('ImportJobs API (e2e)', () => {
   let test: TestApp;
   let importJobs: ImportJobsService;
-  let queue: Queue;
   let queueControl: QueueControlService;
 
   beforeAll(async () => {
     test = await createTestApp();
     importJobs = test.app.get(ImportJobsService);
-    queue = test.app.get<Queue>(getQueueToken(PHOTO_IMPORT_QUEUE));
     queueControl = test.app.get(QueueControlService);
   });
 
   beforeEach(async () => {
     await resetDatabase(test.prisma);
-    // A pause left by a failed test must never leak into the next one.
-    await queue.resume();
     await test.login();
   });
 
@@ -523,8 +514,10 @@ describe('ImportJobs API (e2e)', () => {
         declaredCountMismatch: true,
         pendingCount: 0,
         batchId: null,
-        queueState: null,
       });
+      // AC5: the removed queue-state fields must not resurface on the wire.
+      expect(res.body).not.toHaveProperty('queueState');
+      expect(res.body).not.toHaveProperty('bullJobId');
     });
 
     it('detail: a clean done job has both flags false', async () => {
@@ -715,6 +708,8 @@ describe('ImportJobs API (e2e)', () => {
           where: { id: job.id },
         });
         expect(row.status).toBe(status);
+        // A refused retry must not have made the row runnable.
+        expect(row.nextRunAt).toBeNull();
       },
     );
 
@@ -740,7 +735,7 @@ describe('ImportJobs API (e2e)', () => {
         'igdb',
         'IGDB rejected the credentials',
       );
-      expect(await queue.isPaused()).toBe(true);
+      expect(await queueControl.isPaused()).toBe(true);
 
       const res = await test.request.post('/import-jobs/resume');
 
@@ -750,7 +745,7 @@ describe('ImportJobs API (e2e)', () => {
         reason: null,
         source: null,
       });
-      expect(await queue.isPaused()).toBe(false);
+      expect(await queueControl.isPaused()).toBe(false);
 
       const again = await test.request.post('/import-jobs/resume');
       expect(again.status).toBe(200);
@@ -786,7 +781,7 @@ describe('ImportJobs API (e2e)', () => {
         ).status,
       ).toBe('processing');
 
-      // Idempotent: a BullMQ retry re-enters without clobbering state.
+      // Idempotent: a worker retry re-enters without clobbering state.
       await expect(importJobs.markProcessing(job.id)).resolves.toBeUndefined();
 
       await importJobs.markCompleted(job.id, {

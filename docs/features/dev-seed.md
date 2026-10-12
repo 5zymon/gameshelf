@@ -39,7 +39,7 @@ value is read through `ConfigService` after the app context boots, so the root
 `.env` is honored — but an existing process env wins, so `NODE_ENV=test npm run
 db:seed` is still refused. Any other value, including unset, `test` or
 `production`, exits `1` **before the seed writes anything** (module init —
-Prisma connect, Bull/Redis — does run first).
+Prisma connect — does run first).
 
 Residual limitation: the gate only inspects `NODE_ENV`. A `.env` that says
 `NODE_ENV=development` while `DATABASE_URL` points at a shared or production
@@ -110,7 +110,6 @@ npm run db:clear-dev -- --force && npm run db:seed
 # Out of scope
 
 - Import jobs, recognized/unrecognized items, LLM settings, covers or images.
-- Redis (the command touches only MySQL).
 - A `--fresh` flag (use `db:clear-dev -- --force` first).
 - A Prisma `migrations.seed` hook.
 - Multiple QA accounts or roles.

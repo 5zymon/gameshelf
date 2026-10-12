@@ -1,10 +1,8 @@
-# GameShelf — local development database and job queue.
+# GameShelf — local development database.
 #
 # Convenience only: the application has no dependency on Docker or on this
 # file. It only needs a MySQL 8.4 server reachable at MYSQL_HOST:MYSQL_PORT
-# with character set utf8mb4, and a Redis 7.4 server reachable at
-# REDIS_HOST:REDIS_PORT (see README, "Database (local dev)" and
-# "Redis (local dev)").
+# with character set utf8mb4 (see README, "Database (local dev)").
 #
 # Credentials come from the environment (the .env file next to this file).
 # Never commit real values — .env is gitignored.
@@ -42,29 +40,3 @@ services:
       timeout: 5s
       retries: 20
       start_period: 30s
-  redis:
-    # Pinned major.minor — never "latest".
-    image: redis:7.4
-    command:
-      # AOF persistence — queued job state survives a Redis restart.
-      - --appendonly
-      - 'yes'
-      # ADR-002: BullMQ requires noeviction; an evicting policy can silently
-      # drop job data under memory pressure.
-      - --maxmemory-policy
-      - 'noeviction'
-    ports:
-      # Localhost-only by default; change the host part to expose it.
-      - '127.0.0.1:${REDIS_PORT:-6379}:6379'
-    volumes:
-      # Persistent host path (gitignored) — never an ephemeral container path.
-      - ./data/redis:/data
-    healthcheck:
-      test:
-        - 'CMD'
-        - 'redis-cli'
-        - 'ping'
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 5s

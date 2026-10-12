@@ -1,7 +1,6 @@
 import type { Server } from 'node:http';
 import { existsSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Queue } from 'bullmq';
 import request from 'supertest';
 import { CoverCacheService } from '../../src/covers/cover-cache.service';
 import {
@@ -10,7 +9,7 @@ import {
   type CatalogPlatform,
 } from '../../src/game-catalog/game-catalog.resolver';
 import { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
-import { PHOTO_IMPORT_QUEUE } from '../../src/queue/queue.constants';
+import { QueueControlService } from '../../src/queue/queue-control.service';
 import type { RecognizedItem } from '../../src/settings/vision/vision-provider';
 import { VisionService } from '../../src/settings/vision/vision.service';
 import { resetDatabase } from '../helpers/reset';
@@ -25,11 +24,6 @@ import { createTestApp, type TestApp } from '../helpers/test-app';
  * application restart. Nothing here touches a live external API.
  */
 
-const connection = {
-  host: process.env.REDIS_HOST ?? 'localhost',
-  port: Number(process.env.REDIS_PORT ?? 6379),
-};
-const queuePrefix = process.env.REDIS_QUEUE_PREFIX ?? 'bull-e2e';
 const E2E_PHOTO_DIR_SUFFIX = 'gameshelf-import-photos-e2e';
 const PLATFORM_IGDB_ID = 167;
 
@@ -182,15 +176,6 @@ describe('GameShelf full product chain (e2e acceptance)', () => {
       );
     });
     resolver.search.mockResolvedValue({ kind: 'matches', candidates: [] });
-
-    // Clean the shared e2e queue so no leftover job or pause can interfere.
-    const rawQueue = new Queue(PHOTO_IMPORT_QUEUE, {
-      connection,
-      prefix: queuePrefix,
-    });
-    await rawQueue.obliterate({ force: true });
-    await rawQueue.resume();
-    await rawQueue.close();
 
     test = await createTestApp([
       { provide: VisionService, useValue: vision },
@@ -526,24 +511,27 @@ describe('GameShelf full product chain (e2e acceptance)', () => {
   });
 
   it('12. queued photos survive a mid-import restart and are still processed', async () => {
-    const raw = new Queue(PHOTO_IMPORT_QUEUE, {
-      connection,
-      prefix: queuePrefix,
-    });
-    await raw.pause(); // the worker will not pick up new jobs
+    await test.app
+      .get(QueueControlService)
+      .pauseForConfig('llm', 'acceptance pause');
     try {
       const up = await uploadFiles(['photo:restart-1', 'photo:restart-2']);
       expect(up.status).toBe(202);
       const { batchId: restartBatchId, jobs } = up.body as {
         batchId: string;
-        jobs: { jobId: string }[];
+        jobs: { id: number }[];
       };
+      expect(jobs).toHaveLength(2);
 
-      // Deterministically queued: nothing ran while the queue was paused.
-      for (const j of jobs) {
-        const job = await raw.getJob(j.jobId);
-        if (!job) throw new Error(`expected a queued BullMQ job ${j.jobId}`);
-        expect(await job.getState()).toBe('waiting');
+      // Deterministically queued: the paused worker claimed nothing.
+      const queuedRows = await test.prisma.importJob.findMany({
+        where: { batchId: restartBatchId },
+      });
+      expect(queuedRows).toHaveLength(2);
+      for (const row of queuedRows) {
+        expect(row.status).toBe('queued');
+        expect(row.nextRunAt).not.toBeNull();
+        expect(row.attempts).toBe(0);
       }
 
       await test.app.close(); // worker force-closed mid-import
@@ -559,7 +547,10 @@ describe('GameShelf full product chain (e2e acceptance)', () => {
         .send({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD })
         .expect(200);
 
-      await raw.resume(); // the pause lives in Redis; release it
+      // The pause is durable (a MySQL row), so it survives the restart.
+      const control = reopened.app.get(QueueControlService);
+      expect((await control.getState()).paused).toBe(true);
+      await control.resume();
       await waitForBatchComplete(restartBatchId); // app #2 drains the two jobs
 
       expect(
@@ -574,7 +565,10 @@ describe('GameShelf full product chain (e2e acceptance)', () => {
         expect(existsSync(join(photoDir, row.photoRef ?? ''))).toBe(false);
       }
     } finally {
-      await raw.close();
+      await test.app
+        .get(QueueControlService)
+        .resume()
+        .catch(() => undefined);
     }
   }, 60_000);
 });

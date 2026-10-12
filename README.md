@@ -20,9 +20,9 @@ depends on them**:
   The app runs on one host, reachable at `http://localhost` (or a LAN IP), by its
   operator.
 - **No requirement depends on a container.** `docker-compose.yml` is a
-  _convenience_ that starts a local MySQL and Redis. The application has no
+  _convenience_ that starts a local MySQL. The application has no
   dependency on Docker or on that file: it needs only a MySQL 8.4 server at
-  `MYSQL_HOST:MYSQL_PORT` and a Redis 7.4 server at `REDIS_HOST:REDIS_PORT`.
+  `MYSQL_HOST:MYSQL_PORT`.
   System-installed servers work identically.
 
 ## Prerequisites
@@ -30,7 +30,7 @@ depends on them**:
 - **Node.js 24 LTS** (`>=24 <25`) — pinned in `.nvmrc` and `package.json` (`engines.node`).
 - **npm 11+** (ships with Node 24).
 - [nvm](https://github.com/nvm-sh/nvm) (optional but recommended) to select the pinned Node version.
-- **Docker** (optional) — only for the convenience `docker-compose.yml` that starts the dev MySQL and Redis. The app itself needs just a MySQL 8.4 server reachable at `MYSQL_HOST:MYSQL_PORT` and a Redis 7.4 server reachable at `REDIS_HOST:REDIS_PORT`; system-installed servers work identically.
+- **Docker** (optional) — only for the convenience `docker-compose.yml` that starts the dev MySQL. The app itself needs just a MySQL 8.4 server reachable at `MYSQL_HOST:MYSQL_PORT`; system-installed servers work identically.
 
 The root scripts call `concurrently` and the workspace CLIs, so everything runs from the repository root.
 
@@ -50,9 +50,9 @@ It runs, in order (idempotent — safe to re-run):
 1. `npm install` — install both workspaces and set up git hooks.
 2. `cp .env.example .env` — **only if `.env` is missing**, and generates a random
    `SESSION_SECRET` in the copy so you never ship the placeholder.
-3. `docker compose up -d mysql redis` — start the pinned `mysql:8.4` + `redis:7.4`
+3. `docker compose up -d mysql` — start the pinned `mysql:8.4`
    (convenience only — see "Scope").
-4. Wait until both services report **healthy**.
+4. Wait until MySQL reports **healthy**.
 5. `npm run db:deploy` — apply the committed Prisma migrations (creates every
    table; `migrate deploy` needs no shadow DB).
 6. `npm run db:generate` — generate the Prisma client (a gitignored build artifact).
@@ -73,8 +73,8 @@ If you prefer to do it by hand (or `task`/the script is unavailable):
 nvm install && nvm use          # reads .nvmrc (Node 24)
 npm install
 cp .env.example .env            # then edit .env (at minimum set SESSION_SECRET)
-docker compose up -d mysql redis
-docker compose ps               # wait until both are "healthy"
+docker compose up -d mysql
+docker compose ps               # wait until it is "healthy"
 npm run db:deploy               # apply committed migrations
 npm run db:generate             # generate the Prisma client
 npm run dev
@@ -230,15 +230,15 @@ signup page or link either; that is enforced by the frontend ticket.
 
 The API has a two-tier Jest suite (`apps/api/jest.config.js`), run from the repository root:
 
-| Command             | What it runs                                                                                         |
-| ------------------- | ---------------------------------------------------------------------------------------------------- |
-| `npm run test`      | Both tiers (unit, then e2e)                                                                          |
-| `npm run test:unit` | Unit tests only — services with a mocked `PrismaService`, **no database needed**                     |
-| `npm run test:e2e`  | E2E tests only — a real Nest app (supertest) against a real MySQL **test** database and a real Redis |
+| Command             | What it runs                                                                        |
+| ------------------- | ----------------------------------------------------------------------------------- |
+| `npm run test`      | Both tiers (unit, then e2e)                                                         |
+| `npm run test:unit` | Unit tests only — services with a mocked `PrismaService`, **no database needed**    |
+| `npm run test:e2e`  | E2E tests only — a real Nest app (supertest) against a real MySQL **test** database |
 
 (`test:unit` / `test:e2e` are `apps/api` workspace scripts; from the root use `npm run test:unit --workspace apps/api` etc., or `task test` for the full suite.)
 
-The e2e tier boots the full `AppModule`, which creates the BullMQ photo-import worker on start (ADR-002) — so e2e requires a reachable Redis in addition to MySQL (`docker compose up -d mysql redis`). The queue spec (`photo-import-queue.e2e-spec.ts`) obliterates the queue between cases. The suite runs under its own Redis key prefix (`REDIS_QUEUE_PREFIX=bull-e2e`, set in `test/setup-env.ts`), so it shares the Redis server without sharing the queue keyspace: it can run while `npm run dev` is up, and neither side sees or wipes the other's jobs.
+The e2e tier boots the full `AppModule`, which starts the in-process MySQL-backed photo-import worker on start (ADR-005) — so e2e needs only MySQL (`docker compose up -d mysql`). The queue specs shrink the worker's timings through the `PHOTO_IMPORT_QUEUE_OPTIONS` override (or pass `autoStart: false` when a spec only observes enqueueing), and `resetDatabase` clears the queue rows, so the suite can run while `npm run dev` is up.
 
 The Jest scripts set `NODE_OPTIONS=--experimental-vm-modules` because `@nestjs/schedule` is ESM-only while ts-jest runs in CommonJS mode. This is test-only and does not affect runtime.
 
@@ -268,7 +268,7 @@ The e2e tier is **re-runnable**: before the suite it applies the committed migra
 | Apply migrations      | `npm run db:deploy`        | `prisma migrate deploy` against a throwaway MySQL service container |
 | Migration drift check | `npm run db:migrate:check` | Fail if `schema.prisma` and the deployed database have diverged     |
 
-**Pinned versions.** Node is pinned to **24.21.0** (kept in sync with `.nvmrc` and `engines.node` in `package.json`); the MySQL service container is pinned to **8.4** per ADR-001, with throwaway credentials that are discarded with the run. A **redis:7.4** service (ADR-002, AOF + `noeviction`) backs the BullMQ queue for the e2e tier.
+**Pinned versions.** Node is pinned to **24.21.0** (kept in sync with `.nvmrc` and `engines.node` in `package.json`); the MySQL service container is pinned to **8.4** per ADR-001, with throwaway credentials that are discarded with the run.
 
 **Failure semantics.** Any lint error or type error fails the run — type errors are never warnings-only (`tsc --noEmit` plus error-level typed ESLint rules). A schema change without a committed migration fails the drift check, because the deployed state no longer matches `schema.prisma`.
 
@@ -368,105 +368,74 @@ The **shadow database** (`gameshelf_shadow`) is created by `docker/mysql-init/01
 
 **Character set:** the `?charset=utf8mb4` suffix in `DATABASE_URL` is declarative — Prisma's MySQL connector does not parse it. The real enforcement is threefold: the migration engine connects with `utf8mb4` (MySQL ≥ 5.5.3), every generated table declares `DEFAULT CHARACTER SET utf8mb4`, and the server runs with `--character-set-server=utf8mb4` (see "Confirming the character set").
 
-## Redis (local dev)
+## Photo import queue (MySQL)
 
-GameShelf uses **Redis 7.4** as the BullMQ job queue backing store (ADR-002).
-
-### Starting the queue
-
-Docker Compose is a **convenience, not a dependency**: the app only needs a Redis server reachable at `REDIS_HOST:REDIS_PORT`. A system-installed Redis 7.4 with AOF enabled works identically.
-
-```bash
-docker compose up -d redis     # starts the pinned redis:7.4
-docker compose ps              # wait until the service is "healthy"
-```
-
-(`docker compose up -d` starts both services at once.)
-
-### Confirming AOF persistence
-
-AOF is enabled via the `--appendonly yes` command flag in `docker-compose.yml`. Verify it:
-
-```bash
-docker compose exec redis redis-cli CONFIG GET appendonly
-```
-
-Expected:
-
-```
-appendonly
-yes
-```
-
-### Confirming data persistence
-
-Write a key, restart Redis, and read it back:
-
-```bash
-docker compose exec redis redis-cli SET persistence-test "survives-restart"
-docker compose restart redis
-docker compose exec redis redis-cli GET persistence-test
-```
-
-Expected: `survives-restart`
-
-### Persistent data directory
-
-The data directory is bind-mounted to `./data/redis` (gitignored) — a real host path, **not** an ephemeral container path. Recreating the container never loses data. The application cannot verify that this path sits on durable storage — that is a human check.
-
-To reset the dev Redis completely:
-
-```bash
-docker compose down && rm -rf data/redis
-```
-
-### Connection settings
-
-The BullMQ queue connects using **only** `REDIS_HOST` and `REDIS_PORT` from `.env` (defaults: `localhost` / `6379`), per ADR-002. `REDIS_URL` is present in `.env.example` for convenience but is **not read by the application** — setting it has no effect on the queue connection. An invalid `REDIS_PORT` (not a plain decimal, or outside 1–65535) fails startup.
-
-`REDIS_QUEUE_PREFIX` (default `bull`, BullMQ's own default) namespaces the queue's Redis keys (`"<prefix>:<queue>:..."`). It is a keyspace namespace, not a connection setting — host and port remain the only connection inputs. Tests use a separate prefix so they cannot touch a running dev queue.
+There is no separate queue service: the **`import_jobs` table is the
+photo-import queue**, drained by a single in-process worker inside the API
+(ADR-005). `docker compose up -d mysql` is all the infrastructure it needs. See
+[ADR-005 — MySQL Photo-import Queue](./docs/features/adr-005-mysql-photo-import-queue.md).
 
 ### Worker restart and shutdown
 
-Queued jobs live in Redis, so they survive an API restart: stop the API, enqueue (jobs stay `waiting`), start it again, and the worker drains them.
+Queued jobs live in MySQL, so they survive an API restart: stop the API, start it
+again, and the worker claims the due rows. Every upload, user retry and resume
+wakes the worker immediately; otherwise it polls once a second.
 
-Each photo job inherits `attempts: 3` and exponential backoff (`IMPORT_RETRY_BACKOFF_MS`) from the registered queue's `defaultJobOptions`, so upload and retry enqueue paths cannot drift. A transient failure (e.g. an external 429) throws a retryable error, the `import_jobs` row stays `processing`, and the retry re-runs only the titles that are still unresolved — the vision provider is called at most once per photo (a `vision_completed_at` marker plus a transaction make the recognition write one-shot). A job is marked `failed` only on a non-retryable error or on the final attempt. Confirmed games are saved in one MySQL transaction per batch (batch size 10), so a worker killed mid-job leaves the earlier batches committed.
+Each photo gets up to `IMPORT_MAX_ATTEMPTS = 3` attempts with exponential backoff
+(`IMPORT_RETRY_BACKOFF_MS = 5000` → 5 s, then 10 s). A transient failure (e.g. an
+external 429) throws a retryable error, the row is re-queued with the backoff
+delay, and the retry re-runs only the titles that are still unresolved — the
+vision provider is called at most once per photo (a `vision_completed_at` marker
+plus a transaction make the recognition write one-shot). A row is marked `failed`
+only on a non-retryable error (`PermanentImportError`) or on the final attempt.
+Confirmed games are saved in one MySQL transaction per batch (batch size 10), so
+a worker killed mid-job leaves the earlier batches committed.
 
-**Metadata and covers.** Each confirmed candidate is mapped to a `Game` by the reusable `GameEnrichmentService` (title, canonical platform, vision-only edition, year, publisher, genre, player count, provenance, and the raw archival payload); a source field that is absent stays empty rather than being invented. The candidate's external cover is downloaded once **outside** the DB transaction into the local cache (`COVERS_DIR`, default `~/.gameshelf/covers`) and the saved `coverUrl` becomes a same-origin `/api/covers/<file>` served by the API — never an external host. A catalog thumbnail is generated locally with `sharp` (WebP, width ≤300) and served at `/api/covers/thumbs/<file>`, and `GET /games` exposes both as `coverUrl` and `coverThumbUrl`. A failed download leaves `coverUrl` null without failing the import item, keeps the external URL internally as `sourceCoverUrl`, and a 15-minute `@Interval` sweep retries it (no second queue, ADR-002). Re-enrichment search candidates are passed through a signed same-origin `/api/covers/preview` route so the external host never reaches the browser. Replacing a cover or deleting a game removes the stored file only when no other game references it, and `npm run covers:redownload` repopulates every missing cover from its stored `sourceCoverUrl` (e.g. after the cover directory is wiped). Manual `coverUrl` inputs to `POST /games`/`PATCH /games/:id` are downloaded and kept same-origin too. See `docs/features/local-cover-cache.md` and `docs/features/game-metadata-enrichment.md`.
+**Metadata and covers.** Each confirmed candidate is mapped to a `Game` by the reusable `GameEnrichmentService` (title, canonical platform, vision-only edition, year, publisher, genre, player count, provenance, and the raw archival payload); a source field that is absent stays empty rather than being invented. The candidate's external cover is downloaded once **outside** the DB transaction into the local cache (`COVERS_DIR`, default `~/.gameshelf/covers`) and the saved `coverUrl` becomes a same-origin `/api/covers/<file>` served by the API — never an external host. A catalog thumbnail is generated locally with `sharp` (WebP, width ≤300) and served at `/api/covers/thumbs/<file>`, and `GET /games` exposes both as `coverUrl` and `coverThumbUrl`. A failed download leaves `coverUrl` null without failing the import item, keeps the external URL internally as `sourceCoverUrl`, and a 15-minute `@Interval` sweep retries it (no second queue, ADR-005). Re-enrichment search candidates are passed through a signed same-origin `/api/covers/preview` route so the external host never reaches the browser. Replacing a cover or deleting a game removes the stored file only when no other game references it, and `npm run covers:redownload` repopulates every missing cover from its stored `sourceCoverUrl` (e.g. after the cover directory is wiped). Manual `coverUrl` inputs to `POST /games`/`PATCH /games/:id` are downloaded and kept same-origin too. See `docs/features/local-cover-cache.md` and `docs/features/game-metadata-enrichment.md`.
 
 **Re-enrichment.** `POST /games/:id/enrich` re-runs the same IGDB → MobyGames → unresolved chain against a game's current (corrected) title: with no body it returns the candidate(s) and mutates nothing, and with a `{ "candidate": { "source", "externalId" } }` body it applies fresh metadata to the **existing** row — never a duplicate. The merge only fills a field the candidate provides, never changes `title`/`platformId`/`edition`, and never overwrites a hand-edited (provenance-tracked) field; `source`+`externalId` link the game and `platformUnverified` is cleared. A second identical apply writes nothing. See `docs/features/game-reenrichment.md`.
 
 **Manual add.** `GET /games/search?q=` searches the external game database (through the same per-provider rate limiters) and returns a ranked `candidates` list with same-origin preview covers; queries below 2 normalized characters return an empty list without an upstream call, successful results are cached briefly, and identical concurrent queries are coalesced. `POST /games` accepts an optional `candidate: { "source", "externalId" }` picked from that list: with it the row is saved **linked** (catalog metadata/cover, using the submitted `platformId`/`edition`, re-verified against a fresh search by title); without it the body is saved as typed data (`source: "MANUAL"`, `externalId: null`), which also works with no game database configured. A game whose identity already exists (external record + platform + edition, or normalized title + platform + edition when unlinked) is never inserted twice: `POST /games` returns `409` with `code: "GAME_ALREADY_IN_CATALOG"` and the existing `game`, and `POST /games/:id/copies` increments the new `copyCount` (exposed on `GameDetailModel`) for a deliberate second physical copy. The same identity rule is reused by the import commit, so re-uploaded shelves / overlapping photos link to the existing row and never increment the count. See `docs/features/manual-add-and-copy-count.md`.
 
-**Worker settings** (ticket 3.7; all compile-time constants, not env vars):
+**Worker settings** (ADR-005; all compile-time constants, not env vars, injected
+under the `PHOTO_IMPORT_QUEUE_OPTIONS` token):
 
-| Setting                | Value                                  | Constant                         |
-| ---------------------- | -------------------------------------- | -------------------------------- |
-| Concurrency            | 1 (ADR-002)                            | `PHOTO_IMPORT_CONCURRENCY`       |
-| Attempts               | 3 total (initial + 2 retries)          | `IMPORT_MAX_ATTEMPTS`            |
-| Backoff                | exponential, base 5 s (5 s, then 10 s) | `IMPORT_RETRY_BACKOFF_MS`        |
-| Per-job timeout        | 420 s (7 min)                          | `IMPORT_JOB_TIMEOUT_MS`          |
-| Lock duration          | 480 s (8 min, > timeout)               | `IMPORT_JOB_LOCK_DURATION_MS`    |
-| Lock renew time        | 240 s (half the lock)                  | `IMPORT_JOB_LOCK_RENEW_TIME_MS`  |
-| Stalled-check interval | 30 s                                   | `IMPORT_JOB_STALLED_INTERVAL_MS` |
-| Max stalled recoveries | 2                                      | `IMPORT_JOB_MAX_STALLED_COUNT`   |
+| Setting              | Value                                  | Constant                          |
+| -------------------- | -------------------------------------- | --------------------------------- |
+| Concurrency          | 1 (ADR-005)                            | `PHOTO_IMPORT_CONCURRENCY`        |
+| Attempts             | 3 total (initial + 2 retries)          | `IMPORT_MAX_ATTEMPTS`             |
+| Backoff              | exponential, base 5 s (5 s, then 10 s) | `IMPORT_RETRY_BACKOFF_MS`         |
+| Per-job timeout      | 420 s (7 min)                          | `IMPORT_JOB_TIMEOUT_MS`           |
+| Lease                | 480 s (8 min, > timeout)               | `IMPORT_JOB_LEASE_MS`             |
+| Stall-check interval | 30 s                                   | `IMPORT_STALL_CHECK_INTERVAL_MS`  |
+| Poll interval        | 1 s                                    | `IMPORT_QUEUE_POLL_INTERVAL_MS`   |
+| Shutdown grace       | 5 s                                    | `IMPORT_WORKER_SHUTDOWN_GRACE_MS` |
 
-Job defaults are applied once through `registerQueue`'s `defaultJobOptions` (`photoImportDefaultJobOptions()`); worker options (`photoImportWorkerOptions()`) are applied to the `@Processor`. A job that exceeds the per-job timeout fails with a retryable error and is retried per the backoff above, and is marked `failed` on the last attempt. The timeout **aborts** the attempt (`AbortController`): the in-flight pipeline stops at the next batch boundary and commits no further batch, and `commitImportBatch` refuses to write once the job is terminal — so an abandoned attempt cannot collide with the retry or mutate the DB after `markFailed`. `markCompleted`/`markFailed` write conditionally (`WHERE status IN ('queued','processing')`), so a late writer can never clobber a newer terminal status. **Timeout headroom:** the 420 s budget is sized for a shelf of up to ~50 titles (one vision call at `VISION_REQUEST_TIMEOUT_MS = 120 s`, plus ~50 sequential IGDB lookups through the central rate limiter — 4 req/s, 8 concurrent, so a single sequential path is paced at ~250 ms per request — at up to `IGDB_REQUEST_TIMEOUT_MS = 5 s` each ≈ 120 s + 50 × 5.25 s ≈ 383 s); IGDB 429s are retried internally up to `IGDB_MAX_ATTEMPTS = 3` with exponential backoff (base 500 ms, cap 5 s), while timeouts/5xx/network failures remain BullMQ's responsibility. A photo recognized with substantially more titles can hit the timeout and be retried. The BullMQ lock deliberately outlives the whole permitted job (`lockDuration > jobTimeout`), so a live worker cannot lose its lock mid-job and a second worker can never process the same job concurrently. If a worker is killed mid-job, its lock stops being renewed and expires after at most `lockDuration`; the next stalled check (`stalledInterval`) moves the job back to `waiting` and re-runs it — recovery within roughly `lockDuration + stalledInterval`. Because the pipeline is idempotent, the re-run never duplicates a saved game or a second vision call. Every attempt emits exactly one structured JSON outcome line (`event: "photo_import_job"`) with the job id, photo, counts, duration, attempt, and outcome.
+Worker options come from `photoImportQueueOptions()`, injected under the `PHOTO_IMPORT_QUEUE_OPTIONS` token (tests shrink the timings with it). A job that exceeds the per-job timeout fails with a retryable error and is retried per the backoff above, and is marked `failed` on the last attempt. The timeout **aborts** the attempt (`AbortController`): the in-flight pipeline stops at the next batch boundary and commits no further batch, and `commitImportBatch` refuses to write once the job is terminal — so an abandoned attempt cannot collide with the retry or mutate the DB after `markFailed`. `markCompleted`/`markFailed` write conditionally (`WHERE status IN ('queued','processing')`), so a late writer can never clobber a newer terminal status. **Timeout headroom:** the 420 s budget is sized for a shelf of up to ~50 titles (one vision call at `VISION_REQUEST_TIMEOUT_MS = 120 s`, plus ~50 sequential IGDB lookups through the central rate limiter — 4 req/s, 8 concurrent, so a single sequential path is paced at ~250 ms per request — at up to `IGDB_REQUEST_TIMEOUT_MS = 5 s` each ≈ 120 s + 50 × 5.25 s ≈ 383 s); IGDB 429s are retried internally up to `IGDB_MAX_ATTEMPTS = 3` with exponential backoff (base 500 ms, cap 5 s), while timeouts/5xx/network failures remain the queue's responsibility (worker retry). A photo recognized with substantially more titles can hit the timeout and be retried. The worker claims a due row in one transaction with `SELECT … WHERE status = 'queued' AND next_run_at <= now ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED`, setting `lease_until = now + 480 s`; the lease deliberately outlives the whole permitted job (`IMPORT_JOB_LEASE_MS > IMPORT_JOB_TIMEOUT_MS`), so a live attempt cannot lose its lease mid-job and a second claim can never process the same row concurrently, and there is no lease renewal. A killed worker's lease simply expires, and the stall recovery (on boot, and every 30 s) re-queues the row with the backoff delay — or marks it `failed` once its attempts are exhausted. Because the pipeline is idempotent, the re-run never duplicates a saved game or a second vision call. Every attempt emits exactly one structured JSON outcome line (`event: "photo_import_job"`) with the import job id, photo, counts, duration, attempt, and outcome.
 
 MobyGames is an optional fallback. When `MOBYGAMES_API_KEY` is set, the anti-hallucination chain appends a MobyGames v2 source after IGDB, consulted only for titles IGDB did not resolve; it is throttled to 1 request/second with a hard 720 requests/hour budget that **waits** at the window boundary rather than firing past the cap (so a request is never fired and then retried on `429`). With no key the fallback is not registered at all: imports validate against IGDB alone and a title IGDB misses is flagged unrecognized, never failing the job. Free MobyGames access is granted by application and is not instant, so start that approval early; a configured-but-rejected key (`401`/`403`) pauses the photo-import queue exactly like a broken IGDB credential (ticket 3.10), which is why `.env.example` keeps the key commented out.
 
 The uploaded photo is kept while its job is `queued`/`processing` or `failed`-retryable, deleted by the pipeline once the job completes, and cleaned up by an hourly backstop sweep otherwise. The sweep removes a leftover file from a failed pipeline delete, `dismissed` job photos, a `failed` job's photo after a 7-day retry window, an abandoned `queued`/`processing` job's photo after 48 h, and files with no owning job; a `failed` job is retryable only while its photo exists. See `docs/features/photo-lifecycle.md`.
 
-Shutdown is deterministic even when Redis is unreachable. `PhotoImportProcessor.beforeApplicationShutdown` force-closes the BullMQ worker (`worker.close(true)`) before Nest runs `@nestjs/bullmq`'s own shutdown, which otherwise waits on the reconnecting blocking connection forever. This is what lets `SIGTERM` terminate the process promptly during a Redis outage instead of hanging until `SIGKILL`.
+Shutdown stops the poller and waits up to `IMPORT_WORKER_SHUTDOWN_GRACE_MS = 5 s`
+for the in-flight attempt, then returns. A job still running past the grace keeps
+its lease, so the stall recovery reclaims it — on the next boot, or at the next
+30 s stall check — and, because the pipeline is idempotent, the re-run never
+duplicates a saved game or a second vision call.
 
-Manual verification performed (compiled app, Redis **down** on `REDIS_PORT=6399`):
+### Upgrading from Redis
+
+An existing install no longer needs Redis. Apply the migration, then remove the
+retired service and its data directory:
 
 ```bash
-REDIS_PORT=6399 API_PORT=3999 node apps/api/dist/main.js &
-kill -TERM $!        # process exits in well under a second
+npm run db:deploy
+docker compose down --remove-orphans && rm -rf data/redis
 ```
 
-Measured on the compiled app: **~0.1 s** to exit after the fix, versus **still running after 25 s** (then `SIGKILL`ed) on the pre-fix build.
+The migration backfills every `queued`/`processing` job to runnable, so jobs that
+were waiting in, or running on, the old Redis queue are processed on the next
+start.
 
 ## Backup and restore
 
@@ -477,9 +446,8 @@ rebuildable or ephemeral:
 - **Schema** — fully rebuildable from the committed Prisma migrations (ADR-003);
   you back up _data_, never schema.
 - **`gameshelf_shadow` / `gameshelf_test`** — disposable; never back them up.
-- **Redis queue** — ephemeral by design (ADR-002): jobs are retried and photos are
-  re-uploadable, so a lost queue is not data loss. Back it up only to preserve
-  in-flight jobs across a rebuild.
+- **Import jobs / queue** — part of the `gameshelf` MySQL database (ADR-005):
+  `import_jobs`, `recognized_items` and `unrecognized_items` are backed up with it.
 - **Cover cache** (`COVERS_DIR`, default `~/.gameshelf/covers`) — re-downloadable
   via `npm run covers:redownload`.
 
@@ -543,21 +511,19 @@ schema); they are only needed for a from-scratch setup (see "Setup").
 
 ### Alternative: physical data-directory snapshot
 
-For a full point-in-time snapshot of the durable data dir (MySQL **and** Redis),
-stop the services and copy the bind-mounted directories (a live InnoDB copy is
-unsafe, so MySQL must be stopped):
+For a full point-in-time snapshot of the MySQL data dir, stop the service and
+copy the bind-mounted directory (a live InnoDB copy is unsafe, so MySQL must be
+stopped):
 
 ```bash
-docker compose stop mysql redis
+docker compose stop mysql
 ts=$(date +%s)
 cp -a data/mysql "data/mysql.bak.$ts"
-cp -a data/redis "data/redis.bak.$ts"
-docker compose start mysql redis
+docker compose start mysql
 ```
 
 Restore: `docker compose stop mysql && rm -rf data/mysql && cp -a "data/mysql.bak.$ts" data/mysql && docker compose start mysql`.
-Use this when you also need the Redis queue state; prefer the logical dump for
-game data.
+Prefer the logical dump for game data.
 
 ## External services (LLM, IGDB, MobyGames)
 
@@ -637,10 +603,6 @@ All variables live in a single root `.env` file (see `.env.example`):
 | `MYSQL_ROOT_PASSWORD`           | compose    | MySQL root password (compose only)                                                                                                                                                 |
 | `DATABASE_URL`                  | `apps/api` | Prisma connection string (utf8mb4)                                                                                                                                                 |
 | `DATABASE_SHADOW_URL`           | `apps/api` | Prisma shadow DB (migrate dev only)                                                                                                                                                |
-| `REDIS_HOST`                    | `apps/api` | Redis host (default `localhost`)                                                                                                                                                   |
-| `REDIS_PORT`                    | `apps/api` | Redis port (default `6379`)                                                                                                                                                        |
-| `REDIS_QUEUE_PREFIX`            | `apps/api` | BullMQ key namespace (default `bull`)                                                                                                                                              |
-| `REDIS_URL`                     | `apps/api` | Redis connection string (present for convenience; **not read** by the app — the queue uses `REDIS_HOST`/`REDIS_PORT`)                                                              |
 | `SESSION_SECRET`                | `apps/api` | HMAC-SHA256 key for session tokens (≥32 chars)                                                                                                                                     |
 | `SESSION_TTL_MINUTES`           | `apps/api` | Sliding session lifetime in minutes (default `10080`; no "never")                                                                                                                  |
 | `CUSTOM_API_KEY`                | `apps/api` | API key for the OpenAI-compatible vision endpoint (fallback when no encrypted DB key is stored)                                                                                    |
@@ -665,11 +627,9 @@ the app is up.
 | Check                  | Command                                                                 | Expected                                                              |
 | ---------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------- |
 | API health             | `curl -fsS http://localhost:3001/health`                                | `{"status":"ok"}`                                                     |
-| Queue health           | `curl -fsS http://localhost:3001/health/queue`                          | job counts + worker ready (HTTP 200)                                  |
+| Queue health           | `curl -fsS http://localhost:3001/health/queue`                          | job counts per status from MySQL + worker ready (HTTP 200)            |
 | IGDB connectivity      | `curl -fsS http://localhost:3001/health/igdb`                           | `{"status":"ok","token":"cached"}` (or `acquired`)                    |
 | MySQL charset          | see "Confirming the character set"                                      | `character_set_server=utf8mb4`, `collation_server=utf8mb4_0900_ai_ci` |
-| Redis AOF              | `docker compose exec redis redis-cli CONFIG GET appendonly`             | `appendonly` / `yes`                                                  |
-| Redis persistence      | see "Confirming data persistence"                                       | key survives a restart                                                |
 | Migration drift        | `npm run db:migrate:check`                                              | exit 0 (no drift)                                                     |
 | Durable data dir       | **human check** — confirm `data/mysql` is on durable, backed-up storage | you confirm it                                                        |
 | Zero external requests | see "Single origin, CSP, and fonts"                                     | no non-GameShelf hosts                                                |
@@ -690,7 +650,7 @@ for you — it is always a human decision.
 ├── .husky/             # Git hooks (pre-commit)
 ├── .env.example        # Environment variable template
 ├── docker/             # One-time MySQL init scripts (shadow DB + test DB)
-├── docker-compose.yml    # Local dev MySQL + Redis (convenience only)
+├── docker-compose.yml    # Local dev MySQL (convenience only)
 ├── data/                 # Persistent dev data (gitignored)
 ├── backups/              # Logical MySQL dumps (gitignored)
 ├── .nvmrc              # Pinned Node version

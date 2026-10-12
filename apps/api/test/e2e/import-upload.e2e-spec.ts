@@ -1,7 +1,6 @@
 import type { Server } from 'node:http';
 import { existsSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Queue } from 'bullmq';
 import request from 'supertest';
 import { LlmSettingsService } from '../../src/settings/llm-settings.service';
 import { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
@@ -10,17 +9,10 @@ import {
   MAX_UPLOAD_FILES,
 } from '../../src/import-jobs/upload.options';
 import { PhotoImportHandler } from '../../src/queue/photo-import.handler';
-import { PHOTO_IMPORT_QUEUE } from '../../src/queue/queue.constants';
+import { NO_WORKER } from '../helpers/photo-import-queue';
 import { createTestApp, type TestApp } from '../helpers/test-app';
-import { createNoopPhotoImportHandler } from '../helpers/noop-photo-handler';
 import { resetDatabase } from '../helpers/reset';
 import { seedLlmSettings } from '../helpers/seed';
-
-const connection = {
-  host: process.env.REDIS_HOST ?? 'localhost',
-  port: Number(process.env.REDIS_PORT ?? 6379),
-};
-const queuePrefix = process.env.REDIS_QUEUE_PREFIX ?? 'bull-e2e';
 
 const UPLOAD_URL = '/import/upload';
 const E2E_PHOTO_DIR_SUFFIX = 'gameshelf-import-photos-e2e';
@@ -94,20 +86,13 @@ function uploadRequest(
 
 describe('Import photo upload API (e2e)', () => {
   let test: TestApp;
-  let queue: Queue;
   let llm: LlmSettingsService;
   let photoDir: string;
 
   beforeAll(async () => {
-    test = await createTestApp([
-      {
-        provide: PhotoImportHandler,
-        useValue: createNoopPhotoImportHandler(),
-      },
-    ]);
+    test = await createTestApp([NO_WORKER]);
     llm = test.app.get(LlmSettingsService);
     photoDir = test.app.get(PhotoStorageService).directory;
-    queue = new Queue(PHOTO_IMPORT_QUEUE, { connection, prefix: queuePrefix });
   });
 
   beforeEach(async () => {
@@ -118,7 +103,6 @@ describe('Import photo upload API (e2e)', () => {
   });
 
   afterAll(async () => {
-    await queue.close();
     await test.app.close();
   });
 
@@ -153,16 +137,18 @@ describe('Import photo upload API (e2e)', () => {
       expect(row.status).toBe('queued');
       expect(row.photoRef).not.toBeNull();
       expect(existsSync(join(photoDir, row.photoRef ?? ''))).toBe(true);
+      // The row itself is the queue entry and is immediately runnable.
+      expect(row.nextRunAt).not.toBeNull();
+      expect(row.attempts).toBe(0);
+      expect(row.leaseUntil).toBeNull();
     }
     expect(body.jobs.map((job) => job.id).sort((a, b) => a - b)).toEqual(
       rows.map((row) => row.id),
     );
 
-    // Every returned jobId is a real BullMQ job named 'photo'.
+    // The wire `jobId` is the import_jobs row id, not a Redis job id.
     for (const job of body.jobs) {
-      const queued = await queue.getJob(job.jobId);
-      expect(queued).toBeDefined();
-      expect(queued?.name).toBe('photo');
+      expect(job.jobId).toBe(String(job.id));
     }
   });
 

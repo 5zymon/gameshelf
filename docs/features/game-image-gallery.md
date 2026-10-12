@@ -118,7 +118,7 @@ tab; clicking a thumbnail opens a modal lightbox:
 - No bulk backfill command: existing rows keep `t_thumb` covers and have no
   gallery until re-enriched.
 - No UI/API editing or reordering of the gallery.
-- No MobyGames gallery; no new BullMQ queue; no distinct gallery thumbnail width.
+- No MobyGames gallery; no new queue; no distinct gallery thumbnail width.
 
 # Tests
 

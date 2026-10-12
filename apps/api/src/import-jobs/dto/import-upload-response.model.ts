@@ -7,7 +7,11 @@ export class ImportUploadJobModel {
   })
   id!: number;
 
-  @ApiProperty({ example: '1', description: 'BullMQ job id' })
+  @ApiProperty({
+    example: '42',
+    description:
+      'Queue job id; equals String(id), since the import_jobs row is the queue entry (ADR-005)',
+  })
   jobId!: string;
 
   @ApiProperty({ example: 'queued' })

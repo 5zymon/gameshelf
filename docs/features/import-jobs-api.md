@@ -11,10 +11,11 @@ generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-09T20:32:19Z }
 
 The import jobs API persists the results of photo imports (spec §5, import
 history) so the import progress view and the flagged-item review have durable
-records. ADR-002 settles the reason: the queue (BullMQ + Redis) is the
-mechanism, not the record — "Do not treat Redis contents as an audit log."
+records. ADR-005 settles the reason: the `import_jobs` table itself **is** the
+queue, so a row is at once the mechanism and the record — the durable record is
+never a copy of an external queue's state.
 Every import run is one row of `import_jobs` (one row per uploaded photo,
-ADR-002), and every item the vision model could not match is one row of
+ADR-005), and every item the vision model could not match is one row of
 `unrecognized_items` with its raw recognized title (decision #12).
 
 The API is read-mostly: the import pipeline (tickets 3.2/3.5) writes through
@@ -55,8 +56,6 @@ the multi-photo upload that calls `createJob` — is documented separately in th
   "needsAttention": true,
   "declaredCountMismatch": true,
   "batchId": "c1f0a4e2-...-9b3d",
-  "bullJobId": "17",
-  "queueState": null,
   "errorMessage": null,
   "createdAt": "2026-10-05T10:00:00.000Z",
   "completedAt": "2026-10-05T10:05:00.000Z"
@@ -84,9 +83,6 @@ unrecognized)`; for a running job it is the live count of `pending`
 - `batchId` — the upload batch this run belongs to
   ([Import Photo Upload API](/import-upload-api.md)); `null` for rows created
   without one.
-- `bullJobId` — the BullMQ job currently backing the run (refreshed on retry).
-- `queueState` — the raw BullMQ state, or `null` when the job is terminal,
-  unknown, or Redis is unavailable (see _Live vs durable state_).
 
 `GET /import-jobs` returns `{ items, meta }` with `meta = { page, limit,
 total, totalPages }` (`page` default 1, `limit` default 20, max 100,
@@ -124,8 +120,9 @@ re-dismissing a dismissed job is a `200` no-op.
 
 **User retry is in-place.** A **user-initiated retry** (`POST
 /import-jobs/:id/retry`, ticket 3.6) re-runs the **same** `import_jobs` row:
-it resets `failed → queued` (clearing `errorMessage`/`completedAt`) and
-enqueues a **new** BullMQ unit for the same `importJobId`. The pipeline's own
+it resets `failed → queued` (clearing `errorMessage`/`completedAt`, and resetting
+`attempts` to 0 so the row is runnable again), then wakes the in-process worker.
+The pipeline's own
 idempotency then guarantees correctness — `visionCompletedAt` prevents a
 second vision call, `listPendingRecognizedItems` re-runs only `pending`
 titles, and the `updateMany({ status: 'pending' })` claim in
@@ -134,13 +131,14 @@ counters are left intact and recomputed by the pipeline. Only `failed` jobs
 with a stored `photoRef` are retryable (`409` otherwise: `queued`/`processing`
 are already in flight, `done`/`needs_attention`/`dismissed` have nothing
 pending). The guarded `updateMany({ where: { id, status: 'failed' } })` makes
-two concurrent retries safe. This is distinct from BullMQ's **automatic**
+two concurrent retries safe. This is distinct from the worker's **automatic**
 retry of a transient failure, which also re-runs the **same** row with
-`attempts: 3` and leaves it `processing` between attempts (no user action).
+`attempts: 3`, leaving it `queued` (awaiting the backoff) between attempts (no
+user action).
 
 # Completion counts
 
-`markCompleted(jobId, result)` receives the ADR-002 job result contract —
+`markCompleted(jobId, result)` receives the ADR-005 job result contract —
 the three counts the processor reports — and persists them exactly as
 reported (the API does not reconcile `unrecognized_count` against the item
 rows; the processor is the source of truth):
@@ -207,26 +205,12 @@ and then failed permanently persists the counters it reached (pending items
 count as recognized) instead of leaving every column at 0. When omitted, the
 counter columns are left untouched.
 
-# Live vs durable state
+# Status is durable
 
-The durable record is `import_jobs.status` (MySQL); the BullMQ state (Redis)
-is a **supplementary** signal that lets a poller see a job move without
-waiting for the pipeline to persist each step. ADR-002 is explicit that Redis
-is not an audit log, so the merge is one-directional:
-
-| Durable status                                              | Queue state                                             | Reported `status` |
-| ----------------------------------------------------------- | ------------------------------------------------------- | ----------------- |
-| terminal (`done`, `needs_attention`, `failed`, `dismissed`) | (not fetched)                                           | durable status    |
-| `queued`/`processing`                                       | `active`                                                | `processing`      |
-| `queued`/`processing`                                       | `waiting`, `delayed`, `prioritized`, `waiting-children` | `queued`          |
-| `queued`/`processing`                                       | anything else / unavailable                             | durable status    |
-
-`queueState` carries the raw BullMQ value whenever it was fetched, and is
-`null` for terminal jobs, unknown ids, or when Redis is slow/unreachable. The
-read API fetches state for **non-terminal rows only**, best-effort, with a
-2 s timeout (`IMPORT_QUEUE_STATE_TIMEOUT_MS`); a Redis error returns an empty
-map and leaves the durable status untouched. A terminal outcome is therefore
-**never fabricated from Redis**.
+`import_jobs.status` is the **only** status record (ADR-005): the worker's claim
+writes `processing` durably, and during a backoff the row is `queued`. There is
+no external queue state to merge and no state-fetch timeout — the API reports the
+stored status as-is.
 
 Counts follow the same split (ticket 3.6, decision D5): a terminal job reports
 its **persisted** counters (the pipeline's source of truth); a non-terminal
@@ -270,9 +254,9 @@ The aggregate is one `groupBy(status)` over the durable rows:
 `pendingCount === 0`. An unknown/empty batch is a `404` (not an empty-but-valid
 batch). `batchId` is at most 64 chars (`400` otherwise).
 
-Ticket 3.10 adds the queue pause fields: `paused` mirrors BullMQ
-`queue.isPaused()`, and `pauseReason`/`pauseSource` (`'llm' | 'igdb'`) come from
-the durable `import_queue_state` row. See
+Ticket 3.10 adds the queue pause fields: `paused` comes from the durable
+`import_queue_state.paused` flag (ADR-005), and `pauseReason`/`pauseSource`
+(`'llm' | 'igdb'`) come from the same row. See
 [Queue Pause on Configuration Error](/queue-pause-on-config-error.md).
 
 # Queue pause (ticket 3.10)
@@ -370,7 +354,7 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
 - **Item resolution** — pick a tied candidate (`POST …/pick`, card 105) or
   manual add (frontend) are implemented; dismissal is the other state change.
   (User retry and batch progress are implemented; see _Status lifecycle_,
-  _Live vs durable state_, and _Batch progress_.)
+  _Status is durable_, and _Batch progress_.)
 - **Auth guards** (2.x) and the **frontend views** — the API serves the
   data. The progress view is implemented ([Import Progress UI](/import-progress-ui.md));
   flagged-item review remains a frontend ticket.

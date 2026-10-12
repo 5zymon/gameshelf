@@ -1,13 +1,9 @@
-import { InjectQueue } from '@nestjs/bullmq';
-import { Injectable, Logger } from '@nestjs/common';
-import type { Queue } from 'bullmq';
+import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import type { ConfigErrorSource } from './photo-import.types';
-import { PHOTO_IMPORT_QUEUE } from './queue.constants';
+import { PhotoImportQueue } from './photo-import.queue';
 
-/** Fail fast instead of hanging a read request when Redis is unreachable. */
-export const QUEUE_PAUSE_TIMEOUT_MS = 2_000;
-/** Fallback reason when Redis says paused but no durable reason was recorded. */
+/** Fallback reason when the row says paused but no durable reason was recorded. */
 export const DEFAULT_PAUSE_REASON =
   'Photo import is paused until the configuration is fixed';
 
@@ -20,13 +16,17 @@ export interface ImportQueueState {
 
 const SINGLETON_ID = 1;
 
+/**
+ * The global photo-import pause (ticket 3.10). The MySQL `import_queue_state`
+ * row is the single source of truth (ADR-005): the worker claims nothing while
+ * `paused`. Resume wakes the worker so a paused-then-resumed queue drains
+ * immediately.
+ */
 @Injectable()
 export class QueueControlService {
-  private readonly logger = new Logger(QueueControlService.name);
-
   constructor(
-    @InjectQueue(PHOTO_IMPORT_QUEUE) private readonly queue: Queue,
     private readonly prisma: PrismaService,
+    private readonly photoQueue: PhotoImportQueue,
   ) {}
 
   /** Pause on a config error and persist why (idempotent; latest reason wins). */
@@ -35,7 +35,6 @@ export class QueueControlService {
     reason: string,
   ): Promise<void> {
     const pausedAt = new Date();
-    await this.queue.pause();
     await this.prisma.importQueueState.upsert({
       where: { id: SINGLETON_ID },
       create: { id: SINGLETON_ID, paused: true, reason, source, pausedAt },
@@ -43,9 +42,8 @@ export class QueueControlService {
     });
   }
 
-  /** Resume the queue and clear the stored reason (idempotent). */
+  /** Resume the queue, clear the stored reason, and wake the worker (idempotent). */
   async resume(): Promise<void> {
-    await this.queue.resume();
     await this.prisma.importQueueState.upsert({
       where: { id: SINGLETON_ID },
       create: {
@@ -57,6 +55,7 @@ export class QueueControlService {
       },
       update: { paused: false, reason: null, source: null, pausedAt: null },
     });
+    this.photoQueue.wake();
   }
 
   /** Resume only when the queue is paused for `source`; returns whether it did. */
@@ -67,54 +66,27 @@ export class QueueControlService {
     return true;
   }
 
-  /**
-   * Operational truth: BullMQ `isPaused()` (Redis), with the durable row as the
-   * reason store and as a fallback when Redis cannot be reached.
-   */
+  /** True when the durable pause row says the queue is paused. */
+  async isPaused(): Promise<boolean> {
+    const row = await this.prisma.importQueueState.findUnique({
+      where: { id: SINGLETON_ID },
+    });
+    return row?.paused ?? false;
+  }
+
+  /** The durable pause state; a missing or running row reports not paused. */
   async getState(): Promise<ImportQueueState> {
     const row = await this.prisma.importQueueState.findUnique({
       where: { id: SINGLETON_ID },
     });
-    let paused = row?.paused ?? false;
-    try {
-      paused = await this.withTimeout(
-        this.queue.isPaused(),
-        QUEUE_PAUSE_TIMEOUT_MS,
-      );
-    } catch (error) {
-      this.logger.warn(
-        `Could not read the BullMQ pause state; using the durable record: ${
-          error instanceof Error ? error.message : String(error)
-        }`,
-      );
-    }
-    if (!paused) {
+    if (!row?.paused) {
       return { paused: false, reason: null, source: null, pausedAt: null };
     }
     return {
       paused: true,
-      reason: row?.reason ?? DEFAULT_PAUSE_REASON,
-      source: (row?.source as ConfigErrorSource | null) ?? null,
-      pausedAt: row?.pausedAt ?? null,
+      reason: row.reason ?? DEFAULT_PAUSE_REASON,
+      source: (row.source as ConfigErrorSource | null) ?? null,
+      pausedAt: row.pausedAt,
     };
-  }
-
-  private async withTimeout<T>(
-    promise: Promise<T>,
-    timeoutMs: number,
-  ): Promise<T> {
-    let timer: NodeJS.Timeout | undefined;
-    try {
-      return await Promise.race([
-        promise,
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(() => {
-            reject(new Error('Redis did not respond in time'));
-          }, timeoutMs);
-        }),
-      ]);
-    } finally {
-      if (timer !== undefined) clearTimeout(timer);
-    }
   }
 }

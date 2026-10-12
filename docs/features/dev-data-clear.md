@@ -28,8 +28,8 @@ The entry point is `apps/api/src/cli/clear-dev.ts`, run with `ts-node` against
 `NestFactory.createApplicationContext(AppModule)`, resolves `PrismaService` and
 `ConfigService`, and calls `clearDevData`. Nothing is built first.
 
-Stop `npm run dev` before running it: BullMQ jobs still in Redis can point at
-`import_jobs` rows this command deletes. The command does not touch Redis.
+Stop `npm run dev` first: the in-process worker may be mid-job on an
+`import_jobs` row this command deletes.
 
 # Developer-mode gate
 
@@ -48,15 +48,15 @@ Check `DATABASE_URL` yourself before running, especially with `--force`.
 
 # What is cleared / kept
 
-| Table                                                   | Action                   | Reason                                                                                         |
-| ------------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------- |
-| `recognized_items`, `unrecognized_items`, `import_jobs` | delete                   | Import history points at games and photos; leaving it shows stale progress/attention.          |
-| `game_videos`, `game_images`, `games`                   | delete                   | The game content itself.                                                                       |
-| `platforms WHERE added_by_import = true`                | delete (aliases cascade) | Artifacts of imports that were never confirmed; they would pollute the next test.              |
-| other `platforms` + their `platform_aliases`            | **keep**                 | Canonical IGDB list from `platforms:sync` and user-confirmed rows; re-syncing costs API calls. |
-| `users`, `sessions`                                     | **keep**                 | The operator stays logged in.                                                                  |
-| `llm_settings`                                          | **keep**                 | Holds the encrypted provider key/config; wiping it blocks photo imports.                       |
-| `import_queue_state`                                    | **keep**                 | Redis/BullMQ is authoritative for the pause; resetting only the DB row would desync them.      |
+| Table                                                   | Action                   | Reason                                                                                            |
+| ------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------- |
+| `recognized_items`, `unrecognized_items`, `import_jobs` | delete                   | Import history points at games and photos; leaving it shows stale progress/attention.             |
+| `game_videos`, `game_images`, `games`                   | delete                   | The game content itself.                                                                          |
+| `platforms WHERE added_by_import = true`                | delete (aliases cascade) | Artifacts of imports that were never confirmed; they would pollute the next test.                 |
+| other `platforms` + their `platform_aliases`            | **keep**                 | Canonical IGDB list from `platforms:sync` and user-confirmed rows; re-syncing costs API calls.    |
+| `users`, `sessions`                                     | **keep**                 | The operator stays logged in.                                                                     |
+| `llm_settings`                                          | **keep**                 | Holds the encrypted provider key/config; wiping it blocks photo imports.                          |
+| `import_queue_state`                                    | **keep**                 | The durable pause (ADR-005); clearing it would silently resume a queue paused for a config error. |
 
 Deletes run in one Prisma `$transaction`, children first:
 `recognizedItem`, `unrecognizedItem`, `importJob`, `gameVideo`, `gameImage`,
@@ -96,7 +96,7 @@ immediately.
 # Out of scope
 
 - Dropping or re-migrating the schema (`prisma migrate reset`).
-- Clearing Redis queues or `import_queue_state`.
+- Clearing `import_queue_state`.
 - Clearing `llm_settings`, users or sessions.
 - Deleting cover/gallery/import files on disk.
 - A separate `--dry-run` flag (answering `no` at the prompt covers the dry run).

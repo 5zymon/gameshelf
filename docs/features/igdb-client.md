@@ -119,8 +119,8 @@ centrally so future batching (ticket 4.3) stays within the cap.
 - an HTTP `Retry-After` header (seconds or HTTP-date) is honored instead, also
   capped at 5 s and without jitter;
 - a non-`429` error, or exhaustion of the attempts, throws the existing
-  `IgdbError`; a 429 maps to a **retryable** error, so BullMQ's outer job retry
-  (not this client) still applies after the internal retries are used up.
+  `IgdbError`; a 429 maps to a **retryable** error, so the worker's job-level
+  retry (not this client) still applies after the internal retries are used up.
 
 Internal retry is deliberately 429-only; timeouts, network failures and 5xx
 remain the job-level engine's responsibility.

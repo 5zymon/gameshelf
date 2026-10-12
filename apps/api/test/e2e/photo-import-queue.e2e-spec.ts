@@ -1,65 +1,56 @@
-import { INestApplication } from '@nestjs/common';
-import { getQueueToken } from '@nestjs/bullmq';
-import { Test } from '@nestjs/testing';
-import { Queue } from 'bullmq';
-import { AppModule } from '../../src/app.module';
-import {
-  IMPORT_MAX_ATTEMPTS,
-  IMPORT_RETRY_BACKOFF_MS,
-} from '../../src/import-jobs/import-pipeline.options';
+import type { INestApplication } from '@nestjs/common';
+import { ImportJobsService } from '../../src/import-jobs/import-jobs.service';
 import { PhotoImportHandler } from '../../src/queue/photo-import.handler';
+import {
+  PhotoImportQueue,
+  runnableNowData,
+} from '../../src/queue/photo-import.queue';
+import type { PhotoImportJobResult } from '../../src/queue/photo-import.types';
+import { QueueControlService } from '../../src/queue/queue-control.service';
 import {
   PHOTO_IMPORT_CONCURRENCY,
   PHOTO_IMPORT_QUEUE,
 } from '../../src/queue/queue.constants';
-import type { PhotoImportJobResult } from '../../src/queue/photo-import.types';
-import { createNoopPhotoImportHandler } from '../helpers/noop-photo-handler';
-import { createTestApp } from '../helpers/test-app';
+import {
+  NO_WORKER,
+  queueOptions,
+  waitFor,
+} from '../helpers/photo-import-queue';
+import { resetDatabase } from '../helpers/reset';
+import {
+  createTestApp,
+  type TestApp,
+  type TestProviderOverride,
+} from '../helpers/test-app';
 
-/**
- * Overrides the real handler so the queue tests observe scheduling only and
- * never run recognition, external lookups, or catalog writes.
- */
-const NOOP_OVERRIDE = [
-  {
-    provide: PhotoImportHandler,
-    useValue: createNoopPhotoImportHandler(),
-  },
-];
-
-/**
- * The connection and key prefix used by the test's own producer queues. The
- * worker under test uses the application's connection (REDIS_HOST/REDIS_PORT)
- * and prefix (REDIS_QUEUE_PREFIX); both point at the same local Redis but the
- * `bull-e2e` prefix in test/setup-env.ts keeps this suite in its own keyspace,
- * so it neither steals jobs from nor obliterates a developer's dev queue.
- */
-const connection = {
-  host: process.env.REDIS_HOST ?? 'localhost',
-  port: Number(process.env.REDIS_PORT ?? 6379),
+/** Result a recording handler reports: nothing recognized, nothing imported. */
+const OK_RESULT: PhotoImportJobResult = {
+  recognizedCount: 0,
+  importedCount: 0,
+  unrecognizedCount: 0,
 };
-const queuePrefix = process.env.REDIS_QUEUE_PREFIX ?? 'bull-e2e';
 
-function rawQueue(): Queue {
-  return new Queue(PHOTO_IMPORT_QUEUE, { connection, prefix: queuePrefix });
+/** A handler that records every claim and always succeeds. */
+function recordingHandler() {
+  const runs: { importJobId: number; photoRef: string | null }[] = [];
+  return {
+    runs,
+    override: {
+      provide: PhotoImportHandler,
+      useValue: {
+        handle: jest.fn(
+          (run: { importJobId: number; photoRef: string | null }) => {
+            runs.push(run);
+            return Promise.resolve(OK_RESULT);
+          },
+        ),
+      },
+    } satisfies TestProviderOverride,
+  };
 }
 
 async function delay(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitFor(
-  predicate: () => Promise<boolean>,
-  timeoutMs: number,
-): Promise<void> {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    if (await predicate()) {
-      return;
-    }
-    await delay(50);
-  }
-  throw new Error(`condition not met within ${String(timeoutMs)}ms`);
 }
 
 interface QueueHealthBody {
@@ -72,50 +63,56 @@ interface QueueHealthBody {
 
 describe('Photo import queue (e2e)', () => {
   const openApps: INestApplication[] = [];
+  let test: TestApp;
+
+  beforeAll(async () => {
+    test = await createTestApp([NO_WORKER]);
+  });
+
+  afterAll(async () => {
+    await test.app.close();
+  });
 
   beforeEach(async () => {
-    const queue = rawQueue();
-    await queue.obliterate({ force: true });
-    await queue.close();
-  }, 30_000);
+    await resetDatabase(test.prisma);
+  });
 
   afterEach(async () => {
     while (openApps.length > 0) {
-      const app = openApps.pop();
-      if (app) {
-        await app.close();
-      }
+      await openApps.pop()?.close();
     }
   }, 30_000);
 
-  it('survives an app stop/start: a job enqueued while the API is down is processed after it starts again', async () => {
-    // 1. Boot the full app (worker runs), then stop it again — a real
-    //    stop/start cycle, not just a cold start.
-    const firstBoot = await createTestApp(NOOP_OVERRIDE);
+  it('processes a row created while no app was running (restart durability)', async () => {
+    // A real stop/start cycle: app A writes the runnable row, then closes
+    // before app B polls. Only the row's durability can survive this.
+    const firstBoot = await createTestApp([NO_WORKER]);
+    const row = await firstBoot.prisma.importJob.create({
+      data: { status: 'queued', photoRef: 'restart', ...runnableNowData() },
+    });
     await firstBoot.app.close();
 
-    // 2. With no app running, enqueue the job. It exists only in Redis now.
-    const queue = rawQueue();
-    try {
-      const job = await queue.add('photo', { photoRef: 'restart' });
-      expect(await job.getState()).toBe('waiting');
+    const recorder = recordingHandler();
+    const secondBoot = await createTestApp([
+      recorder.override,
+      queueOptions({ pollIntervalMs: 20 }),
+    ]);
+    openApps.push(secondBoot.app);
 
-      // 3. A freshly started app must pick up the persisted job.
-      const secondBoot = await createTestApp(NOOP_OVERRIDE);
-      openApps.push(secondBoot.app);
+    await waitFor(() => recorder.runs.length >= 1, 15_000);
+    expect(recorder.runs[0]).toMatchObject({
+      importJobId: row.id,
+      photoRef: 'restart',
+    });
 
-      await waitFor(async () => (await job.getState()) === 'completed', 15_000);
-      expect(await job.getState()).toBe('completed');
-    } finally {
-      await queue.close();
-    }
-    // Scope: this proves job state survives an application shutdown/start in
-    // Redis and is drained by the restarted worker. It does NOT kill a worker
-    // mid-job; the process-level restart of the compiled API was verified
-    // manually (see README, "Worker restart and shutdown").
+    const stored = await secondBoot.prisma.importJob.findUniqueOrThrow({
+      where: { id: row.id },
+    });
+    expect(stored.attempts).toBe(1);
+    expect(stored.leaseUntil).toBeNull();
   }, 30_000);
 
-  it('processes jobs with concurrency exactly 1', async () => {
+  it('processes one row at a time (concurrency 1)', async () => {
     let started = 0;
     let active = 0;
     let maxActive = 0;
@@ -128,95 +125,205 @@ describe('Photo import queue (e2e)', () => {
       signalFirstStarted = resolve;
     });
 
-    // A handler that blocks on the first job so a second concurrent slot, if it
-    // existed, would be observable.
-    const blockingHandler = {
-      async handle(): Promise<PhotoImportJobResult> {
-        started += 1;
-        active += 1;
-        maxActive = Math.max(maxActive, active);
-        if (started === 1) {
-          signalFirstStarted();
-          await gate;
-        }
-        active -= 1;
-        return { recognizedCount: 0, importedCount: 0, unrecognizedCount: 0 };
-      },
-    };
-
-    const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(PhotoImportHandler)
-      .useValue(blockingHandler)
-      .compile();
-    const app = moduleRef.createNestApplication({ logger: false });
-    await app.init();
+    // Blocks on the first row so a second concurrent slot would be observable.
+    const app = (
+      await createTestApp([
+        {
+          provide: PhotoImportHandler,
+          useValue: {
+            async handle(): Promise<PhotoImportJobResult> {
+              started += 1;
+              active += 1;
+              maxActive = Math.max(maxActive, active);
+              if (started === 1) {
+                signalFirstStarted();
+                await gate;
+              }
+              active -= 1;
+              return OK_RESULT;
+            },
+          },
+        },
+        queueOptions({ pollIntervalMs: 20 }),
+      ])
+    ).app;
     openApps.push(app);
 
-    const queue = rawQueue();
     try {
-      await queue.add('photo', { photoRef: 'gate-a' });
-      await queue.add('photo', { photoRef: 'gate-b' });
+      await test.prisma.importJob.create({
+        data: { status: 'queued', photoRef: 'gate-a', ...runnableNowData() },
+      });
+      await test.prisma.importJob.create({
+        data: { status: 'queued', photoRef: 'gate-b', ...runnableNowData() },
+      });
 
       await firstStarted;
       await delay(300);
 
-      // With concurrency 1 the second job must still be waiting; with 2 it
-      // would already have started (started === 2, active === 2).
       expect(started).toBe(1);
       expect(active).toBe(1);
-      const counts = await queue.getJobCounts('active', 'waiting');
-      expect(counts.active).toBe(1);
-      expect(counts.waiting).toBe(1);
+      expect(
+        await test.prisma.importJob.count({ where: { status: 'processing' } }),
+      ).toBe(1);
+      expect(
+        await test.prisma.importJob.count({ where: { status: 'queued' } }),
+      ).toBe(1);
 
       releaseGate();
-      await waitFor(
-        async () => (await queue.getJobCounts('completed')).completed === 2,
-        15_000,
-      );
-      expect(started).toBe(2);
+      await waitFor(() => started === 2, 15_000);
       expect(maxActive).toBe(1);
     } finally {
-      // Never leave the first job blocked: `app.close()` waits for it.
+      // Never leave the first row blocked: `close()` waits for it.
       releaseGate();
-      await queue.close();
     }
   }, 30_000);
 
-  it('exposes GET /health/queue with the pinned concurrency and a ready worker', async () => {
-    const test = await createTestApp();
-    openApps.push(test.app);
+  it('reports GET /health/queue counts from MySQL (AC6)', async () => {
+    const health = await createTestApp();
+    openApps.push(health.app);
 
-    await waitFor(async () => {
-      const res = await test.request.get('/health/queue');
-      return res.status === 200 && (res.body as QueueHealthBody).workerReady;
-    }, 15_000);
+    await test.prisma.importJob.create({ data: { status: 'done' } });
+    await test.prisma.importJob.create({ data: { status: 'done' } });
+    await test.prisma.importJob.create({
+      data: { status: 'failed', errorMessage: 'boom' },
+    });
+    // No `nextRunAt`: the row is not runnable and must stay `queued`.
+    await test.prisma.importJob.create({ data: { status: 'queued' } });
 
-    const res = await test.request.get('/health/queue');
+    const res = await health.request.get('/health/queue');
     expect(res.status).toBe(200);
-    const body = res.body as QueueHealthBody;
-    expect(body).toMatchObject({
+    expect(res.body as QueueHealthBody).toEqual({
       status: 'ok',
       queue: PHOTO_IMPORT_QUEUE,
       concurrency: PHOTO_IMPORT_CONCURRENCY,
       workerReady: true,
+      counts: {
+        queued: 1,
+        processing: 0,
+        done: 2,
+        needs_attention: 0,
+        failed: 1,
+        dismissed: 0,
+      },
     });
-    expect(typeof body.counts.waiting).toBe('number');
-    expect(typeof body.counts.completed).toBe('number');
-    expect(typeof body.counts.prioritized).toBe('number');
-    expect(typeof body.counts['waiting-children']).toBe('number');
-  });
+  }, 30_000);
 
-  it('applies the configured default job options to jobs added through the app queue', async () => {
-    const test = await createTestApp(NOOP_OVERRIDE);
-    openApps.push(test.app);
+  it('wakes the worker on an enqueue even with a long poll interval', async () => {
+    const recorder = recordingHandler();
+    const app = (
+      await createTestApp([
+        recorder.override,
+        queueOptions({ pollIntervalMs: 60_000 }),
+      ])
+    ).app;
+    openApps.push(app);
 
-    const queue = test.app.get<Queue>(getQueueToken(PHOTO_IMPORT_QUEUE));
-    const job = await queue.add('photo', { photoRef: 'opts-check' });
+    const importJobs = app.get(ImportJobsService);
+    const row = await importJobs.createJob({ photoRef: 'wake', enqueue: true });
 
-    expect(job.opts.attempts).toBe(IMPORT_MAX_ATTEMPTS);
-    expect(job.opts.backoff).toEqual({
-      type: 'exponential',
-      delay: IMPORT_RETRY_BACKOFF_MS,
+    // Only the enqueue wake can satisfy this: polling is a minute away.
+    await waitFor(
+      () => recorder.runs.some((run) => run.importJobId === row.id),
+      2_000,
+    );
+  }, 30_000);
+
+  it('claims nothing while paused and drains on resume (AC4)', async () => {
+    const recorder = recordingHandler();
+    const paused = await createTestApp([
+      recorder.override,
+      queueOptions({ pollIntervalMs: 50 }),
+    ]);
+    openApps.push(paused.app);
+
+    await paused.app
+      .get(QueueControlService)
+      .pauseForConfig('igdb', 'test pause');
+    const row = await test.prisma.importJob.create({
+      data: { status: 'queued', photoRef: 'paused', ...runnableNowData() },
     });
+
+    await delay(500);
+    expect(recorder.runs).toHaveLength(0);
+    expect(
+      (await test.prisma.importJob.findUniqueOrThrow({ where: { id: row.id } }))
+        .status,
+    ).toBe('queued');
+
+    await paused.login();
+    const resume = await paused.request.post('/import-jobs/resume');
+    expect(resume.status).toBe(200);
+
+    await waitFor(
+      () => recorder.runs.some((run) => run.importJobId === row.id),
+      2_000,
+    );
+  }, 30_000);
+
+  it('claims only due rows and compares due times in UTC', async () => {
+    const app = (await createTestApp([NO_WORKER])).app;
+    openApps.push(app);
+    const queue = app.get(PhotoImportQueue);
+
+    const never = await test.prisma.importJob.create({
+      data: { status: 'queued' },
+    });
+    const future = await test.prisma.importJob.create({
+      data: {
+        status: 'queued',
+        nextRunAt: new Date(Date.now() + 3_600_000),
+      },
+    });
+    const due = await test.prisma.importJob.create({
+      data: {
+        status: 'queued',
+        nextRunAt: new Date(Date.now() - 1_000),
+      },
+    });
+
+    const claimed = await queue.claimNext(1_000);
+    expect(claimed?.id).toBe(due.id);
+    expect(await queue.claimNext(1_000)).toBeNull();
+
+    expect(
+      (
+        await test.prisma.importJob.findUniqueOrThrow({
+          where: { id: never.id },
+        })
+      ).status,
+    ).toBe('queued');
+    expect(
+      (
+        await test.prisma.importJob.findUniqueOrThrow({
+          where: { id: future.id },
+        })
+      ).status,
+    ).toBe('queued');
+  }, 30_000);
+
+  it('claims distinct rows under concurrent SKIP LOCKED claims', async () => {
+    const app = (await createTestApp([NO_WORKER])).app;
+    openApps.push(app);
+    const queue = app.get(PhotoImportQueue);
+
+    const a = await test.prisma.importJob.create({
+      data: { status: 'queued', ...runnableNowData() },
+    });
+    const b = await test.prisma.importJob.create({
+      data: { status: 'queued', ...runnableNowData() },
+    });
+
+    const [first, second] = await Promise.all([
+      queue.claimNext(1_000),
+      queue.claimNext(1_000),
+    ]);
+    const ids = [first?.id, second?.id].filter(
+      (id): id is number => id !== undefined,
+    );
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+    expect(ids.sort((x, y) => x - y)).toEqual(
+      [a.id, b.id].sort((x, y) => x - y),
+    );
   }, 30_000);
 });

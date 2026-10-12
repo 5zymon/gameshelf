@@ -4,7 +4,7 @@ import { CoverRecoveryService } from './cover-recovery.service';
 import { COVER_RETRY_SWEEP_INTERVAL_MS } from './covers.options';
 
 /**
- * Background backstop for failed cover downloads (ADR-002: no second queue).
+ * Background backstop for failed cover downloads (ADR-005: no second queue).
  * A scheduled sweep retries the games left with a `coverUrl: null` placeholder
  * and a stored `sourceCoverUrl`, so a transient download failure heals without
  * any user action. The CLI `covers:redownload` covers the wiped-directory case.
