@@ -1,0 +1,30 @@
+# Build context for apps/api/Dockerfile and apps/web/Dockerfile (context = repo root).
+# Dependencies and build output are produced inside the image.
+**/node_modules
+**/.next
+**/dist
+**/*.tsbuildinfo
+apps/api/src/generated
+
+# Secrets and local state: never baked into an image.
+.env
+.env.*
+data
+backups
+coverage
+*.log
+
+# Not needed to build or run the app.
+.git
+.github
+.husky
+.opencode
+.openchamber
+.qa
+designs
+docs
+docker
+docker-compose.yml
+**/Dockerfile
+.dockerignore
+.DS_Store

@@ -1,21 +1,32 @@
-# GameShelf — local development database.
+# GameShelf — full local stack: MySQL, migrations, API and web.
 #
-# Convenience only: the application has no dependency on Docker or on this
-# file. It only needs a MySQL 8.4 server reachable at MYSQL_HOST:MYSQL_PORT
-# with character set utf8mb4 (see README, "Database (local dev)").
+#   docker compose up --build    # then open http://localhost:3000
 #
-# Credentials come from the environment (the .env file next to this file).
-# Never commit real values — .env is gitignored.
+# Works with no .env at all: every variable has a local-only default. If a
+# root .env exists, Compose reads it for ${VAR} substitution only — the
+# containers never load it, so its host-side DATABASE_URL (localhost) and
+# NODE_ENV=development do not leak in.
+#
+# The Node-based dev flow (`npm run setup` / `npm run dev`) uses only the
+# mysql service: `docker compose up -d mysql`.
+#
+# Local / LAN use only — not a production deployment (README, "Scope").
+
+x-api-build: &api-build
+  context: .
+  dockerfile: apps/api/Dockerfile
 
 services:
   mysql:
     # Pinned major.minor per ADR-001 — never "latest".
     image: mysql:8.4
     environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required — copy .env.example to .env}
+      # Local-only defaults. Set your own in .env for anything beyond local
+      # use — before the first start (the data dir keeps the first values).
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-gameshelf-root}
       MYSQL_DATABASE: ${MYSQL_DATABASE:-gameshelf}
       MYSQL_USER: ${MYSQL_USER:-gameshelf}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required — copy .env.example to .env}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-gameshelf}
     command:
       # Server-level charset per ADR-001; databases created by the entrypoint inherit these.
       - --character-set-server=utf8mb4
@@ -26,9 +37,9 @@ services:
     volumes:
       # Persistent host path (gitignored) — never an ephemeral container path.
       - ./data/mysql:/var/lib/mysql
-      # One-time bootstrap: creates the Prisma shadow database for
-      # `prisma migrate dev` (runs only on first initialization of an
-      # empty data dir — see README, "Migrations").
+      # One-time bootstrap: creates the Prisma shadow and e2e test databases
+      # (runs only on first initialization of an empty data dir — see
+      # README, "Migrations").
       - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test:
@@ -40,3 +51,99 @@ services:
       timeout: 5s
       retries: 20
       start_period: 30s
+
+  migrate:
+    # One-shot: applies the committed Prisma migrations (`prisma migrate
+    # deploy` — never `db push`) and exits. A no-op when up to date.
+    build: *api-build
+    image: gameshelf-api:local
+    working_dir: /app
+    command: ['npm', 'run', 'db:deploy']
+    environment:
+      # Built here, not taken from .env (whose DATABASE_URL targets localhost).
+      DATABASE_URL: &database-url 'mysql://${MYSQL_USER:-gameshelf}:${MYSQL_PASSWORD:-gameshelf}@mysql:3306/${MYSQL_DATABASE:-gameshelf}?charset=utf8mb4'
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: 'no'
+
+  api:
+    build: *api-build
+    image: gameshelf-api:local
+    init: true
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: *database-url
+      # REQUIRED by the API (>= 32 chars). The default is for local use only —
+      # set your own SESSION_SECRET in .env for anything else. Changing it
+      # later logs everyone out and makes a stored LLM key unreadable.
+      SESSION_SECRET: ${SESSION_SECRET:-gameshelf-local-docker-session-secret-change-me}
+      SESSION_TTL_MINUTES: ${SESSION_TTL_MINUTES:-10080}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      # Durable cover cache on the `covers` named volume.
+      COVERS_DIR: /data/covers
+      # Optional external services — supply them in .env (blank = not configured).
+      IGDB_CLIENT_ID: ${IGDB_CLIENT_ID:-}
+      IGDB_CLIENT_SECRET: ${IGDB_CLIENT_SECRET:-}
+      IGDB_TOKEN_URL: ${IGDB_TOKEN_URL:-}
+      CUSTOM_API_KEY: ${CUSTOM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_SETTINGS_SECRET: ${LLM_SETTINGS_SECRET:-}
+      MOBYGAMES_API_KEY: ${MOBYGAMES_API_KEY:-}
+    ports:
+      # Host debugging only (Swagger at /docs, /health); the browser uses :3000.
+      - '127.0.0.1:${API_PORT:-3001}:3001'
+    volumes:
+      - covers:/data/covers
+    depends_on:
+      mysql:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3001/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    image: gameshelf-web:local
+    init: true
+    environment:
+      NODE_ENV: production
+      # Server-side target of the /api rewrite and SSR (the compose service).
+      NEXT_PUBLIC_API_URL: http://api:3001
+    ports:
+      # The only port the browser needs. Listens on all interfaces (LAN use);
+      # prefix with 127.0.0.1: to keep it local.
+      - '${WEB_PORT:-3000}:3000'
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/login', { redirect: 'manual' }).then((r) => process.exit(r.status < 500 ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  covers:
