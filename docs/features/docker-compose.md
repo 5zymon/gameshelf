@@ -26,6 +26,12 @@ public signup). The same `docker-compose.yml` still serves the Node-based dev
 flow: `npm run setup` runs `docker compose up -d mysql`, which starts only the
 database.
 
+> **Security on first start:** `web` is published on all interfaces with a
+> repo-known default `SESSION_SECRET`, and `/setup` is open until the first
+> account exists — any host on the LAN can claim it. Complete `/setup`
+> immediately after first start, or keep web local-only with
+> `WEB_PORT=127.0.0.1:3000`.
+
 This is a local/LAN convenience, not a production deployment (README, "Scope").
 The app itself still depends only on a MySQL 8.4 server.
 
@@ -53,7 +59,8 @@ need the root `package.json` and `package-lock.json`) and are pinned to
 `node:24.21.0`, the CI Node version.
 
 1. **deps**: copies only the workspace manifests and runs `npm ci` with
-   `HUSKY=0` (no `.git` in the context). Shared by both images.
+   `HUSKY=0` (no `.git` in the context). Each image builds its own — the two
+   Dockerfiles are independent builds that at most share the Docker layer cache.
 2. **build**: copies the source and runs the workspace build. The API runs
    `prisma generate && nest build`. The web app runs `next build` with
    `NEXT_PUBLIC_API_URL=http://api:3001`, because Next.js inlines
@@ -71,7 +78,11 @@ authenticated `SELECT 1` against `DATABASE_URL` until it succeeds. This makes
 `docker compose restart` safe: unlike `up`, `restart` does not honour
 `depends_on`, so the API can otherwise start before MySQL is ready — and a
 boot-time DB failure leaves its Prisma connection pool stuck, returning 500s
-until the container is restarted again. The gate removes that window.
+until the container is restarted again. The gate removes that window. It fails
+fast (exit 1) on errors that retrying cannot fix — bad credentials, a missing
+database, an unparseable `DATABASE_URL` — and caps the wait at 120 s, so a
+database that never becomes ready surfaces as a container failure that the
+`unless-stopped` restart retries instead of looping forever.
 
 `.dockerignore` keeps `.env`, `data/`, `.git`, `node_modules` and build output
 out of the context, so no secret or local state ends up in an image.
@@ -86,17 +97,17 @@ their own `DATABASE_URL`:
 mysql://${MYSQL_USER:-gameshelf}:${MYSQL_PASSWORD:-gameshelf}@mysql:3306/${MYSQL_DATABASE:-gameshelf}?charset=utf8mb4
 ```
 
-| Variable                                                                                    | Default in compose                                | Notes                                                                                                         |
-| ------------------------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `MYSQL_ROOT_PASSWORD`                                                                       | `gameshelf-root`                                  | Applied only when the `mysql-data` volume is first initialized                                                |
-| `MYSQL_USER` / `MYSQL_PASSWORD`                                                             | `gameshelf` / `gameshelf`                         | Same; a password with URL-reserved characters must be URL-encoded                                             |
-| `MYSQL_DATABASE`                                                                            | `gameshelf`                                       |                                                                                                               |
-| `SESSION_SECRET`                                                                            | `gameshelf-local-docker-session-secret-change-me` | Local use only; set your own (32+ chars). Changing it logs everyone out and makes a stored LLM key unreadable |
-| `SESSION_TTL_MINUTES`                                                                       | `10080`                                           |                                                                                                               |
-| `SESSION_COOKIE_SECURE`                                                                     | `false`                                           | Plain HTTP on localhost/LAN                                                                                   |
-| `IGDB_CLIENT_ID` / `IGDB_CLIENT_SECRET`                                                     | blank                                             | Needed for game lookups and photo import; not needed to boot                                                  |
-| `IGDB_TOKEN_URL`, `CUSTOM_API_KEY`, `LLM_MODEL`, `LLM_SETTINGS_SECRET`, `MOBYGAMES_API_KEY` | blank                                             | Blank means not configured                                                                                    |
-| `WEB_PORT` / `API_PORT` / `MYSQL_PORT`                                                      | `3000` / `3001` / `3306`                          | Host ports only; containers always listen on 3000 / 3001 / 3306                                               |
+| Variable                                                                                    | Default in compose                                | Notes                                                                                                                                  |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `MYSQL_ROOT_PASSWORD`                                                                       | `gameshelf-root`                                  | Applied only when the `mysql-data` volume is first initialized                                                                         |
+| `MYSQL_USER` / `MYSQL_PASSWORD`                                                             | `gameshelf` / `gameshelf`                         | Same; use only `[A-Za-z0-9._~-]` characters (no URL encoding — the value is fed to MySQL raw and to `DATABASE_URL` as a URL component) |
+| `MYSQL_DATABASE`                                                                            | `gameshelf`                                       |                                                                                                                                        |
+| `SESSION_SECRET`                                                                            | `gameshelf-local-docker-session-secret-change-me` | Local use only; set your own (32+ chars). Changing it logs everyone out and makes a stored LLM key unreadable                          |
+| `SESSION_TTL_MINUTES`                                                                       | `10080`                                           |                                                                                                                                        |
+| `SESSION_COOKIE_SECURE`                                                                     | `false`                                           | Plain HTTP on localhost/LAN                                                                                                            |
+| `IGDB_CLIENT_ID` / `IGDB_CLIENT_SECRET`                                                     | blank                                             | Needed for game lookups and photo import; not needed to boot                                                                           |
+| `IGDB_TOKEN_URL`, `CUSTOM_API_KEY`, `LLM_MODEL`, `LLM_SETTINGS_SECRET`, `MOBYGAMES_API_KEY` | blank                                             | Blank means not configured                                                                                                             |
+| `WEB_PORT` / `API_PORT` / `MYSQL_PORT`                                                      | `3000` / `3001` / `3306`                          | Host ports only; containers always listen on 3000 / 3001 / 3306                                                                        |
 
 Fixed values: `NODE_ENV=production` (so the dev-only `db:seed` and
 `db:clear-dev` refuse to run in the containers), `COVERS_DIR=/data/covers`,
@@ -106,9 +117,16 @@ Fixed values: `NODE_ENV=production` (so the dev-only `db:seed` and
 # Data and persistence
 
 - **Library:** the `mysql-data` named volume, shared with the Node-based flow
-  (both use the same `mysql` service). Back it up as described in the README,
-  "Backup and restore". The `docker compose exec mysql …` commands there work
-  unchanged.
+  (both use the same `mysql` service). The `MYSQL_*` credentials from the first
+  start win: the MySQL image creates the user and database only on first
+  initialization, so editing the passwords in `.env` later has no effect until
+  you `docker compose down -v`. Back it up as described in the README, "Backup
+  and restore". The `docker compose exec mysql …` commands there work unchanged.
+- **Upgrading from the `./data/mysql` bind mount:** earlier versions stored the
+  database in `./data/mysql` (a host bind mount); that data is still on disk but
+  is not used by the `mysql-data` volume, so a fresh start shows `/setup` again.
+  See the README, "Database (local dev)" → "Upgrading from the `./data/mysql`
+  bind mount", to recover it.
 - **Covers:** the `covers` named volume (`<project>_covers`). It survives
   `docker compose down` but is deleted by `docker compose down -v`. Missing
   covers can be fetched again with

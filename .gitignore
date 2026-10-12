@@ -18,7 +18,8 @@ apps/api/src/generated/
 .env.*
 !.env.example
 
-# Local dev data (MySQL data dir — persistent, never commit)
+# Legacy local data (old MySQL bind mount, retired Redis) — the live database
+# is the `mysql-data` Docker volume, not this dir. Never commit.
 data/
 
 # Backups (logical MySQL dumps)

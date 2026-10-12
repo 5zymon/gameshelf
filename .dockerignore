@@ -6,13 +6,15 @@
 **/*.tsbuildinfo
 apps/api/src/generated
 
-# Secrets and local state: never baked into an image.
-.env
-.env.*
-data
-backups
-coverage
-*.log
+# Secrets and local state: never baked into an image. The `**/` prefix makes
+# these match at any depth (a root-anchored pattern would miss apps/*/.env).
+**/.env
+**/.env.*
+**/data
+**/backups
+**/coverage
+**/*.log
+**/*.pem
 
 # Not needed to build or run the app.
 .git

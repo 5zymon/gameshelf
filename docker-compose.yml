@@ -52,12 +52,18 @@ services:
       timeout: 5s
       retries: 20
       start_period: 30s
+    # Must come back after a Docker/host restart: api/web depend on it, but
+    # `depends_on` is not re-applied on daemon-initiated restarts, so without
+    # this mysql would stay down while the others come back.
+    restart: unless-stopped
 
   migrate:
     # One-shot: applies the committed Prisma migrations (`prisma migrate
     # deploy` — never `db push`) and exits. A no-op when up to date.
-    build: *api-build
+    # Runs the image the `api` service builds (same tag); `pull_policy: never`
+    # keeps it on the locally built image instead of trying to pull the tag.
     image: gameshelf-api:local
+    pull_policy: never
     working_dir: /app
     command: ['npm', 'run', 'db:deploy']
     environment:
@@ -124,6 +130,8 @@ services:
     environment:
       NODE_ENV: production
       # Server-side target of the /api rewrite and SSR (the compose service).
+      # Baked into the web image at build time (the ARG in apps/web/Dockerfile);
+      # the runtime value here must match that build-time value.
       NEXT_PUBLIC_API_URL: http://api:3001
     ports:
       # The only port the browser needs. Listens on all interfaces (LAN use);

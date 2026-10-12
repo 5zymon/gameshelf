@@ -24,6 +24,12 @@ Open <http://localhost:3000>: on a fresh install the app redirects to `/setup`,
 where you create the first account (there is no public signup), and you are
 logged in.
 
+> **Security on first start:** the web app is published on all interfaces
+> (`0.0.0.0`) with a repo-known default `SESSION_SECRET`, and `/setup` is open
+> until the first account exists — any host on your LAN can claim it. Complete
+> `/setup` immediately after first start, or keep web local-only with
+> `WEB_PORT=127.0.0.1:3000`.
+
 - **Run in the background:** `docker compose up --build -d`; follow logs with
   `docker compose logs -f api web`.
 - **Stop:** `docker compose down` (data is kept). Start again with
@@ -32,6 +38,11 @@ logged in.
   with the Node-based dev flow, since both use the same `mysql` service); cached
   covers live in the `covers` Docker volume. `docker compose down` keeps both;
   `docker compose down -v` deletes them.
+- **Upgrading from the `./data/mysql` bind mount:** earlier versions stored the
+  database in `./data/mysql` (a host bind mount). That data is still on disk but
+  is **not** used by the `mysql-data` volume, so a fresh start shows `/setup`
+  again. If you don't care about it, just continue; to recover it, see
+  "Database (local dev)" → "Upgrading from the `./data/mysql` bind mount".
 - **Configuration:** it works without a `.env`, using local-only defaults. For
   anything beyond trying it out, create a `.env` next to `docker-compose.yml`
   and set at least `SESSION_SECRET` (32+ characters), plus `IGDB_CLIENT_ID` /
@@ -392,6 +403,38 @@ docker compose down -v
 
 Note: the MySQL image creates the database and user only on **first** initialization (empty data directory). Changing `MYSQL_USER`/`MYSQL_PASSWORD` in `.env` later has no effect until you reset.
 
+### Upgrading from the `./data/mysql` bind mount
+
+Earlier versions of `docker-compose.yml` stored the database in `./data/mysql`
+(a host bind mount). This version uses the `mysql-data` named volume instead, so
+the old directory is no longer read — a fresh start looks empty and shows
+`/setup` again. **Your old data is still intact in `./data/mysql`.** If you
+don't need it, you can ignore (or delete) the directory and continue. To
+recover it:
+
+```bash
+# 1. Start a throwaway mysql:8.4 on the old data dir (localhost-only port).
+docker run -d --name gs-old-mysql -v "$PWD/data/mysql":/var/lib/mysql \
+  -p 127.0.0.1:3307:3306 mysql:8.4 \
+  --character-set-server=utf8mb4 --collation-server=utf8mb4_0900_ai_ci
+
+# 2. Dump the old database (substitute your own -u/-p if you changed them).
+docker exec gs-old-mysql mysqldump -ugameshelf -pgameshelf \
+  --single-transaction --routines --triggers --no-tablespaces \
+  gameshelf > dump.sql
+
+# 3. Stop and remove the throwaway container.
+docker rm -f gs-old-mysql
+
+# 4. Restore into the running database: drop the (empty, migrated) database,
+#    recreate it, and load the dump (which recreates schema + data).
+docker compose exec mysql mysql -ugameshelf -pgameshelf -e \
+  "DROP DATABASE IF EXISTS gameshelf; CREATE DATABASE gameshelf CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
+docker compose exec -T mysql mysql -ugameshelf -pgameshelf gameshelf < dump.sql
+```
+
+The committed migrations are not re-run: the dump already contains the schema.
+
 ### Migrations (Prisma)
 
 Prisma is the data-access layer (ADR-003). The schema lives at `apps/api/prisma/schema.prisma`, and every schema change is captured as a committed migration under `apps/api/prisma/migrations/`. Because the migrations are in git, the schema is fully rebuildable from a clean clone — the container filesystem is disposable (ADR-001).
@@ -466,8 +509,9 @@ duplicates a saved game or a second vision call.
 
 ### Upgrading from Redis
 
-An existing install no longer needs Redis. Apply the migration, then remove the
-retired service and its data directory:
+An install that predates the Redis retirement (ADR-005) no longer needs Redis.
+Apply the migration, then remove the retired service — an orphan once the current
+`docker-compose.yml` is in place — and its old bind-mount data directory:
 
 ```bash
 npm run db:deploy
@@ -558,10 +602,12 @@ copy is unsafe, so MySQL must be stopped):
 
 ```bash
 docker compose stop mysql
-project=$(basename "$PWD")   # compose project name (dir basename by default, or your -p value)
+# Read the actual (lowercased) volume name from the container — Compose
+# lowercases/strips the project name, so `basename "$PWD"` can be wrong.
+vol=$(docker inspect -f '{{range .Mounts}}{{.Name}}{{end}}' "$(docker compose ps -aq mysql)")
 ts=$(date +%s)
 mkdir -p "backups/mysql-physical-$ts"
-docker run --rm -v "${project}_mysql-data":/src:ro \
+docker run --rm -v "${vol}":/src:ro \
   -v "$PWD/backups/mysql-physical-$ts":/dst alpine cp -a /src/. /dst/
 docker compose start mysql
 ```
@@ -570,7 +616,8 @@ Restore: stop MySQL, clear the volume, copy the snapshot back in, then start it:
 
 ```bash
 docker compose stop mysql
-docker run --rm -v "${project}_mysql-data":/dst \
+vol=$(docker inspect -f '{{range .Mounts}}{{.Name}}{{end}}' "$(docker compose ps -aq mysql)")
+docker run --rm -v "${vol}":/dst \
   -v "$PWD/backups/mysql-physical-$ts":/src:ro \
   alpine sh -c 'find /dst -mindepth 1 -delete && cp -a /src/. /dst'
 docker compose start mysql
@@ -705,7 +752,7 @@ for you — it is always a human decision.
 ├── docker/             # One-time MySQL init scripts (shadow DB + test DB)
 ├── docker-compose.yml    # Full local stack (Docker quick start); `mysql` alone = dev DB
 ├── .dockerignore         # Build context filter for the Dockerfiles
-├── data/                 # Persistent dev data (gitignored)
+├── data/                 # Legacy local data (old MySQL bind mount, retired Redis) — gitignored
 ├── backups/              # Logical MySQL dumps (gitignored)
 ├── .nvmrc              # Pinned Node version
 └── package.json        # Workspaces + root scripts

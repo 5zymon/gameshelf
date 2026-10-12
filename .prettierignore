@@ -16,5 +16,5 @@ apps/api/src/generated/
 # Vendored agent skills
 .opencode/skills/
 
-# Local dev data (MySQL data dir — persistent, never format)
+# Legacy local data (old MySQL bind mount, retired Redis) — never format
 data/
