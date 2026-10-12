@@ -72,6 +72,11 @@ tasks:
     cmds:
       - npm run covers:redownload
 
+  db:seed:
+    desc: Dev only - seed the QA account and sample platforms/games (needs a running MySQL)
+    cmds:
+      - npm run db:seed
+
   fix:
     desc: Apply ESLint autofixes and Prettier formatting
     cmds:

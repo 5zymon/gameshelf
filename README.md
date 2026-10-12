@@ -108,6 +108,7 @@ Other useful scripts (all run from the root):
 | `npm run platforms:sync`    | Fetch and reconcile the canonical IGDB platform list locally                   |
 | `npm run covers:redownload` | Re-download every missing game cover from its stored link                      |
 | `npm run db:clear-dev`      | Dev only: delete all games and import data, keep accounts                      |
+| `npm run db:seed`           | Dev only: create the QA account and sample platforms/games (idempotent)        |
 | `npm run db:deploy`         | Apply committed migrations                                                     |
 | `npm run db:migrate:check`  | Fail if schema and deployed DB diverge                                         |
 | `npm run db:generate`       | Regenerate the Prisma client                                                   |
@@ -214,6 +215,13 @@ Accounts are provisioned only by:
   same code path as first-run setup (`UsersService.prepareUser`); the CLI adds
   no separate rules. See
   [`docs/features/user-cli.md`](./docs/features/user-cli.md).
+
+- **Dev seed** — `npm run db:seed` (development only) creates
+  `qa@gameshelf.local` / `gameshelf-qa-password` for QA, plus a small sample
+  catalog. It is idempotent: re-running resets the password and never
+  duplicates games. It needs `NODE_ENV=development` (set in `.env.example`)
+  or it refuses to run. See
+  [`docs/features/dev-seed.md`](./docs/features/dev-seed.md).
 
 Additional users therefore require operator action. The web client exposes no
 signup page or link either; that is enforced by the frontend ticket.

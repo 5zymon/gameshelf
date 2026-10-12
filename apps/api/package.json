@@ -17,6 +17,7 @@
     "platforms:sync": "ts-node -P tsconfig.json src/cli/platforms.ts",
     "covers:redownload": "ts-node -P tsconfig.json src/cli/covers.ts",
     "db:clear-dev": "ts-node -P tsconfig.json src/cli/clear-dev.ts",
+    "db:seed": "ts-node -P tsconfig.json src/cli/seed.ts",
     "db:deploy": "prisma migrate deploy",
     "db:generate": "prisma generate",
     "db:migrate:check": "prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code",
