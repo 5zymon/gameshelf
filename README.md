@@ -21,8 +21,8 @@ docker compose up --build
 The first run builds the API and web images (a few minutes), starts MySQL 8.4,
 applies the committed migrations once, then starts the API and the web app.
 Open <http://localhost:3000>: on a fresh install the app redirects to `/setup`,
-where you create the first account (there is no public signup), and you are
-logged in.
+where you create the first account (there is no public signup), then log in
+with it.
 
 > **Security on first start:** the web app is published on all interfaces
 > (`0.0.0.0`) with a repo-known default `SESSION_SECRET`, and `/setup` is open
