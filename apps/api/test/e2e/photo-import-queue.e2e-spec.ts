@@ -105,6 +105,16 @@ describe('Photo import queue (e2e)', () => {
       photoRef: 'restart',
     });
 
+    // The handler being invoked (above) happens after the claim sets the lease
+    // but before the release clears it, so wait for the release before reading
+    // the settled row — asserting immediately is racy on a slow CI runner.
+    await waitFor(async () => {
+      const settled = await secondBoot.prisma.importJob.findUniqueOrThrow({
+        where: { id: row.id },
+      });
+      return settled.leaseUntil === null;
+    }, 15_000);
+
     const stored = await secondBoot.prisma.importJob.findUniqueOrThrow({
       where: { id: row.id },
     });
