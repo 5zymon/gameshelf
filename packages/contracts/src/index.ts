@@ -152,7 +152,12 @@ export interface EnrichCandidateRef {
 }
 
 /** Body for POST /import-jobs/:id/unrecognized/:itemId/pick (card 105). */
-export type PickUnrecognizedCandidateRequest = EnrichCandidateRef;
+export interface PickUnrecognizedCandidateRequest extends EnrichCandidateRef {
+  /** Re-search query that produced the candidate; lifts the stored-tie requirement. */
+  query?: string;
+  /** User-confirmed platform (UUIDv7). */
+  platformId?: string;
+}
 
 export interface CreateGameRequest {
   title: string;
@@ -268,6 +273,12 @@ export interface UnrecognizedItem {
   dismissedAt: string | null;
   /** Empty unless several candidates matched equally well. */
   candidates: UnrecognizedItemCandidate[];
+}
+
+/** Query for GET /import-jobs/:id/unrecognized/:itemId/search (card 105 re-search). */
+export interface SearchUnrecognizedItemQuery {
+  q?: string;
+  platformId?: string;
 }
 
 export interface ImportJobDetail extends ImportJob {

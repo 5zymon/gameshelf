@@ -110,12 +110,19 @@ function AttentionCard({
   const [pickingCandidateKey, setPickingCandidateKey] = useState<string | null>(
     null,
   );
+  const [lookupBusyItemId, setLookupBusyItemId] = useState<string | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [dismissing, setDismissing] = useState(false);
   const [confirmingDismiss, setConfirmingDismiss] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const failed = photo.status === 'failed';
+  // Any write in flight for this card's items: one action blocks every other
+  // action (and the manual save), so two writes can never race for one item.
+  const cardBusy =
+    itemBusyId !== null ||
+    pickingCandidateKey !== null ||
+    lookupBusyItemId !== null;
 
   const idBase = `attention-${photo.id}`;
   const cancelRef = useRef<HTMLButtonElement>(null);
@@ -234,7 +241,7 @@ function AttentionCard({
   }
 
   async function dismissItem(item: UnrecognizedItem): Promise<boolean> {
-    if (itemBusyId !== null) return false;
+    if (cardBusy) return false;
     setItemBusyId(item.id);
     setActionError(null);
     try {
@@ -264,7 +271,7 @@ function AttentionCard({
     candidate: UnrecognizedItemCandidate,
   ): Promise<void> {
     const key = `${candidate.source}:${String(candidate.externalId)}`;
-    if (pickingCandidateKey !== null) return;
+    if (cardBusy) return;
     setPickingCandidateKey(key);
     setActionError(null);
     try {
@@ -290,6 +297,13 @@ function AttentionCard({
     } finally {
       setPickingCandidateKey(null);
     }
+  }
+
+  function onItemResolved(item: UnrecognizedItem, game: GameDetail): void {
+    setItems((current) => current?.filter((i) => i.id !== item.id) ?? current);
+    setAddItemId(null);
+    setActionError(null);
+    setStatus(t('added', { title: game.title }));
   }
 
   async function onItemSaved(
@@ -379,7 +393,7 @@ function AttentionCard({
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
-                        disabled={itemBusyId !== null}
+                        disabled={cardBusy}
                         onClick={() => {
                           void dismissItem(item);
                         }}
@@ -392,7 +406,7 @@ function AttentionCard({
                       <button
                         type="button"
                         aria-expanded={addItemId === item.id}
-                        disabled={itemBusyId !== null}
+                        disabled={cardBusy}
                         onClick={() => {
                           setAddItemId((cur) =>
                             cur === item.id ? null : item.id,
@@ -417,9 +431,7 @@ function AttentionCard({
                       <button
                         type="button"
                         aria-expanded={candidateItemId === item.id}
-                        disabled={
-                          itemBusyId !== null || pickingCandidateKey !== null
-                        }
+                        disabled={cardBusy}
                         onClick={() => {
                           setCandidateItemId((cur) =>
                             cur === item.id ? null : item.id,
@@ -464,7 +476,7 @@ function AttentionCard({
                                   </div>
                                   <button
                                     type="button"
-                                    disabled={pickingCandidateKey !== null}
+                                    disabled={cardBusy}
                                     onClick={() => {
                                       void pickCandidate(item, candidate);
                                     }}
@@ -490,6 +502,37 @@ function AttentionCard({
                           item.rawPlatform,
                         )}
                         submitLabel={t('addToCatalog')}
+                        disabled={
+                          itemBusyId !== null || pickingCandidateKey !== null
+                        }
+                        onLookupBusyChange={(busy) => {
+                          setLookupBusyItemId(busy ? item.id : null);
+                        }}
+                        catalogLookup={{
+                          search: async (q, platformId, signal) =>
+                            (
+                              await api.importJobs.searchUnrecognizedItem(
+                                photo.id,
+                                item.id,
+                                { q, platformId },
+                                { signal },
+                              )
+                            ).candidates,
+                          pick: (candidate, query, platformId) =>
+                            api.importJobs.pickUnrecognizedCandidate(
+                              photo.id,
+                              item.id,
+                              {
+                                source: candidate.source,
+                                externalId: candidate.externalId,
+                                query,
+                                platformId,
+                              },
+                            ),
+                          onPicked: (game) => {
+                            onItemResolved(item, game);
+                          },
+                        }}
                         onSaved={(game) => {
                           void onItemSaved(item, game);
                         }}

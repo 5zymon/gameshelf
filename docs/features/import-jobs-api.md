@@ -29,17 +29,33 @@ the multi-photo upload that calls `createJob` — is documented separately in th
 
 # Endpoint contract
 
-| Method  | Path                                         | Purpose                                                                         | Success                          | Errors                     |
-| ------- | -------------------------------------------- | ------------------------------------------------------------------------------- | -------------------------------- | -------------------------- |
-| `GET`   | `/import-jobs`                               | List import runs with status and counts, newest first                           | `200` `ListImportJobsResponse`   | `400`                      |
-| `GET`   | `/import-jobs/batches/:batchId`              | Aggregate progress for one upload batch (X of Y photos)                         | `200` `ImportBatchProgressModel` | `400`, `404`               |
-| `GET`   | `/import-jobs/:id`                           | One run with ALL its unrecognized items (full trace)                            | `200` `ImportJobDetailModel`     | `400`, `404`               |
-| `POST`  | `/import-jobs/:id/retry`                     | Retry a failed run in place (re-runs only unresolved titles)                    | `202` `ImportJobDetailModel`     | `400`, `404`, `409`, `503` |
-| `POST`  | `/import-jobs/resume`                        | Resume a queue paused by a configuration error (idempotent)                     | `200` `ImportQueueStateModel`    | `401`                      |
-| `GET`   | `/import-jobs/:id/unrecognized`              | Flagged items awaiting review (non-dismissed only)                              | `200` `UnrecognizedItemModel[]`  | `400`, `404`               |
-| `PATCH` | `/import-jobs/:id`                           | Dismiss a needs-attention/failed job (`{"status":"dismissed"}`)                 | `200` `ImportJobDetailModel`     | `400`, `404`, `409`        |
-| `PATCH` | `/import-jobs/:id/unrecognized/:itemId`      | Dismiss/acknowledge a flagged item (`{"dismissed":true}`)                       | `200` `UnrecognizedItemModel`    | `400`, `404`               |
-| `POST`  | `/import-jobs/:id/unrecognized/:itemId/pick` | Pick a tied candidate for a flagged item (creates a `Game`, dismisses the item) | `200` `GameDetailModel`          | `400`, `404`, `409`, `503` |
+| Method  | Path                                           | Purpose                                                                                        | Success                          | Errors                     |
+| ------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------- | -------------------------- |
+| `GET`   | `/import-jobs`                                 | List import runs with status and counts, newest first                                          | `200` `ListImportJobsResponse`   | `400`                      |
+| `GET`   | `/import-jobs/batches/:batchId`                | Aggregate progress for one upload batch (X of Y photos)                                        | `200` `ImportBatchProgressModel` | `400`, `404`               |
+| `GET`   | `/import-jobs/:id`                             | One run with ALL its unrecognized items (full trace)                                           | `200` `ImportJobDetailModel`     | `400`, `404`               |
+| `POST`  | `/import-jobs/:id/retry`                       | Retry a failed run in place (re-runs only unresolved titles)                                   | `202` `ImportJobDetailModel`     | `400`, `404`, `409`, `503` |
+| `POST`  | `/import-jobs/resume`                          | Resume a queue paused by a configuration error (idempotent)                                    | `200` `ImportQueueStateModel`    | `401`                      |
+| `GET`   | `/import-jobs/:id/unrecognized`                | Flagged items awaiting review (non-dismissed only)                                             | `200` `UnrecognizedItemModel[]`  | `400`, `404`               |
+| `GET`   | `/import-jobs/:id/unrecognized/:itemId/search` | Re-search the game database for a flagged item with a corrected title                          | `200` `GameSearchResponseModel`  | `400`, `404`, `409`, `503` |
+| `PATCH` | `/import-jobs/:id`                             | Dismiss a needs-attention/failed job (`{"status":"dismissed"}`)                                | `200` `ImportJobDetailModel`     | `400`, `404`, `409`        |
+| `PATCH` | `/import-jobs/:id/unrecognized/:itemId`        | Dismiss/acknowledge a flagged item (`{"dismissed":true}`)                                      | `200` `UnrecognizedItemModel`    | `400`, `404`               |
+| `POST`  | `/import-jobs/:id/unrecognized/:itemId/pick`   | Pick a tied or re-searched candidate for a flagged item (creates a `Game`, dismisses the item) | `200` `GameDetailModel`          | `400`, `404`, `409`, `503` |
+
+A flagged item can also be re-searched with a corrected title:
+`GET /import-jobs/:id/unrecognized/:itemId/search?q=&platformId=` runs the same
+debounce-protected catalog search as `GET /games/search` (`200`
+`GameSearchResponseModel`), scoped to a live (non-dismissed) item — `404` for an
+unknown or foreign item, `409` when already reviewed, `400` for a malformed or
+unknown `platformId`, `503` while the source is down. `platformId` is a
+preference, not a filter: candidates on it are listed first, catalog order
+otherwise. Pick one with `POST …/pick` carrying the re-search `query` (lifts
+the stored-tie requirement; the candidate is re-confirmed against a fresh
+search for that query) and optionally the user-confirmed `platformId`, which
+overrides photo/catalog platform resolution (`platformUnverified` false). The
+`query` is trimmed before validation and must contain at least 2 letters or
+digits after normalization — the same bar the search's minimum length uses —
+otherwise the pick is a `400`.
 
 `ImportJobModel` response shape:
 
@@ -297,8 +313,9 @@ configuration is not re-failed. Full behaviour in
   `GET /import-jobs/:id` returns **all** items including dismissed — the
   full trace, which must outlive dismissal (spec §4.2.5).
 - Dismissal is a **state change, not a deletion**: rows remain queryable
-  (see Retention policy). "Resolution" — picking a tied candidate
-  (`POST …/pick`, card 105) or manual add — creates a `Game` and dismisses
+  (see Retention policy). "Resolution" — picking a tied or re-searched
+  candidate (`POST …/pick`, card 105; optional re-search `query` and
+  user-confirmed `platformId`) or manual add — creates a `Game` and dismisses
   the item in one guarded transaction.
 
 # Retention policy
@@ -351,8 +368,9 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
   [Photo Import Pipeline](/photo-import-pipeline.md); it calls
   `markProcessing` / `saveRecognition` / `commitImportBatch` /
   `markCompleted` / `markFailed`.
-- **Item resolution** — pick a tied candidate (`POST …/pick`, card 105) or
-  manual add (frontend) are implemented; dismissal is the other state change.
+- **Item resolution** — pick a tied or re-searched candidate (`POST …/pick`,
+  card 105) or manual add (frontend) are implemented; dismissal is the other
+  state change.
   (User retry and batch progress are implemented; see _Status lifecycle_,
   _Status is durable_, and _Batch progress_.)
 - **Auth guards** (2.x) and the **frontend views** — the API serves the

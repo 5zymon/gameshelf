@@ -28,6 +28,7 @@ import type {
   PutLlmSettingsRequest,
   PutPreferencesRequest,
   SearchGamesQuery,
+  SearchUnrecognizedItemQuery,
   SetupRequest,
   SetupResponse,
   SetupStatus,
@@ -208,7 +209,13 @@ export interface ApiClient {
       itemId: string,
       body: PickUnrecognizedCandidateRequest,
       options?: ApiRequestOptions,
-    ): Promise<UnrecognizedItem>;
+    ): Promise<GameDetail>;
+    searchUnrecognizedItem(
+      id: string,
+      itemId: string,
+      query: SearchUnrecognizedItemQuery,
+      options?: ApiRequestOptions,
+    ): Promise<GameSearchResponse>;
   };
   importUpload: {
     upload(
@@ -394,7 +401,7 @@ export function createApiClient(transport: Transport): ApiClient {
           ),
         ),
       pickUnrecognizedCandidate: (id, itemId, body, options) =>
-        request<UnrecognizedItem>(
+        request<GameDetail>(
           transport,
           `/import-jobs/${id}/unrecognized/${itemId}/pick`,
           jsonInit(
@@ -402,6 +409,12 @@ export function createApiClient(transport: Transport): ApiClient {
             body satisfies PickUnrecognizedCandidateRequest,
             options,
           ),
+        ),
+      searchUnrecognizedItem: (id, itemId, query, options) =>
+        request<GameSearchResponse>(
+          transport,
+          `/import-jobs/${id}/unrecognized/${itemId}/search${buildQueryString({ q: query.q, platformId: query.platformId })}`,
+          getInit(options),
         ),
     },
     importUpload: {

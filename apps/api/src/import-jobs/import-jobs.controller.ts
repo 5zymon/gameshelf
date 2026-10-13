@@ -23,6 +23,7 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { GameDetailModel } from '../games/dto/game-response.model';
+import { GameSearchResponseModel } from '../games/dto/game-search-response.model';
 import { DismissImportJobDto } from './dto/dismiss-import-job.dto';
 import { DismissUnrecognizedItemDto } from './dto/dismiss-unrecognized-item.dto';
 import { ImportBatchIdParamDto } from './dto/import-batch-id-param.dto';
@@ -36,6 +37,7 @@ import {
 } from './dto/import-job-response.model';
 import { ListImportJobsQueryDto } from './dto/list-import-jobs-query.dto';
 import { PickUnrecognizedCandidateDto } from './dto/pick-unrecognized-candidate.dto';
+import { SearchUnrecognizedItemQueryDto } from './dto/search-unrecognized-item-query.dto';
 import { UnrecognizedItemIdParamDto } from './dto/unrecognized-item-id-param.dto';
 import { ImportJobsService } from './import-jobs.service';
 import { UnrecognizedItemPickService } from './unrecognized-item-pick.service';
@@ -187,22 +189,52 @@ export class ImportJobsController {
     );
   }
 
+  @Get(':id/unrecognized/:itemId/search')
+  @ApiOperation({
+    summary:
+      'Re-search the game database for a flagged item with a corrected title',
+    description:
+      'Debounce-protected (shared catalog search cache). Candidates on `platformId` ' +
+      'are listed first. Pick one via POST …/pick with `query`.',
+  })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiParam({ name: 'itemId', type: String, format: 'uuid' })
+  @ApiOkResponse({ type: GameSearchResponseModel })
+  @ApiBadRequestResponse({
+    description: 'Invalid query/platformId or unknown platform',
+  })
+  @ApiNotFoundResponse({
+    description: 'Import job or unrecognized item not found',
+  })
+  @ApiConflictResponse({ description: 'Item already reviewed' })
+  @ApiServiceUnavailableResponse({
+    description: 'The catalog source is temporarily unavailable',
+  })
+  searchUnrecognized(
+    @Param() params: UnrecognizedItemIdParamDto,
+    @Query() query: SearchUnrecognizedItemQueryDto,
+  ): Promise<GameSearchResponseModel> {
+    return this.pickService.search(params.id, params.itemId, query);
+  }
+
   @Post(':id/unrecognized/:itemId/pick')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
-      'Resolve a flagged item by picking one of its tied catalog candidates',
+      'Resolve a flagged item by picking one of its tied or re-searched catalog candidates',
     description:
       'Creates the game (platform via the photo, metadata via the catalog) and ' +
       'marks the item reviewed, like "Add manually". The picked candidate is ' +
-      're-confirmed against a fresh catalog search before any game is written.',
+      're-confirmed against a fresh catalog search before any game is written; ' +
+      'with `query` the fresh search runs for that corrected title instead of the ' +
+      "stored candidate's title, and `platformId` overrides platform resolution.",
   })
   @ApiParam({ name: 'id', type: String, format: 'uuid' })
   @ApiParam({ name: 'itemId', type: String, format: 'uuid' })
   @ApiOkResponse({ type: GameDetailModel })
   @ApiBadRequestResponse({
     description:
-      "The picked candidate is not one of the item's tied candidates",
+      "The picked candidate is not one of the item's tied candidates, or unknown platformId",
   })
   @ApiNotFoundResponse({
     description: 'Import job or unrecognized item not found',
