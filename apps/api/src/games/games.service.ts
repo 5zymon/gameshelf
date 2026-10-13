@@ -529,8 +529,10 @@ export class GamesService {
 
   private buildWhere(query: ListGamesQueryDto): Prisma.GameWhereInput {
     const where: Prisma.GameWhereInput = {};
-    if (query.platformId !== undefined) {
-      where.platformId = query.platformId;
+    if (query.platformId !== undefined && query.platformId.length > 0) {
+      where.platformId = {
+        in: [...new Set(query.platformId)].sort((a, b) => a - b),
+      };
     }
     const edition = this.trimToUndefined(query.edition);
     if (edition !== undefined) {

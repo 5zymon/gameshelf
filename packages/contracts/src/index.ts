@@ -94,7 +94,8 @@ export type SortDirection = 'asc' | 'desc';
 export interface ListGamesQuery {
   page?: number;
   limit?: number;
-  platformId?: number;
+  /** Repeated on the wire (`?platformId=1&platformId=2`); a game on any of them matches. */
+  platformId?: number[];
   edition?: string;
   year?: number;
   publisher?: string;

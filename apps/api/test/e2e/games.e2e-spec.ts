@@ -184,6 +184,59 @@ describe('Games API (e2e)', () => {
       expect(noMatch.meta.total).toBe(0);
     });
 
+    it('filters by several platform ids as a union (repeated platformId)', async () => {
+      const pc = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+      const ps5 = await seedPlatform(test.prisma, {
+        name: 'PlayStation 5',
+        slug: 'ps5',
+      });
+      const nswitch = await seedPlatform(test.prisma, {
+        name: 'Nintendo Switch',
+        slug: 'nintendo-switch',
+      });
+      await seedGame(test.prisma, { title: 'On PC', platformId: pc.id });
+      await seedGame(test.prisma, { title: 'On PS5', platformId: ps5.id });
+      await seedGame(test.prisma, {
+        title: 'On Switch',
+        platformId: nswitch.id,
+      });
+
+      // Literal query string — do not rely on superagent's array serialisation.
+      const union = await test.request.get(
+        `/games?platformId=${String(pc.id)}&platformId=${String(ps5.id)}&sort=title`,
+      );
+      expect(union.status).toBe(200);
+      const unionBody = union.body as GamesListBody;
+      expect(unionBody.items.map((g) => g.title)).toEqual(['On PC', 'On PS5']);
+      expect(unionBody.meta.total).toBe(2);
+
+      const repeated = await test.request.get(
+        `/games?platformId=${String(pc.id)}&platformId=${String(pc.id)}`,
+      );
+      expect(repeated.status).toBe(200);
+      const repeatedBody = repeated.body as GamesListBody;
+      expect(repeatedBody.items.map((g) => g.title)).toEqual(['On PC']);
+      expect(repeatedBody.meta.total).toBe(1);
+    });
+
+    it('an unknown id in the list matches nothing and is not a 400', async () => {
+      const pc = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+      const ps5 = await seedPlatform(test.prisma, {
+        name: 'PlayStation 5',
+        slug: 'ps5',
+      });
+      await seedGame(test.prisma, { title: 'On PC', platformId: pc.id });
+      await seedGame(test.prisma, { title: 'On PS5', platformId: ps5.id });
+
+      const res = await test.request.get(
+        `/games?platformId=${String(pc.id)}&platformId=999999`,
+      );
+      expect(res.status).toBe(200);
+      const body = res.body as GamesListBody;
+      expect(body.items.map((g) => g.title)).toEqual(['On PC']);
+      expect(body.meta.total).toBe(1);
+    });
+
     it('searches titles case-insensitively (q)', async () => {
       const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
       await seedGame(test.prisma, { title: 'Hollow Knight', platformId: p.id });
@@ -345,6 +398,13 @@ describe('Games API (e2e)', () => {
       'limit=101',
       'limit=abc',
       'platformId=0',
+      'platformId=1&platformId=0',
+      'platformId=1&platformId=abc',
+      'platformId=2147483648',
+      'platformId[]=1',
+      Array.from({ length: 101 }, (_, i) => `platformId=${String(i + 1)}`).join(
+        '&',
+      ),
       'year=999',
       'year=2101',
       'year=abc',

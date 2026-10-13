@@ -8,6 +8,8 @@ import { CatalogPagination } from '@/components/catalog-pagination';
 import { GameCard } from '@/components/game-card';
 import type { ListGamesQuery } from '@/lib/api';
 import {
+  catalogHref,
+  DEFAULT_SORT,
   hasActiveFilters,
   parseCatalogFilters,
   type CatalogSearchParams,
@@ -54,7 +56,13 @@ export default async function CatalogPage({
   const params = await searchParams;
   const page = parsePage(params.page);
   const filters = parseCatalogFilters(params);
-  const query: ListGamesQuery = { page, limit: PAGE_SIZE, ...filters };
+  const query: ListGamesQuery = {
+    page,
+    limit: PAGE_SIZE,
+    ...filters,
+    sort: filters.sort ?? DEFAULT_SORT.sort,
+    order: filters.order ?? DEFAULT_SORT.order,
+  };
   const games = await getGames(query);
   if (games === null) redirect('/login');
   const t = await getTranslations('catalog');
@@ -88,7 +96,10 @@ export default async function CatalogPage({
       />
 
       {meta.total === 0 ? (
-        <NoResults t={t} />
+        <NoResults
+          t={t}
+          clearHref={catalogHref({ sort: filters.sort, order: filters.order })}
+        />
       ) : items.length === 0 ? (
         <div className="rounded-card border border-edge bg-surface px-6 py-10">
           <p className="text-sm text-muted">
@@ -152,13 +163,19 @@ function EmptyCatalog({
   );
 }
 
-function NoResults({ t }: { t: TranslatorFor<'catalog'> }): React.ReactElement {
+function NoResults({
+  t,
+  clearHref,
+}: {
+  t: TranslatorFor<'catalog'>;
+  clearHref: string;
+}): React.ReactElement {
   return (
     <div className="rounded-card border border-edge bg-surface p-6 sm:p-8">
       <h2 className="text-lg font-semibold text-ink">{t('noResults.title')}</h2>
       <p className="mt-2 max-w-md text-sm text-muted">{t('noResults.body')}</p>
       <div className="mt-6 flex flex-wrap items-center gap-3">
-        <Link href="/" className={SECONDARY_BUTTON}>
+        <Link href={clearHref} className={SECONDARY_BUTTON}>
           {t('noResults.clear')}
         </Link>
       </div>

@@ -49,17 +49,20 @@ export async function CatalogSkeleton(): Promise<React.ReactElement> {
         <SkeletonBlock className="h-4 w-64" />
       </header>
       <div className="space-y-3 sm:space-y-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
-            <SkeletonBlock className="h-5 w-24" />
-            <SkeletonBlock className="h-10 w-full rounded-control border border-edge" />
-          </div>
-          {Array.from({ length: 6 }, (_, i) => (
-            <div key={i} className="space-y-1.5">
-              <SkeletonBlock className="h-5 w-24" />
-              <SkeletonBlock className="h-10 w-full rounded-control border border-edge" />
+        <div className="space-y-3">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <SkeletonBlock className="h-10 w-full rounded-control border border-edge lg:w-72 lg:shrink-0" />
+            <div className="flex min-w-0 flex-1 gap-2 overflow-hidden">
+              {Array.from({ length: 4 }, (_, i) => (
+                <SkeletonBlock
+                  key={i}
+                  className="h-9 w-24 rounded-full border border-edge"
+                />
+              ))}
             </div>
-          ))}
+            <SkeletonBlock className="h-10 w-full rounded-control border border-edge lg:w-52 lg:shrink-0" />
+          </div>
+          <SkeletonBlock className="h-5 w-36" />
         </div>
       </div>
       <ul className={GRID}>

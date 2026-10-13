@@ -36,8 +36,11 @@ wrapped every `(app)` route (`/platforms`, `/settings`, `/import`,
 shell. Cover boxes reuse the real `aspect-[3/4]` frame and text rows use the same
 line-box heights, so the fallback→content swap does not reflow the grid. The
 catalog skeleton's filter area also mirrors the real `CatalogFilterBar` box model
-(same `space-y-3 sm:space-y-4` wrapper and `grid gap-3` field grid, no extra
-border/padding box) so the ~34px of panel chrome does not disappear on swap.
+(same `space-y-3 sm:space-y-4` wrapper, a `flex flex-col gap-3 lg:flex-row`
+row — search block, chip group, sort block — the chip placeholders on one
+clipped line (`overflow-hidden`), like the real scroller — and the toggle-line
+placeholder, no extra border/padding box) so the panel chrome does not disappear
+on swap.
 
 **Known limitation:** for an empty library the skeleton (filter panel + 24 tiles)
 does not know the catalog is empty, so the swap to `EmptyCatalog` is a large
@@ -46,7 +49,9 @@ to the no-results state) and to an out-of-range page (swap to the "That page has
 no games" message): the skeleton cannot know the result count or the filter
 outcome before the fetch completes. It only affects the first paint of a
 genuinely empty or empty-after-filtering result, and is unavoidable without the
-count up front.
+count up front. The filter skeleton also cannot know the platform-chip count (it
+draws four) or whether the advanced panel starts open, so those swaps shift the
+bar slightly.
 
 # Error boundaries and retry
 
@@ -115,6 +120,7 @@ once.
 - Filter chips have a 24 px remove hit area with a visible focus outline (the
   shared `:focus-visible` outline).
 - The grid stays `grid-cols-2` at 375 px with no horizontal scroll.
+- The platform chip strip scrolls horizontally inside itself (mouse drag anywhere with momentum, vertical wheel, native touch — see [Catalog Filters & Search](/catalog-filters.md)); the page never scrolls horizontally.
 
 # De-templating
 
@@ -143,7 +149,7 @@ huge first-letter initial) is the **designed** no-cover state, not a defect.
 2. Stop the API and load `/`: the root error boundary renders **Try again**; restarting the API and pressing it reloads the catalog.
 3. Open `/games/[id]`: the detail skeleton mirrors the header/cover/record geometry.
 4. A slow cover shows the pulse then fades in without moving its tile; a broken cover URL shows the gradient-initial no-cover placeholder.
-5. At 375 px the grid is 2 columns (2 / 3 / 4 / 5 across 375 / 768 / 1024 / 1280), the filter bar is single-column full-width, the detail cover is capped, and there is no horizontal scroll.
+5. At 375 px the grid is 2 columns (2 / 3 / 4 / 5 across 375 / 768 / 1024 / 1280), the filter bar stacks (the platform chips stay on one line and scroll horizontally inside their own strip, with edge fades; search and sort are full width), the detail cover is capped, and the page has no horizontal scroll.
 6. Delete dialog: focus starts on **Cancel**, Tab cycles Cancel↔Delete, Escape returns focus to **Delete game**.
 7. Edit disclosure: opening focuses **Title**, Escape closes and focuses **Edit record**.
 8. Grid tiles announce each game once; the detail hero and re-enrich preview covers keep non-empty descriptive `alt`; keyboard focus outlines are visible throughout (the shared `:focus-visible` outline).

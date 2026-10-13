@@ -26,7 +26,7 @@ without importing the decorator-based Nest DTOs into the web bundle.
 | ---------------------- | ----------------------------------------------------------------------------------------------------- |
 | `lib/api/contracts.ts` | Re-exports `@gameshelf/contracts`; the only module that imports the package.                          |
 | `lib/api/errors.ts`    | `ApiError`, `isApiError`, `isGameConflict`, `apiErrorFromResponse`.                                   |
-| `lib/api/query.ts`     | `buildQueryString`, `gamesListQuery`, `importJobsListQuery`.                                          |
+| `lib/api/query.ts`     | `buildQueryString` (array values repeat the key), `gamesListQuery`, `importJobsListQuery`.            |
 | `lib/api/client.ts`    | `Transport`, `ApiRequestOptions`, `ApiClient`, `createApiClient`.                                     |
 | `lib/api/server.ts`    | Server client (`API_ORIGIN` + forwarded cookie) and `getCurrentUser` / `getSetupStatus` / `getGames`. |
 | `lib/api/browser.ts`   | Browser client (relative `/api`, `credentials: 'same-origin'`).                                       |
