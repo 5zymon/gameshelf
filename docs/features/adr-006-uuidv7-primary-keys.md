@@ -55,10 +55,15 @@ Switching them to UUIDs later is a four-file change.
 **D5 — `sessions.id` stays as is.** It is an HMAC string, not a row key anyone
 references; only `sessions.user_id` becomes `CHAR(36)`.
 
-**D6 — every id input is validated with `@IsUUID('7')`.** A malformed or
-non-v7 id is a `400`; a well-formed but unknown id is a `404`. Swagger
-documents every id with `format: 'uuid'` and a v7 example.
-`validator@13.15.35` supports version `'7'`.
+**D6 — every id input is validated with `@IsUUID('7')`, and lowercased at the
+DTO boundary.** A malformed or non-v7 id is a `400`; a well-formed but unknown
+id is a `404`. Swagger documents every id with `format: 'uuid'` and a v7
+example. `validator@13.15.35` supports version `'7'`. `@IsUUID` is
+case-insensitive, so every id input (params, `platformId`, `targetId`) carries
+a `@Transform` (`common/lowercase-id.ts`) that runs before validation and
+normalises the value to lowercase; an uppercase id therefore can never reach
+the database or the merge self-check. `batchId` is an opaque key and is left
+as is.
 
 **D7 — `ORDER BY id`, `orderBy: { id }` and the `id > cursor` paging stay.**
 Lowercase UUIDv7 strings sort lexicographically in creation order, so the
@@ -94,9 +99,11 @@ uses — keeps working.
   increasing within one process; across processes in the same millisecond the
   order is random. Only ties are affected (default catalog sort, simultaneous
   queue claims), which is acceptable.
-- **Case.** `@IsUUID('7')` accepts uppercase; lookups still match because the
-  table collation is case-insensitive, and responses always return the stored
-  lowercase. The web helper lowercases platform ids before de-duplicating.
+- **Case.** `@IsUUID('7')` accepts uppercase, so every id input is lowercased
+  at the DTO boundary (`common/lowercase-id.ts`, a `@Transform` that runs
+  before validation). Lookups therefore store and compare the lowercase form
+  and responses always return lowercase UUIDv7s. The web helper lowercases
+  platform ids before de-duplicating.
 - **Raw SQL must supply ids.** Prisma's generated default does not apply to raw
   SQL, so any future raw `INSERT` must generate its id with
   `common/uuid-v7.ts`; the schema header comment and the helper's docstring say

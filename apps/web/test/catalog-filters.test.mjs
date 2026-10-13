@@ -219,6 +219,18 @@ test('removePlatformId: removes (idempotent), the last removal yields undefined'
   assert.equal(removePlatformId(undefined, ID_A), undefined);
 });
 
+test('togglePlatformId/removePlatformId: an uppercase id matches its lowercase entry', () => {
+  assert.notEqual(ID_MIXED.toUpperCase(), ID_MIXED);
+  assert.deepEqual(togglePlatformId(undefined, ID_MIXED.toUpperCase()), [
+    ID_MIXED,
+  ]);
+  assert.equal(togglePlatformId([ID_MIXED], ID_MIXED.toUpperCase()), undefined);
+  assert.equal(removePlatformId([ID_MIXED], ID_MIXED.toUpperCase()), undefined);
+  assert.deepEqual(removePlatformId([ID_A, ID_MIXED], ID_MIXED.toUpperCase()), [
+    ID_A,
+  ]);
+});
+
 test('sortOverrides: the default clears both keys, others split', () => {
   assert.deepEqual(sortOverrides('title-asc'), {
     sort: undefined,

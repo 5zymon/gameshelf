@@ -68,22 +68,31 @@ export function canonicalPlatformIds(
   return out.length === 0 ? undefined : out;
 }
 
-/** Adds `id` when absent, removes it when present; the last removal yields `undefined`. */
+/**
+ * Adds `id` when absent, removes it when present; the last removal yields
+ * `undefined`. `id` is lowercased first, like every entry stored by
+ * `canonicalPlatformIds`, so an uppercase copy of a selected id still toggles.
+ */
 export function togglePlatformId(
   selected: readonly string[] | undefined,
   id: string,
 ): string[] | undefined {
-  return selected?.includes(id)
-    ? canonicalPlatformIds(selected.filter((x) => x !== id))
-    : canonicalPlatformIds([...(selected ?? []), id]);
+  const target = id.toLowerCase();
+  return selected?.includes(target)
+    ? canonicalPlatformIds(selected.filter((x) => x !== target))
+    : canonicalPlatformIds([...(selected ?? []), target]);
 }
 
-/** Removes `id` (idempotent); the last removal yields `undefined`. */
+/**
+ * Removes `id` (idempotent); the last removal yields `undefined`. `id` is
+ * lowercased first, matching the canonical (lowercase) selection.
+ */
 export function removePlatformId(
   selected: readonly string[] | undefined,
   id: string,
 ): string[] | undefined {
-  return canonicalPlatformIds((selected ?? []).filter((x) => x !== id));
+  const target = id.toLowerCase();
+  return canonicalPlatformIds((selected ?? []).filter((x) => x !== target));
 }
 
 /** '' / non-numeric / out-of-range → undefined (dropped, never sent → no 400). */

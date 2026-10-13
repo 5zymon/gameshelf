@@ -942,5 +942,27 @@ describe('Games API (e2e)', () => {
       expect(body.id).toMatch(UUID_V7_PATTERN);
       expect(body.platform.id).toMatch(UUID_V7_PATTERN);
     });
+
+    it('lowercases an uppercase platformId on PATCH /games/:id', async () => {
+      const pc = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+      const ps5 = await seedPlatform(test.prisma, { name: 'PS5', slug: 'ps5' });
+      const game = await seedGame(test.prisma, {
+        title: 'Hollow Knight',
+        platformId: pc.id,
+      });
+
+      const res = await test.request
+        .patch(`/games/${game.id}`)
+        .send({ platformId: ps5.id.toUpperCase() });
+
+      expect(res.status).toBe(200);
+      const body = res.body as GameDetail;
+      expect(body.platformId).toBe(ps5.id);
+
+      const stored = await test.prisma.game.findUnique({
+        where: { id: game.id },
+      });
+      expect(stored?.platformId).toBe(ps5.id);
+    });
   });
 });

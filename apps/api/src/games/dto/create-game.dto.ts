@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsInt,
   IsNotEmpty,
@@ -12,6 +12,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 
+import { lowercaseId } from '../../common/lowercase-id';
 import { UUID_V7_EXAMPLE } from '../../common/uuid-v7';
 import { EnrichCandidateDto } from './enrich-game.dto';
 
@@ -31,6 +32,7 @@ export class CreateGameDto {
     format: 'uuid',
     example: UUID_V7_EXAMPLE,
   })
+  @Transform(lowercaseId)
   @IsUUID('7')
   platformId!: string;
 

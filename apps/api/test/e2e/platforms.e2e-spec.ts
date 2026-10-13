@@ -484,5 +484,15 @@ describe('Platforms API (e2e)', () => {
 
       expect(res.status).toBe(400);
     });
+
+    it('rejects merging a platform into itself with an uppercase targetId with 400', async () => {
+      const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+
+      const res = await test.request
+        .post(`/platforms/${p.id}/merge`)
+        .send({ targetId: p.id.toUpperCase() });
+
+      expect(res.status).toBe(400);
+    });
   });
 });

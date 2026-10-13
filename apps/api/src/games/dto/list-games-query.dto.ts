@@ -13,6 +13,7 @@ import {
   Min,
 } from 'class-validator';
 
+import { lowercaseIdArray } from '../../common/lowercase-id';
 import { UUID_V7_EXAMPLE } from '../../common/uuid-v7';
 
 /** Upper bound on repeated `platformId` values (a bounded SQL IN list). */
@@ -64,13 +65,7 @@ export class ListGamesQueryDto {
     example: [UUID_V7_EXAMPLE],
   })
   @IsOptional()
-  @Transform(({ value }: { value: unknown }) =>
-    value === undefined || value === null
-      ? undefined
-      : Array.isArray(value)
-        ? value
-        : [value],
-  )
+  @Transform(lowercaseIdArray)
   @IsArray()
   @ArrayMaxSize(MAX_PLATFORM_IDS)
   @IsUUID('7', { each: true })

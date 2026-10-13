@@ -477,6 +477,16 @@ describe('ImportJobs API (e2e)', () => {
       expect(res.status).toBe(404);
     });
 
+    it('rejects a malformed itemId with 400', async () => {
+      const job = await importJobs.createJob({});
+
+      const res = await test.request
+        .patch(`/import-jobs/${job.id}/unrecognized/not-a-uuid`)
+        .send({ dismissed: true });
+
+      expect(res.status).toBe(400);
+    });
+
     it.each([
       ['dismissed false', { dismissed: false }],
       ['missing dismissed', {}],
