@@ -7,12 +7,13 @@ import type {
   GameDetailRow,
   GameListRow,
 } from '../../src/games/game-detail.mapper';
+import { testId } from '../helpers/ids';
 
 function row(overrides: Partial<GameDetailRow> = {}): GameDetailRow {
   return {
-    id: 1,
+    id: testId(1),
     title: 'Halo: Combat Evolved',
-    platformId: 3,
+    platformId: testId(3),
     edition: null,
     releaseYear: 2001,
     publisher: 'Bungie',
@@ -34,9 +35,9 @@ function row(overrides: Partial<GameDetailRow> = {}): GameDetailRow {
     userEditedFields: null,
     createdAt: new Date('2026-10-01T00:00:00.000Z'),
     updatedAt: new Date('2026-10-02T00:00:00.000Z'),
-    platform: { id: 3, name: 'Xbox', slug: 'xbox' },
+    platform: { id: testId(3), name: 'Xbox', slug: 'xbox' },
     images: [{ url: '/api/covers/img1.jpg' }, { url: '/api/covers/img2.jpg' }],
-    videos: [{ id: 7, videoId: 'AbCdEfGhIj0', name: 'Trailer' }],
+    videos: [{ id: testId(7), videoId: 'AbCdEfGhIj0', name: 'Trailer' }],
     ...overrides,
   };
 }
@@ -84,7 +85,7 @@ describe('toGameDetail (unit)', () => {
     expect(detail.rating).toBe(78.4);
     expect(detail.ratingCount).toBe(512);
     expect(detail.videos).toEqual([
-      { id: 7, name: 'Trailer', videoId: 'AbCdEfGhIj0' },
+      { id: testId(7), name: 'Trailer', videoId: 'AbCdEfGhIj0' },
     ]);
   });
 });
@@ -92,12 +93,12 @@ describe('toGameDetail (unit)', () => {
 describe('toGameListItem (unit)', () => {
   it('passes the rating through (null stays null)', () => {
     const item = toGameListItem({
-      id: 1,
+      id: testId(1),
       title: 'Halo',
       edition: null,
       coverUrl: null,
       rating: null,
-      platform: { id: 3, name: 'Xbox', slug: 'xbox' },
+      platform: { id: testId(3), name: 'Xbox', slug: 'xbox' },
     } satisfies GameListRow);
 
     expect(item.rating).toBeNull();

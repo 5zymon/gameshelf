@@ -23,6 +23,7 @@ import type {
   GameEnrichmentService,
 } from '../../src/enrichment/game-enrichment.service';
 import type { CoverMaintenanceService } from '../../src/covers/cover-maintenance.service';
+import { testId } from '../helpers/ids';
 
 /** A catalog candidate as returned by a fresh search. */
 function candidate(
@@ -49,7 +50,7 @@ function candidate(
 function enriched(overrides: Partial<EnrichedGameData> = {}): EnrichedGameData {
   return {
     title: 'Rise of Nations: Rise of Legends',
-    platformId: 10,
+    platformId: testId(10),
     edition: 'Gold',
     releaseYear: null,
     publisher: null,
@@ -72,7 +73,7 @@ function enriched(overrides: Partial<EnrichedGameData> = {}): EnrichedGameData {
 }
 
 /** A `Game` detail row (with the GAME_DETAIL_INCLUDE projection). */
-function gameRow(id: number): GameDetailRow {
+function gameRow(id: string): GameDetailRow {
   return {
     id,
     title: 'Rise of Nations: Rise of Legends',
@@ -84,15 +85,15 @@ function gameRow(id: number): GameDetailRow {
     externalId: 18797,
     sourceCoverUrl: 'https://x/cover.jpg',
     igdbSlug: 'ron',
-    platform: { id: 10, name: 'PC', slug: 'pc' },
+    platform: { id: testId(10), name: 'PC', slug: 'pc' },
     images: [{ url: '/api/covers/img1.jpg' }],
     videos: [],
   } as unknown as GameDetailRow;
 }
 
 const ITEM = {
-  id: 5,
-  importJobId: 1,
+  id: testId(5),
+  importJobId: testId(1),
   rawTitle: 'Rise of Legends',
   rawPlatform: 'PC',
   rawEdition: 'Gold',
@@ -167,16 +168,16 @@ describe('UnrecognizedItemPickService (unit)', () => {
       candidates: [candidate()],
     });
     importJobs.resolvePlatformId.mockResolvedValue({
-      platformId: 10,
+      platformId: testId(10),
       provenance: 'catalog',
     });
     identity.findExisting.mockResolvedValue(null);
     enrichment.enrichCandidate.mockResolvedValue(enriched());
-    mock.game.create.mockResolvedValue({ id: 42 });
+    mock.game.create.mockResolvedValue({ id: testId(42) });
     mock.unrecognizedItem.updateMany.mockResolvedValue({ count: 1 });
-    mock.game.findUnique.mockResolvedValue(gameRow(42));
+    mock.game.findUnique.mockResolvedValue(gameRow(testId(42)));
 
-    const result = await service.pick(1, 5, REF);
+    const result = await service.pick(testId(1), testId(5), REF);
 
     expect(importJobs.resolvePlatformId).toHaveBeenCalledWith(
       candidate().platforms,
@@ -184,17 +185,17 @@ describe('UnrecognizedItemPickService (unit)', () => {
     );
     expect(enrichment.enrichCandidate).toHaveBeenCalledWith(
       expect.objectContaining({ externalId: 18797 }),
-      10,
+      testId(10),
       'Gold',
     );
     expect(mock.game.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ platformUnverified: true }) as unknown,
     });
     expect(mock.unrecognizedItem.updateMany).toHaveBeenCalledWith({
-      where: { id: 5, dismissedAt: null },
+      where: { id: testId(5), dismissedAt: null },
       data: { dismissedAt: expect.any(Date) as Date },
     });
-    expect(result).toEqual(toGameDetail(gameRow(42)));
+    expect(result).toEqual(toGameDetail(gameRow(testId(42))));
   });
 
   it('links an existing game and dismisses the item without creating', async () => {
@@ -206,22 +207,22 @@ describe('UnrecognizedItemPickService (unit)', () => {
       candidates: [candidate()],
     });
     importJobs.resolvePlatformId.mockResolvedValue({
-      platformId: 10,
+      platformId: testId(10),
       provenance: 'photo',
     });
-    identity.findExisting.mockResolvedValue({ id: 7, copyCount: 1 });
-    mock.game.findUnique.mockResolvedValue(gameRow(7));
+    identity.findExisting.mockResolvedValue({ id: testId(7), copyCount: 1 });
+    mock.game.findUnique.mockResolvedValue(gameRow(testId(7)));
     mock.unrecognizedItem.updateMany.mockResolvedValue({ count: 1 });
 
-    const result = await service.pick(1, 5, REF);
+    const result = await service.pick(testId(1), testId(5), REF);
 
     expect(mock.game.create).not.toHaveBeenCalled();
     expect(enrichment.enrichCandidate).not.toHaveBeenCalled();
     expect(mock.unrecognizedItem.updateMany).toHaveBeenCalledWith({
-      where: { id: 5, dismissedAt: null },
+      where: { id: testId(5), dismissedAt: null },
       data: { dismissedAt: expect.any(Date) as Date },
     });
-    expect(result).toEqual(toGameDetail(gameRow(7)));
+    expect(result).toEqual(toGameDetail(gameRow(testId(7))));
   });
 
   it('400s when the ref is not one of the stored tied candidates', async () => {
@@ -229,7 +230,7 @@ describe('UnrecognizedItemPickService (unit)', () => {
     mock.unrecognizedItem.findUnique.mockResolvedValue(ITEM);
 
     await expect(
-      service.pick(1, 5, { source: 'IGDB', externalId: 999 }),
+      service.pick(testId(1), testId(5), { source: 'IGDB', externalId: 999 }),
     ).rejects.toThrow(
       new BadRequestException(
         "The selected candidate is not one of this item's tied candidates",
@@ -244,7 +245,7 @@ describe('UnrecognizedItemPickService (unit)', () => {
       dismissedAt: new Date('2026-01-02T00:00:00.000Z'),
     });
 
-    await expect(service.pick(1, 5, REF)).rejects.toThrow(
+    await expect(service.pick(testId(1), testId(5), REF)).rejects.toThrow(
       new ConflictException('This flagged item was already reviewed'),
     );
   });
@@ -253,12 +254,12 @@ describe('UnrecognizedItemPickService (unit)', () => {
     const { service, mock } = createService();
     mock.unrecognizedItem.findUnique.mockResolvedValue({
       ...ITEM,
-      importJobId: 99,
+      importJobId: testId(99),
     });
 
-    await expect(service.pick(1, 5, REF)).rejects.toThrow(
+    await expect(service.pick(testId(1), testId(5), REF)).rejects.toThrow(
       new NotFoundException(
-        'Unrecognized item with id 5 not found in import job 1',
+        `Unrecognized item with id ${testId(5)} not found in import job ${testId(1)}`,
       ),
     );
   });
@@ -271,7 +272,7 @@ describe('UnrecognizedItemPickService (unit)', () => {
       reason: 'IGDB 429',
     });
 
-    await expect(service.pick(1, 5, REF)).rejects.toThrow(
+    await expect(service.pick(testId(1), testId(5), REF)).rejects.toThrow(
       new ServiceUnavailableException('IGDB 429'),
     );
   });
@@ -284,7 +285,7 @@ describe('UnrecognizedItemPickService (unit)', () => {
       candidates: [],
     });
 
-    await expect(service.pick(1, 5, REF)).rejects.toThrow(
+    await expect(service.pick(testId(1), testId(5), REF)).rejects.toThrow(
       new ConflictException('The selected candidate is no longer available'),
     );
   });
@@ -298,7 +299,7 @@ describe('UnrecognizedItemPickService (unit)', () => {
     });
     importJobs.resolvePlatformId.mockResolvedValue(null);
 
-    await expect(service.pick(1, 5, REF)).rejects.toThrow(
+    await expect(service.pick(testId(1), testId(5), REF)).rejects.toThrow(
       new ConflictException(
         'No usable platform for this candidate — add it manually',
       ),
@@ -321,15 +322,15 @@ describe('UnrecognizedItemPickService (unit)', () => {
       candidates: [candidate()],
     });
     importJobs.resolvePlatformId.mockResolvedValue({
-      platformId: 10,
+      platformId: testId(10),
       provenance: 'catalog',
     });
     identity.findExisting.mockResolvedValue(null);
     enrichment.enrichCandidate.mockResolvedValue(enriched());
-    mock.game.create.mockResolvedValue({ id: 42 });
+    mock.game.create.mockResolvedValue({ id: testId(42) });
     mock.unrecognizedItem.updateMany.mockResolvedValue({ count: 0 });
 
-    await expect(service.pick(1, 5, REF)).rejects.toThrow(
+    await expect(service.pick(testId(1), testId(5), REF)).rejects.toThrow(
       new ConflictException('This flagged item was already reviewed'),
     );
     // The downloaded assets are cleaned up after the rollback.

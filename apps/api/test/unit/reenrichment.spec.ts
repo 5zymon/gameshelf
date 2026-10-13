@@ -8,12 +8,13 @@ import {
   TRACKED_METADATA_FIELDS,
   type ReenrichmentExisting,
 } from '../../src/enrichment/reenrichment';
+import { testId } from '../helpers/ids';
 
 function existing(
   overrides: Partial<ReenrichmentExisting> = {},
 ): ReenrichmentExisting {
   return {
-    id: 1,
+    id: testId(1),
     releaseYear: null,
     publisher: null,
     genre: null,
@@ -38,7 +39,7 @@ function existing(
 function enriched(overrides: Partial<EnrichedGameData> = {}): EnrichedGameData {
   return {
     title: 'Halo: Combat Evolved',
-    platformId: 3,
+    platformId: testId(3),
     edition: null,
     releaseYear: 2001,
     publisher: 'Bungie',
@@ -200,7 +201,7 @@ describe('buildReenrichmentUpdate', () => {
       existing: existing({ source: 'IGDB', externalId: 1036 }),
       enriched: enriched({
         title: 'Different Title',
-        platformId: 99,
+        platformId: testId(99),
         edition: 'GOTY',
       }),
     });

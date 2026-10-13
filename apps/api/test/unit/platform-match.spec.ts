@@ -4,10 +4,11 @@ import {
   normalizePlatformName,
   type PlatformMatchCandidate,
 } from '../../src/platforms/platform-match';
+import { testId } from '../helpers/ids';
 
 /** Builds a candidate with sensible null defaults. */
 function candidate(
-  overrides: Partial<PlatformMatchCandidate> & { id: number },
+  overrides: Partial<PlatformMatchCandidate> & { id: string },
 ): PlatformMatchCandidate {
   return {
     name: '',
@@ -68,7 +69,7 @@ describe('expandPlatformInputs (unit)', () => {
 describe('findPlatformMatch (unit)', () => {
   it('matches PS5 to a platform whose abbreviation is PS5', () => {
     const ps5 = candidate({
-      id: 1,
+      id: testId(1),
       name: 'PlayStation 5',
       abbreviation: 'PS5',
     });
@@ -78,7 +79,7 @@ describe('findPlatformMatch (unit)', () => {
 
   it("resolves 'PS5' and 'PlayStation 5' to the same record", () => {
     const ps5 = candidate({
-      id: 1,
+      id: testId(1),
       name: 'PlayStation 5',
       abbreviation: 'PS5',
     });
@@ -89,7 +90,7 @@ describe('findPlatformMatch (unit)', () => {
 
   it('matches through a platform alternative name', () => {
     const ps5 = candidate({
-      id: 1,
+      id: testId(1),
       name: 'Sony PlayStation 5',
       alternativeName: 'PS5',
     });
@@ -98,27 +99,27 @@ describe('findPlatformMatch (unit)', () => {
   });
 
   it('is case-insensitive', () => {
-    const platform = candidate({ id: 1, name: 'PlayStation 5' });
+    const platform = candidate({ id: testId(1), name: 'PlayStation 5' });
 
     expect(findPlatformMatch([platform], ['playstation 5'])).toBe(platform);
   });
 
   it('ignores punctuation and whitespace differences', () => {
-    const platform = candidate({ id: 1, name: 'Nintendo Switch' });
+    const platform = candidate({ id: testId(1), name: 'Nintendo Switch' });
 
     expect(findPlatformMatch([platform], ['nintendo-switch'])).toBe(platform);
   });
 
   it('returns the match for the first input that resolves', () => {
-    const alpha = candidate({ id: 1, name: 'Alpha' });
-    const beta = candidate({ id: 2, name: 'Beta' });
+    const alpha = candidate({ id: testId(1), name: 'Alpha' });
+    const beta = candidate({ id: testId(2), name: 'Beta' });
 
     expect(findPlatformMatch([alpha, beta], ['Beta', 'Alpha'])).toBe(beta);
   });
 
   it('does not force-match a near-miss name', () => {
     const ps5 = candidate({
-      id: 1,
+      id: testId(1),
       name: 'PlayStation 5',
       abbreviation: 'PS5',
     });
@@ -128,7 +129,7 @@ describe('findPlatformMatch (unit)', () => {
 
   it('does not force-match a near-miss abbreviation', () => {
     const ps5 = candidate({
-      id: 1,
+      id: testId(1),
       name: 'PlayStation 5',
       abbreviation: 'PS5',
     });
@@ -137,27 +138,31 @@ describe('findPlatformMatch (unit)', () => {
   });
 
   it('does not force-match a shorter name against a longer one', () => {
-    const xbox = candidate({ id: 1, name: 'Xbox' });
+    const xbox = candidate({ id: testId(1), name: 'Xbox' });
 
     expect(findPlatformMatch([xbox], ['Xbox 360'])).toBeNull();
   });
 
   it('returns null when no input is known', () => {
-    const ps5 = candidate({ id: 1, name: 'PlayStation 5' });
+    const ps5 = candidate({ id: testId(1), name: 'PlayStation 5' });
 
     expect(findPlatformMatch([ps5], ['Atari Jaguar', 'Dreamcast'])).toBeNull();
   });
 
   it('never matches a key shared by two distinct platforms', () => {
-    const a = candidate({ id: 1, name: 'Shared' });
-    const b = candidate({ id: 2, name: 'Other', abbreviation: 'Shared' });
+    const a = candidate({ id: testId(1), name: 'Shared' });
+    const b = candidate({
+      id: testId(2),
+      name: 'Other',
+      abbreviation: 'Shared',
+    });
 
     expect(findPlatformMatch([a, b], ['Shared'])).toBeNull();
   });
 
   it('matches through an alias', () => {
     const ps5 = candidate({
-      id: 1,
+      id: testId(1),
       name: 'PlayStation 5',
       aliases: ['PlayStaton 5'],
     });
@@ -167,7 +172,7 @@ describe('findPlatformMatch (unit)', () => {
 
   it('matches a PC DVD ROM banner to the canonical PC platform', () => {
     const pc = candidate({
-      id: 3,
+      id: testId(3),
       name: 'PC (Microsoft Windows)',
       abbreviation: 'PC',
     });
@@ -183,14 +188,14 @@ describe('findPlatformMatch (unit)', () => {
     // present. If the synonym collided on the index instead, the ambiguity
     // guard would return null and the importer would create a junk platform.
     const legacy = candidate({
-      id: 7,
+      id: testId(7),
       name: 'Windows',
       abbreviation: null,
       alternativeName: null,
       aliases: [],
     });
     const canonical = candidate({
-      id: 3,
+      id: testId(3),
       name: 'PC (Microsoft Windows)',
       abbreviation: 'PC',
       alternativeName: null,
@@ -210,7 +215,7 @@ describe('findPlatformMatch (unit)', () => {
     // name. A row named "PC (Microsoft Windows)" with no abbreviation must
     // match its own name exactly — no synonym rewrite, no createCanonical.
     const canonical = candidate({
-      id: 3,
+      id: testId(3),
       name: 'PC (Microsoft Windows)',
       abbreviation: null,
     });
@@ -222,7 +227,7 @@ describe('findPlatformMatch (unit)', () => {
 
   it('does not force-match PC Engine to the PC platform', () => {
     const pc = candidate({
-      id: 3,
+      id: testId(3),
       name: 'PC (Microsoft Windows)',
       abbreviation: 'PC',
     });
@@ -233,20 +238,20 @@ describe('findPlatformMatch (unit)', () => {
   });
 
   it('never matches an alias key shared by two distinct platforms', () => {
-    const a = candidate({ id: 1, name: 'Alpha', aliases: ['Shared'] });
-    const b = candidate({ id: 2, name: 'Beta', aliases: ['Shared'] });
+    const a = candidate({ id: testId(1), name: 'Alpha', aliases: ['Shared'] });
+    const b = candidate({ id: testId(2), name: 'Beta', aliases: ['Shared'] });
 
     expect(findPlatformMatch([a, b], ['Shared'])).toBeNull();
   });
 
   it('treats a platform without aliases as a valid candidate (regression)', () => {
-    const ps5 = candidate({ id: 1, name: 'PlayStation 5' });
+    const ps5 = candidate({ id: testId(1), name: 'PlayStation 5' });
 
     expect(findPlatformMatch([ps5], ['PlayStation 5'])).toBe(ps5);
   });
 
   it('skips null, undefined, and blank inputs', () => {
-    const platform = candidate({ id: 1, name: 'Alpha' });
+    const platform = candidate({ id: testId(1), name: 'Alpha' });
 
     expect(
       findPlatformMatch([platform], [null, undefined, '', '   ', 'Alpha']),

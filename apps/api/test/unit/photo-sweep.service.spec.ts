@@ -6,6 +6,7 @@ import {
   type PhotoSweepOwner,
 } from '../../src/import-jobs/photo-sweep.options';
 import { PhotoSweepService } from '../../src/import-jobs/photo-sweep.service';
+import { testId } from '../helpers/ids';
 
 interface StorageMock {
   list: jest.Mock;
@@ -22,7 +23,7 @@ const OLD = new Date('2026-10-06T00:00:00.000Z').getTime();
 
 function owner(overrides: Partial<PhotoSweepOwner> = {}): PhotoSweepOwner {
   return {
-    id: 7,
+    id: testId(7),
     status: 'done',
     createdAt: NOW,
     enqueuedAt: null,
@@ -69,14 +70,14 @@ describe('PhotoSweepService (unit)', () => {
   it('releases and deletes a terminal leftover photo', async () => {
     storage.list.mockResolvedValue([{ name: 'a.png', mtimeMs: OLD }]);
     jobs.findPhotoOwners.mockResolvedValue(
-      new Map([['a.png', owner({ id: 7, status: 'done' })]]),
+      new Map([['a.png', owner({ id: testId(7), status: 'done' })]]),
     );
     jobs.releaseSweptPhoto.mockResolvedValue(true);
 
     await service.sweep(NOW);
 
     expect(jobs.releaseSweptPhoto).toHaveBeenCalledWith(
-      7,
+      testId(7),
       'a.png',
       'done',
       undefined,
@@ -87,7 +88,7 @@ describe('PhotoSweepService (unit)', () => {
   it('does not delete the file when the guarded release loses the race', async () => {
     storage.list.mockResolvedValue([{ name: 'a.png', mtimeMs: OLD }]);
     jobs.findPhotoOwners.mockResolvedValue(
-      new Map([['a.png', owner({ id: 7, status: 'done' })]]),
+      new Map([['a.png', owner({ id: testId(7), status: 'done' })]]),
     );
     jobs.releaseSweptPhoto.mockResolvedValue(false);
 
@@ -110,7 +111,9 @@ describe('PhotoSweepService (unit)', () => {
   it('keeps a file and does not release it while the job is in flight', async () => {
     storage.list.mockResolvedValue([{ name: 'a.png', mtimeMs: OLD }]);
     jobs.findPhotoOwners.mockResolvedValue(
-      new Map([['a.png', owner({ id: 7, status: 'queued', createdAt: NOW })]]),
+      new Map([
+        ['a.png', owner({ id: testId(7), status: 'queued', createdAt: NOW })],
+      ]),
     );
 
     await service.sweep(NOW);
@@ -123,7 +126,7 @@ describe('PhotoSweepService (unit)', () => {
     storage.list.mockResolvedValue([{ name: 'a.png', mtimeMs: OLD }]);
     jobs.findPhotoOwners.mockResolvedValue(
       new Map([
-        ['a.png', owner({ id: 7, status: 'failed', completedAt: NOW })],
+        ['a.png', owner({ id: testId(7), status: 'failed', completedAt: NOW })],
       ]),
     );
 
@@ -138,7 +141,7 @@ describe('PhotoSweepService (unit)', () => {
     storage.list.mockResolvedValue([{ name: 'a.png', mtimeMs: OLD }]);
     jobs.findPhotoOwners.mockResolvedValue(
       new Map([
-        ['a.png', owner({ id: 7, status: 'queued', createdAt: stale })],
+        ['a.png', owner({ id: testId(7), status: 'queued', createdAt: stale })],
       ]),
     );
     jobs.releaseSweptPhoto.mockResolvedValue(true);
@@ -146,7 +149,7 @@ describe('PhotoSweepService (unit)', () => {
     await service.sweep(NOW);
 
     expect(jobs.releaseSweptPhoto).toHaveBeenCalledWith(
-      7,
+      testId(7),
       'a.png',
       'queued',
       PHOTO_SWEEP_ABANDONED_REASON,
@@ -164,7 +167,7 @@ describe('PhotoSweepService (unit)', () => {
         [
           'a.png',
           owner({
-            id: 7,
+            id: testId(7),
             status: 'queued',
             createdAt: staleCreatedAt,
             enqueuedAt: NOW,

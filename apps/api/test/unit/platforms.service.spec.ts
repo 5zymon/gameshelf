@@ -6,6 +6,7 @@ import {
 import { Prisma } from '../../src/generated/prisma/client';
 import { PlatformsService } from '../../src/platforms/platforms.service';
 import type { PrismaService } from '../../src/prisma/prisma.service';
+import { testId } from '../helpers/ids';
 
 interface PlatformsPrismaMock {
   platform: {
@@ -77,7 +78,7 @@ function knownError(
 }
 
 const PS5 = {
-  id: 1,
+  id: testId(1),
   name: 'PlayStation 5',
   abbreviation: null,
   alternativeName: null,
@@ -97,10 +98,10 @@ describe('PlatformsService (unit)', () => {
 
   describe('list', () => {
     it('joins one groupBy count map (no N+1) and defaults missing counts to 0', async () => {
-      const pc = { ...PS5, id: 2, name: 'PC', slug: 'pc' };
+      const pc = { ...PS5, id: testId(2), name: 'PC', slug: 'pc' };
       mock.platform.findMany.mockResolvedValue([PS5, pc]);
       mock.game.groupBy.mockResolvedValue([
-        { platformId: 1, _count: { _all: 3 } },
+        { platformId: testId(1), _count: { _all: 3 } },
       ]);
 
       const result = await service.list();
@@ -124,13 +125,13 @@ describe('PlatformsService (unit)', () => {
       mock.platform.findUnique.mockResolvedValue(PS5);
       mock.game.count.mockResolvedValue(5);
 
-      const result = await service.findOne(1);
+      const result = await service.findOne(testId(1));
 
       expect(mock.platform.findUnique).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: { id: testId(1) },
       });
       expect(mock.game.count).toHaveBeenCalledWith({
-        where: { platformId: 1 },
+        where: { platformId: testId(1) },
       });
       expect(result).toEqual({ ...PS5, gameCount: 5 });
     });
@@ -139,8 +140,8 @@ describe('PlatformsService (unit)', () => {
       mock.platform.findUnique.mockResolvedValue(null);
       mock.game.count.mockResolvedValue(0);
 
-      await expect(service.findOne(9)).rejects.toThrow(
-        new NotFoundException('Platform with id 9 not found'),
+      await expect(service.findOne(testId(9))).rejects.toThrow(
+        new NotFoundException(`Platform with id ${testId(9)} not found`),
       );
     });
   });
@@ -149,7 +150,7 @@ describe('PlatformsService (unit)', () => {
     it('selects matcher fields + aliases, oldest id first, and maps aliases to strings', async () => {
       mock.platform.findMany.mockResolvedValue([
         {
-          id: 1,
+          id: testId(1),
           name: 'PC',
           abbreviation: null,
           alternativeName: null,
@@ -159,7 +160,7 @@ describe('PlatformsService (unit)', () => {
 
       await expect(service.listMatchCandidates()).resolves.toEqual([
         {
-          id: 1,
+          id: testId(1),
           name: 'PC',
           abbreviation: null,
           alternativeName: null,
@@ -183,7 +184,7 @@ describe('PlatformsService (unit)', () => {
     it('reserves a slug and stores the canonical fields', async () => {
       mock.platform.findUnique.mockResolvedValue(null);
       const created = {
-        id: 1,
+        id: testId(1),
         name: 'PlayStation 5',
         abbreviation: 'PS5',
         alternativeName: null,
@@ -234,7 +235,9 @@ describe('PlatformsService (unit)', () => {
     it('returns false without writing when the platform is missing', async () => {
       mock.platform.findUnique.mockResolvedValue(null);
 
-      await expect(service.updateCanonical(1, input)).resolves.toBe(false);
+      await expect(service.updateCanonical(testId(1), input)).resolves.toBe(
+        false,
+      );
       expect(mock.platform.update).not.toHaveBeenCalled();
     });
 
@@ -246,7 +249,9 @@ describe('PlatformsService (unit)', () => {
         igdbId: 130,
       });
 
-      await expect(service.updateCanonical(1, input)).resolves.toBe(false);
+      await expect(service.updateCanonical(testId(1), input)).resolves.toBe(
+        false,
+      );
       expect(mock.platform.update).not.toHaveBeenCalled();
     });
 
@@ -259,9 +264,11 @@ describe('PlatformsService (unit)', () => {
       });
       mock.platform.update.mockResolvedValue({});
 
-      await expect(service.updateCanonical(1, input)).resolves.toBe(true);
+      await expect(service.updateCanonical(testId(1), input)).resolves.toBe(
+        true,
+      );
       expect(mock.platform.update).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: { id: testId(1) },
         data: {
           abbreviation: 'PS5',
           alternativeName: null,
@@ -281,9 +288,11 @@ describe('PlatformsService (unit)', () => {
       });
       mock.platform.update.mockResolvedValue({});
 
-      await expect(service.updateCanonical(1, input)).resolves.toBe(true);
+      await expect(service.updateCanonical(testId(1), input)).resolves.toBe(
+        true,
+      );
       expect(mock.platform.update).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: { id: testId(1) },
         data: {
           abbreviation: 'PS5',
           alternativeName: null,
@@ -385,7 +394,7 @@ describe('PlatformsService (unit)', () => {
     it('retries with a suffixed slug on a P2002 on the slug unique', async () => {
       mock.platform.findUnique
         .mockResolvedValueOnce(null) // attempt 1: base slug looked free
-        .mockResolvedValueOnce({ id: 9 }) // attempt 2: base slug now taken
+        .mockResolvedValueOnce({ id: testId(9) }) // attempt 2: base slug now taken
         .mockResolvedValueOnce(null); // attempt 2: base-2 is free
       const created = { ...PS5, slug: 'playstation-5-2' };
       mock.platform.create
@@ -404,7 +413,7 @@ describe('PlatformsService (unit)', () => {
     it('retries on a slug P2002 reported via the driver-adapter shape', async () => {
       mock.platform.findUnique
         .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({ id: 9 })
+        .mockResolvedValueOnce({ id: testId(9) })
         .mockResolvedValueOnce(null);
       const created = { ...PS5, slug: 'playstation-5-2' };
       mock.platform.create
@@ -435,7 +444,9 @@ describe('PlatformsService (unit)', () => {
     });
 
     it('rejects a name that is already an alias of another platform with 409', async () => {
-      mock.platformAlias.findUnique.mockResolvedValue({ platformId: 7 });
+      mock.platformAlias.findUnique.mockResolvedValue({
+        platformId: testId(7),
+      });
 
       await expect(service.create({ name: 'PlayStaton 5' })).rejects.toThrow(
         ConflictException,
@@ -448,9 +459,11 @@ describe('PlatformsService (unit)', () => {
     it('creates a flagged platform and returns its id', async () => {
       mock.platformAlias.findUnique.mockResolvedValue(null);
       mock.platform.findUnique.mockResolvedValue(null);
-      mock.platform.create.mockResolvedValue({ id: 42 });
+      mock.platform.create.mockResolvedValue({ id: testId(42) });
 
-      await expect(service.createFromImport('PlayStaton 5')).resolves.toBe(42);
+      await expect(service.createFromImport('PlayStaton 5')).resolves.toBe(
+        testId(42),
+      );
       expect(mock.platform.create).toHaveBeenCalledWith({
         data: {
           name: 'PlayStaton 5',
@@ -462,9 +475,13 @@ describe('PlatformsService (unit)', () => {
     });
 
     it('returns the alias owner id without creating', async () => {
-      mock.platformAlias.findUnique.mockResolvedValue({ platformId: 9 });
+      mock.platformAlias.findUnique.mockResolvedValue({
+        platformId: testId(9),
+      });
 
-      await expect(service.createFromImport('PlayStaton 5')).resolves.toBe(9);
+      await expect(service.createFromImport('PlayStaton 5')).resolves.toBe(
+        testId(9),
+      );
       expect(mock.platform.create).not.toHaveBeenCalled();
     });
 
@@ -474,9 +491,11 @@ describe('PlatformsService (unit)', () => {
       mock.platform.create.mockRejectedValue(
         knownError('P2002', { target: ['name'] }),
       );
-      mock.platform.findFirst.mockResolvedValue({ id: 5 });
+      mock.platform.findFirst.mockResolvedValue({ id: testId(5) });
 
-      await expect(service.createFromImport('PlayStaton 5')).resolves.toBe(5);
+      await expect(service.createFromImport('PlayStaton 5')).resolves.toBe(
+        testId(5),
+      );
       expect(mock.platform.findFirst).toHaveBeenCalledWith({
         where: { name: 'PlayStaton 5' },
         select: { id: true },
@@ -487,13 +506,15 @@ describe('PlatformsService (unit)', () => {
       mock.platformAlias.findUnique.mockResolvedValue(null);
       mock.platform.findUnique
         .mockResolvedValueOnce(null) // attempt 1 base slug free
-        .mockResolvedValueOnce({ id: 9 }) // attempt 2 base taken
+        .mockResolvedValueOnce({ id: testId(9) }) // attempt 2 base taken
         .mockResolvedValueOnce(null); // attempt 2 base-2 free
       mock.platform.create
         .mockRejectedValueOnce(knownError('P2002', { target: ['slug'] }))
-        .mockResolvedValueOnce({ id: 42 });
+        .mockResolvedValueOnce({ id: testId(42) });
 
-      await expect(service.createFromImport('PlayStaton 5')).resolves.toBe(42);
+      await expect(service.createFromImport('PlayStaton 5')).resolves.toBe(
+        testId(42),
+      );
       expect(mock.platform.create).toHaveBeenCalledTimes(2);
     });
 
@@ -506,7 +527,7 @@ describe('PlatformsService (unit)', () => {
 
   describe('rename', () => {
     it('rejects a blank (whitespace-only) name with 400', async () => {
-      await expect(service.rename(1, { name: '  ' })).rejects.toThrow(
+      await expect(service.rename(testId(1), { name: '  ' })).rejects.toThrow(
         new BadRequestException('name must not be blank'),
       );
       expect(mock.platform.findUnique).not.toHaveBeenCalled();
@@ -515,37 +536,42 @@ describe('PlatformsService (unit)', () => {
     it('throws 404 for an unknown platform', async () => {
       mock.platform.findUnique.mockResolvedValue(null);
 
-      await expect(service.rename(9, { name: 'New' })).rejects.toThrow(
-        new NotFoundException('Platform with id 9 not found'),
+      await expect(service.rename(testId(9), { name: 'New' })).rejects.toThrow(
+        new NotFoundException(`Platform with id ${testId(9)} not found`),
       );
       expect(mock.platform.update).not.toHaveBeenCalled();
     });
 
     it('renames and returns the fresh game count', async () => {
       mock.platform.findUnique.mockResolvedValue({
-        id: 1,
+        id: testId(1),
         name: 'PlayStation 5',
       });
       const updated = { ...PS5, name: 'PlayStation 5 Pro' };
       mock.platform.update.mockResolvedValue(updated);
       mock.game.count.mockResolvedValue(4);
 
-      const result = await service.rename(1, { name: 'PlayStation 5 Pro' });
+      const result = await service.rename(testId(1), {
+        name: 'PlayStation 5 Pro',
+      });
 
       expect(mock.platform.update).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: { id: testId(1) },
         data: { name: 'PlayStation 5 Pro' },
       });
       expect(result).toEqual({ ...updated, gameCount: 4 });
     });
 
     it('only sends canonical fields when the name is unchanged', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 1, name: 'PS5' });
+      mock.platform.findUnique.mockResolvedValue({
+        id: testId(1),
+        name: 'PS5',
+      });
       const updated = { ...PS5, name: 'PS5', abbreviation: 'PS5', igdbId: 130 };
       mock.platform.update.mockResolvedValue(updated);
       mock.game.count.mockResolvedValue(0);
 
-      await service.rename(1, {
+      await service.rename(testId(1), {
         name: 'PS5',
         abbreviation: 'PS5',
         alternativeName: null,
@@ -553,45 +579,53 @@ describe('PlatformsService (unit)', () => {
       });
 
       expect(mock.platform.update).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: { id: testId(1) },
         data: { abbreviation: 'PS5', alternativeName: null, igdbId: 130 },
       });
     });
 
     it('maps a P2002 on the name unique to 409', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 1, name: 'Old' });
+      mock.platform.findUnique.mockResolvedValue({
+        id: testId(1),
+        name: 'Old',
+      });
       mock.platform.update.mockRejectedValue(
         knownError('P2002', { target: ['name'] }),
       );
 
-      await expect(service.rename(1, { name: 'Taken' })).rejects.toThrow(
+      await expect(
+        service.rename(testId(1), { name: 'Taken' }),
+      ).rejects.toThrow(
         new ConflictException('A platform named "Taken" already exists'),
       );
     });
 
     it('maps P2025 (deleted mid-flight) to 404', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 1, name: 'Old' });
+      mock.platform.findUnique.mockResolvedValue({
+        id: testId(1),
+        name: 'Old',
+      });
       mock.platform.update.mockRejectedValue(knownError('P2025'));
 
-      await expect(service.rename(1, { name: 'New' })).rejects.toThrow(
-        new NotFoundException('Platform with id 1 not found'),
+      await expect(service.rename(testId(1), { name: 'New' })).rejects.toThrow(
+        new NotFoundException(`Platform with id ${testId(1)} not found`),
       );
     });
 
     it('writes the previous name as a normalized alias', async () => {
       mock.platform.findUnique.mockResolvedValue({
-        id: 1,
+        id: testId(1),
         name: 'PlayStaton 5',
       });
       mock.platform.update.mockResolvedValue({ ...PS5 });
       mock.game.count.mockResolvedValue(0);
 
-      await service.rename(1, { name: 'PlayStation 5' });
+      await service.rename(testId(1), { name: 'PlayStation 5' });
 
       expect(mock.platformAlias.createMany).toHaveBeenCalledWith({
         data: [
           {
-            platformId: 1,
+            platformId: testId(1),
             name: 'PlayStaton 5',
             normalizedName: 'playstaton 5',
           },
@@ -601,46 +635,64 @@ describe('PlatformsService (unit)', () => {
     });
 
     it('does not write an alias when the name is unchanged', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 1, name: 'PS5' });
+      mock.platform.findUnique.mockResolvedValue({
+        id: testId(1),
+        name: 'PS5',
+      });
       mock.platform.update.mockResolvedValue({ ...PS5 });
       mock.game.count.mockResolvedValue(0);
 
-      await service.rename(1, { name: 'PS5' });
+      await service.rename(testId(1), { name: 'PS5' });
 
       expect(mock.platformAlias.createMany).not.toHaveBeenCalled();
     });
 
     it('rejects a new name owned by another alias with 409', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 1, name: 'Old' });
-      mock.platformAlias.findUnique.mockResolvedValue({ platformId: 99 });
+      mock.platform.findUnique.mockResolvedValue({
+        id: testId(1),
+        name: 'Old',
+      });
+      mock.platformAlias.findUnique.mockResolvedValue({
+        platformId: testId(99),
+      });
 
-      await expect(service.rename(1, { name: 'Taken' })).rejects.toThrow(
-        ConflictException,
-      );
+      await expect(
+        service.rename(testId(1), { name: 'Taken' }),
+      ).rejects.toThrow(ConflictException);
       expect(mock.platform.update).not.toHaveBeenCalled();
     });
 
     it('allows a rename to an alias already owned by the same platform', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 1, name: 'Old' });
-      mock.platformAlias.findUnique.mockResolvedValue({ platformId: 1 });
+      mock.platform.findUnique.mockResolvedValue({
+        id: testId(1),
+        name: 'Old',
+      });
+      mock.platformAlias.findUnique.mockResolvedValue({
+        platformId: testId(1),
+      });
       mock.platform.update.mockResolvedValue({ ...PS5 });
       mock.game.count.mockResolvedValue(0);
 
-      await expect(service.rename(1, { name: 'New' })).resolves.toEqual({
-        ...PS5,
-        gameCount: 0,
-      });
+      await expect(service.rename(testId(1), { name: 'New' })).resolves.toEqual(
+        {
+          ...PS5,
+          gameCount: 0,
+        },
+      );
     });
 
     it('toggles hidden through the same update', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 1, name: 'PS5' });
+      mock.platform.findUnique.mockResolvedValue({
+        id: testId(1),
+        name: 'PS5',
+      });
       mock.platform.update.mockResolvedValue({ ...PS5, hidden: true });
       mock.game.count.mockResolvedValue(0);
 
-      await service.rename(1, { name: 'PS5', hidden: false });
+      await service.rename(testId(1), { name: 'PS5', hidden: false });
 
       expect(mock.platform.update).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: { id: testId(1) },
         data: { hidden: false },
       });
     });
@@ -651,13 +703,13 @@ describe('PlatformsService (unit)', () => {
       mock.platform.update.mockResolvedValue({ ...PS5, addedByImport: false });
       mock.game.count.mockResolvedValue(3);
 
-      await expect(service.confirm(1)).resolves.toEqual({
+      await expect(service.confirm(testId(1))).resolves.toEqual({
         ...PS5,
         addedByImport: false,
         gameCount: 3,
       });
       expect(mock.platform.update).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: { id: testId(1) },
         data: { addedByImport: false },
       });
     });
@@ -665,96 +717,102 @@ describe('PlatformsService (unit)', () => {
     it('maps P2025 to 404', async () => {
       mock.platform.update.mockRejectedValue(knownError('P2025'));
 
-      await expect(service.confirm(1)).rejects.toThrow(
-        new NotFoundException('Platform with id 1 not found'),
+      await expect(service.confirm(testId(1))).rejects.toThrow(
+        new NotFoundException(`Platform with id ${testId(1)} not found`),
       );
     });
   });
 
   describe('merge', () => {
     it('rejects merging into itself with 400', async () => {
-      await expect(service.merge(1, 1)).rejects.toThrow(BadRequestException);
+      await expect(service.merge(testId(1), testId(1))).rejects.toThrow(
+        BadRequestException,
+      );
       expect(mock.platform.findUnique).not.toHaveBeenCalled();
     });
 
     it('throws 404 when the source is missing', async () => {
       mock.platform.findUnique
         .mockResolvedValueOnce(null)
-        .mockResolvedValueOnce({ id: 2 });
+        .mockResolvedValueOnce({ id: testId(2) });
 
-      await expect(service.merge(1, 2)).rejects.toThrow(
-        new NotFoundException('Platform with id 1 not found'),
+      await expect(service.merge(testId(1), testId(2))).rejects.toThrow(
+        new NotFoundException(`Platform with id ${testId(1)} not found`),
       );
     });
 
     it('throws 404 when the target is missing', async () => {
       mock.platform.findUnique
         .mockResolvedValueOnce({
-          id: 1,
+          id: testId(1),
           name: 'A',
           abbreviation: null,
           alternativeName: null,
         })
         .mockResolvedValueOnce(null);
 
-      await expect(service.merge(1, 2)).rejects.toThrow(
-        new NotFoundException('Platform with id 2 not found'),
+      await expect(service.merge(testId(1), testId(2))).rejects.toThrow(
+        new NotFoundException(`Platform with id ${testId(2)} not found`),
       );
     });
 
     it('moves games, transfers aliases, adds name keys, deletes the source', async () => {
       mock.platform.findUnique
         .mockResolvedValueOnce({
-          id: 1,
+          id: testId(1),
           name: 'PlayStaton 5',
           abbreviation: 'PS5',
           alternativeName: null,
         })
-        .mockResolvedValueOnce({ id: 2 })
-        .mockResolvedValueOnce({ ...PS5, id: 2 });
+        .mockResolvedValueOnce({ id: testId(2) })
+        .mockResolvedValueOnce({ ...PS5, id: testId(2) });
       mock.game.updateMany.mockResolvedValue({ count: 2 });
       mock.platformAlias.updateMany.mockResolvedValue({ count: 1 });
       mock.platformAlias.createMany.mockResolvedValue({ count: 2 });
       mock.platform.delete.mockResolvedValue({});
       mock.game.count.mockResolvedValue(4);
 
-      const result = await service.merge(1, 2);
+      const result = await service.merge(testId(1), testId(2));
 
       expect(mock.game.updateMany).toHaveBeenCalledWith({
-        where: { platformId: 1 },
-        data: { platformId: 2 },
+        where: { platformId: testId(1) },
+        data: { platformId: testId(2) },
       });
       expect(mock.platformAlias.updateMany).toHaveBeenCalledWith({
-        where: { platformId: 1 },
-        data: { platformId: 2 },
+        where: { platformId: testId(1) },
+        data: { platformId: testId(2) },
       });
       expect(mock.platformAlias.createMany).toHaveBeenCalledWith({
         data: [
           {
-            platformId: 2,
+            platformId: testId(2),
             name: 'PlayStaton 5',
             normalizedName: 'playstaton 5',
           },
-          { platformId: 2, name: 'PS5', normalizedName: 'ps5' },
+          { platformId: testId(2), name: 'PS5', normalizedName: 'ps5' },
         ],
         skipDuplicates: true,
       });
-      expect(mock.platform.delete).toHaveBeenCalledWith({ where: { id: 1 } });
-      expect(result).toEqual({ ...PS5, id: 2, gameCount: 4 });
+      expect(mock.platform.delete).toHaveBeenCalledWith({
+        where: { id: testId(1) },
+      });
+      expect(result).toEqual({ ...PS5, id: testId(2), gameCount: 4 });
     });
 
     it('maps a P2003 to 409', async () => {
       mock.platform.findUnique
         .mockResolvedValueOnce({
-          id: 1,
+          id: testId(1),
           name: 'A',
           abbreviation: null,
           alternativeName: null,
         })
-        .mockResolvedValueOnce({ id: 2 });
+        .mockResolvedValueOnce({ id: testId(2) });
       mock.game.updateMany.mockRejectedValue(knownError('P2003'));
 
-      await expect(service.merge(1, 2)).rejects.toThrow(ConflictException);
+      await expect(service.merge(testId(1), testId(2))).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -762,26 +820,32 @@ describe('PlatformsService (unit)', () => {
     it('throws 404 for an unknown platform', async () => {
       mock.platform.findUnique.mockResolvedValue(null);
 
-      await expect(service.remove(9)).rejects.toThrow(
-        new NotFoundException('Platform with id 9 not found'),
+      await expect(service.remove(testId(9))).rejects.toThrow(
+        new NotFoundException(`Platform with id ${testId(9)} not found`),
       );
       expect(mock.game.count).not.toHaveBeenCalled();
     });
 
     it('refuses with 409 while games reference the platform', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 1, igdbId: null });
+      mock.platform.findUnique.mockResolvedValue({
+        id: testId(1),
+        igdbId: null,
+      });
       mock.game.count.mockResolvedValue(2);
 
-      await expect(service.remove(1)).rejects.toThrow(
+      await expect(service.remove(testId(1))).rejects.toThrow(
         new ConflictException(
-          'Platform with id 1 has 2 game(s); reassign or delete them before deleting the platform',
+          `Platform with id ${testId(1)} has 2 game(s); reassign or delete them before deleting the platform`,
         ),
       );
       expect(mock.platform.delete).not.toHaveBeenCalled();
     });
 
     it('hides (never deletes) a reference platform without games', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 1, igdbId: 130 });
+      mock.platform.findUnique.mockResolvedValue({
+        id: testId(1),
+        igdbId: 130,
+      });
       mock.game.count.mockResolvedValue(0);
       mock.platform.update.mockResolvedValue({
         ...PS5,
@@ -789,45 +853,56 @@ describe('PlatformsService (unit)', () => {
         hidden: true,
       });
 
-      await service.remove(1);
+      await service.remove(testId(1));
 
       expect(mock.platform.update).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: { id: testId(1) },
         data: { hidden: true },
       });
       expect(mock.platform.delete).not.toHaveBeenCalled();
     });
 
     it('deletes a custom/import platform without games', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 1, igdbId: null });
+      mock.platform.findUnique.mockResolvedValue({
+        id: testId(1),
+        igdbId: null,
+      });
       mock.game.count.mockResolvedValue(0);
       mock.platform.delete.mockResolvedValue(PS5);
 
-      await service.remove(1);
+      await service.remove(testId(1));
 
-      expect(mock.platform.delete).toHaveBeenCalledWith({ where: { id: 1 } });
+      expect(mock.platform.delete).toHaveBeenCalledWith({
+        where: { id: testId(1) },
+      });
       expect(mock.platform.update).not.toHaveBeenCalled();
     });
 
     it('maps a P2003 (FK race) to 409', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 1, igdbId: null });
+      mock.platform.findUnique.mockResolvedValue({
+        id: testId(1),
+        igdbId: null,
+      });
       mock.game.count.mockResolvedValue(0);
       mock.platform.delete.mockRejectedValue(knownError('P2003'));
 
-      await expect(service.remove(1)).rejects.toThrow(
+      await expect(service.remove(testId(1))).rejects.toThrow(
         new ConflictException(
-          'Platform with id 1 has games; reassign or delete them before deleting the platform',
+          `Platform with id ${testId(1)} has games; reassign or delete them before deleting the platform`,
         ),
       );
     });
 
     it('maps P2025 (deleted mid-flight) to 404', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 1, igdbId: null });
+      mock.platform.findUnique.mockResolvedValue({
+        id: testId(1),
+        igdbId: null,
+      });
       mock.game.count.mockResolvedValue(0);
       mock.platform.delete.mockRejectedValue(knownError('P2025'));
 
-      await expect(service.remove(1)).rejects.toThrow(
-        new NotFoundException('Platform with id 1 not found'),
+      await expect(service.remove(testId(1))).rejects.toThrow(
+        new NotFoundException(`Platform with id ${testId(1)} not found`),
       );
     });
   });

@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import type { UsersService } from '../../src/auth/users.service';
 import { SetupService } from '../../src/setup/setup.service';
+import { testId } from '../helpers/ids';
 
 interface UsersMock {
   hasAnyUser: jest.Mock;
@@ -51,14 +52,14 @@ describe('SetupService (unit)', () => {
   describe('setup', () => {
     it('delegates to createFirstUser and returns the created user', async () => {
       const createdAt = new Date('2026-10-05T12:00:00.000Z');
-      const created = { id: 1, email: 'ash@example.com', createdAt };
+      const created = { id: testId(1), email: 'ash@example.com', createdAt };
       users.createFirstUser.mockResolvedValue(created);
       const dto = { email: 'Ash@Example.com', password: 'pikachu123' };
 
       await expect(service.setup(dto)).resolves.toEqual(created);
       expect(users.createFirstUser).toHaveBeenCalledWith(dto);
       expect(logSpy).toHaveBeenCalledWith(
-        'First-run setup completed: created user 1 (ash@example.com)',
+        `First-run setup completed: created user ${testId(1)} (ash@example.com)`,
       );
     });
   });

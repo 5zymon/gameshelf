@@ -8,6 +8,7 @@ import {
   type SeedDeps,
 } from '../../src/cli/seed-data';
 import { runSeedCli, type SeedCliDeps } from '../../src/cli/run-seed';
+import { testId } from '../helpers/ids';
 
 const TARGET = 'gameshelf@db.internal:3306';
 
@@ -94,7 +95,7 @@ describe('runSeedCli', () => {
 /** The three seed platforms as matcher candidates (an already-synced DB). */
 const MATCHING_CANDIDATES: readonly PlatformMatchCandidate[] =
   SEED_PLATFORMS.map((platform, index) => ({
-    id: index + 1,
+    id: testId(index + 1),
     name: platform.name,
     abbreviation: platform.abbreviation,
     alternativeName: null,
@@ -103,7 +104,7 @@ const MATCHING_CANDIDATES: readonly PlatformMatchCandidate[] =
 /** The six seed games as existing rows, matched by identity. */
 const ALL_GAMES_PRESENT = SEED_GAMES.map((game, index) => ({
   title: game.title,
-  platformId: index < 2 ? 1 : index < 4 ? 2 : 3,
+  platformId: testId(index < 2 ? 1 : index < 4 ? 2 : 3),
   edition: game.edition,
   source: 'MANUAL',
   externalId: null,
@@ -137,7 +138,7 @@ function createSeedHarness(
   const createCanonical = jest
     .fn()
     .mockImplementation((input: CanonicalPlatformInput) => {
-      const id = nextPlatformId;
+      const id = testId(nextPlatformId);
       nextPlatformId += 1;
       return {
         id,
@@ -208,7 +209,7 @@ describe('seedDevData', () => {
   it('resets the password and reuses everything when the seed already exists', async () => {
     const harness = createSeedHarness({
       findByEmail: jest.fn().mockResolvedValue({
-        id: 1,
+        id: testId(1),
         email: SEED_QA_USER.email,
         passwordHash: 'hash',
         language: 'pl',
@@ -241,7 +242,7 @@ describe('seedDevData', () => {
       gameFindMany: jest.fn().mockResolvedValue([
         {
           title: 'hades',
-          platformId: 1,
+          platformId: testId(1),
           edition: null,
           source: 'MANUAL',
           externalId: null,

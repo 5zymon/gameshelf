@@ -3,6 +3,7 @@ import { Readable, Writable } from 'node:stream';
 import { parseUsersArgs, UsageError } from '../../src/cli/args';
 import { createLineReader, createPasswordReader } from '../../src/cli/prompt';
 import { runUsersCli, type UsersCliDeps } from '../../src/cli/run-users';
+import { testId } from '../helpers/ids';
 
 interface UsersMock {
   createUser: jest.Mock;
@@ -141,7 +142,7 @@ describe('runUsersCli', () => {
       readPassword: jest.fn().mockResolvedValue('pikachu123'),
     });
     harness.users.createUser.mockResolvedValue({
-      id: 1,
+      id: testId(1),
       email: 'ash@example.com',
       createdAt: new Date('2026-10-05T12:00:00.000Z'),
     });
@@ -157,7 +158,7 @@ describe('runUsersCli', () => {
       password: 'pikachu123',
     });
     expect(harness.out.join('\n')).toContain(
-      'Created user 1 <ash@example.com>',
+      `Created user ${testId(1)} <ash@example.com>`,
     );
   });
 
@@ -166,7 +167,7 @@ describe('runUsersCli', () => {
       readPassword: jest.fn().mockResolvedValue('new-secret'),
     });
     harness.users.setPassword.mockResolvedValue({
-      id: 2,
+      id: testId(2),
       email: 'misty@example.com',
       createdAt: new Date('2026-10-05T12:00:00.000Z'),
     });
@@ -182,7 +183,7 @@ describe('runUsersCli', () => {
       password: 'new-secret',
     });
     expect(harness.out.join('\n')).toContain(
-      'Updated password for user 2 <misty@example.com>',
+      `Updated password for user ${testId(2)} <misty@example.com>`,
     );
   });
 
@@ -193,7 +194,7 @@ describe('runUsersCli', () => {
       readPassword: jest.fn().mockResolvedValue('pikachu123'),
     });
     harness.users.createUser.mockResolvedValue({
-      id: 1,
+      id: testId(1),
       email: 'ash@example.com',
       createdAt: new Date('2026-10-05T12:00:00.000Z'),
     });
@@ -241,7 +242,7 @@ describe('runUsersCli', () => {
       readPassword: jest.fn(),
     });
     harness.users.createUser.mockResolvedValue({
-      id: 1,
+      id: testId(1),
       email: 'ash@example.com',
       createdAt: new Date('2026-10-05T12:00:00.000Z'),
     });

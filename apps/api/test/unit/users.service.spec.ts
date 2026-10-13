@@ -11,6 +11,7 @@ import {
 } from '../../src/auth/users.service';
 import { Prisma } from '../../src/generated/prisma/client';
 import type { PrismaService } from '../../src/prisma/prisma.service';
+import { testId, UUID_V7_PATTERN } from '../helpers/ids';
 
 interface UsersPrismaMock {
   user: {
@@ -75,7 +76,7 @@ describe('UsersService (unit)', () => {
     const createdAt = new Date('2026-10-05T12:00:00.000Z');
     passwords.hash.mockResolvedValue('ARGON2HASH');
     prisma.user.create.mockResolvedValue({
-      id: 1,
+      id: testId(1),
       email: 'ash@example.com',
       language: 'pl',
       theme: 'system',
@@ -99,7 +100,7 @@ describe('UsersService (unit)', () => {
       },
     });
     expect(result).toEqual({
-      id: 1,
+      id: testId(1),
       email: 'ash@example.com',
       language: 'pl',
       theme: 'system',
@@ -142,7 +143,7 @@ describe('UsersService (unit)', () => {
   describe('findByEmail', () => {
     it('normalizes the email and selects the credential row', async () => {
       const row = {
-        id: 1,
+        id: testId(1),
         email: 'ash@example.com',
         passwordHash: 'ARGON2HASH',
         language: 'pl',
@@ -176,7 +177,7 @@ describe('UsersService (unit)', () => {
   describe('findById', () => {
     it('selects only id/email/createdAt (never passwordHash)', async () => {
       const row = {
-        id: 7,
+        id: testId(7),
         email: 'ash@example.com',
         language: 'pl',
         theme: 'system',
@@ -184,10 +185,10 @@ describe('UsersService (unit)', () => {
       };
       prisma.user.findUnique.mockResolvedValue(row);
 
-      const result = await service.findById(7);
+      const result = await service.findById(testId(7));
 
       expect(prisma.user.findUnique).toHaveBeenCalledWith({
-        where: { id: 7 },
+        where: { id: testId(7) },
         select: {
           id: true,
           email: true,
@@ -208,7 +209,7 @@ describe('UsersService (unit)', () => {
       prisma.user.count.mockResolvedValue(0);
       prisma.$executeRaw.mockResolvedValue(1);
       prisma.user.findUnique.mockResolvedValue({
-        id: 1,
+        id: testId(1),
         email: 'ash@example.com',
         language: 'pl',
         theme: 'system',
@@ -227,9 +228,11 @@ describe('UsersService (unit)', () => {
         ...unknown[],
       ];
       const sql = strings.join('?');
-      expect(sql).toContain('INSERT INTO users (email, password_hash)');
+      expect(sql).toContain('INSERT INTO users (id, email, password_hash)');
       expect(sql).toContain('WHERE NOT EXISTS (SELECT 1 FROM users)');
-      expect(values).toEqual(['ash@example.com', 'ARGON2HASH']);
+      expect(values).toHaveLength(3);
+      expect(values[0]).toMatch(UUID_V7_PATTERN);
+      expect(values.slice(1)).toEqual(['ash@example.com', 'ARGON2HASH']);
       expect(prisma.user.findUnique).toHaveBeenCalledWith({
         where: { email: 'ash@example.com' },
         select: {
@@ -241,7 +244,7 @@ describe('UsersService (unit)', () => {
         },
       });
       expect(result).toEqual({
-        id: 1,
+        id: testId(1),
         email: 'ash@example.com',
         language: 'pl',
         theme: 'system',
@@ -286,7 +289,7 @@ describe('UsersService (unit)', () => {
         .mockRejectedValueOnce(new Error('deadlock found'))
         .mockResolvedValueOnce(1);
       prisma.user.findUnique.mockResolvedValue({
-        id: 1,
+        id: testId(1),
         email: 'ash@example.com',
         language: 'pl',
         theme: 'system',
@@ -310,7 +313,7 @@ describe('UsersService (unit)', () => {
         },
       });
       expect(result).toEqual({
-        id: 1,
+        id: testId(1),
         email: 'ash@example.com',
         language: 'pl',
         theme: 'system',
@@ -379,7 +382,7 @@ describe('UsersService (unit)', () => {
       const createdAt = new Date('2026-10-05T12:00:00.000Z');
       passwords.hash.mockResolvedValue('ARGON2HASH');
       prisma.user.update.mockResolvedValue({
-        id: 1,
+        id: testId(1),
         email: 'ash@example.com',
         language: 'pl',
         theme: 'system',
@@ -404,7 +407,7 @@ describe('UsersService (unit)', () => {
         },
       });
       expect(result).toEqual({
-        id: 1,
+        id: testId(1),
         email: 'ash@example.com',
         language: 'pl',
         theme: 'system',

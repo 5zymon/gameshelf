@@ -4,11 +4,12 @@ import {
   normalizeEdition,
   type GameIdentity,
 } from '../../src/games/game-identity';
+import { testId } from '../helpers/ids';
 
 function linked(overrides: Partial<GameIdentity> = {}): GameIdentity {
   return {
     title: 'Halo',
-    platformId: 1,
+    platformId: testId(1),
     edition: null,
     source: 'IGDB',
     externalId: 1036,
@@ -19,7 +20,7 @@ function linked(overrides: Partial<GameIdentity> = {}): GameIdentity {
 function manual(overrides: Partial<GameIdentity> = {}): GameIdentity {
   return {
     title: 'Halo',
-    platformId: 1,
+    platformId: testId(1),
     edition: null,
     source: 'MANUAL',
     externalId: null,
@@ -95,7 +96,9 @@ describe('isSameGameIdentity (unit)', () => {
   });
 
   it('rejects a different platform', () => {
-    expect(isSameGameIdentity(manual(), manual({ platformId: 2 }))).toBe(false);
+    expect(
+      isSameGameIdentity(manual(), manual({ platformId: testId(2) })),
+    ).toBe(false);
   });
 
   it('rejects a different edition (GOTY vs null)', () => {

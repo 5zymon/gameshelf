@@ -16,6 +16,7 @@ import {
   TRACKED_METADATA_FIELDS,
 } from '../../src/enrichment/reenrichment';
 import type { PrismaService } from '../../src/prisma/prisma.service';
+import { testId } from '../helpers/ids';
 
 const PLATFORM_SELECT = { id: true, name: true, slug: true };
 
@@ -192,7 +193,7 @@ describe('GamesService (unit)', () => {
       mock.platform.findMany.mockResolvedValue([]);
 
       await service.list({
-        platformId: [2],
+        platformId: [testId(2)],
         edition: '  GOTY  ',
         year: 2017,
         publisher: '  Team Cherry  ',
@@ -205,7 +206,7 @@ describe('GamesService (unit)', () => {
         1,
         expect.objectContaining({
           where: {
-            platformId: { in: [2] },
+            platformId: { in: [testId(2)] },
             edition: 'GOTY',
             releaseYear: 2017,
             publisher: 'Team Cherry',
@@ -217,7 +218,7 @@ describe('GamesService (unit)', () => {
       );
       expect(mock.game.count).toHaveBeenCalledWith({
         where: {
-          platformId: { in: [2] },
+          platformId: { in: [testId(2)] },
           edition: 'GOTY',
           releaseYear: 2017,
           publisher: 'Team Cherry',
@@ -251,14 +252,16 @@ describe('GamesService (unit)', () => {
       mock.game.count.mockResolvedValue(0);
       mock.platform.findMany.mockResolvedValue([]);
 
-      await service.list({ platformId: [3, 1, 3] });
+      await service.list({ platformId: [testId(3), testId(1), testId(3)] });
 
       expect(mock.game.findMany).toHaveBeenNthCalledWith(
         1,
-        expect.objectContaining({ where: { platformId: { in: [1, 3] } } }),
+        expect.objectContaining({
+          where: { platformId: { in: [testId(1), testId(3)] } },
+        }),
       );
       expect(mock.game.count).toHaveBeenCalledWith({
-        where: { platformId: { in: [1, 3] } },
+        where: { platformId: { in: [testId(1), testId(3)] } },
       });
     });
 
@@ -357,11 +360,11 @@ describe('GamesService (unit)', () => {
       mock.game.findMany
         .mockResolvedValueOnce([
           {
-            id: 1,
+            id: testId(1),
             title: 'HK',
             edition: null,
             coverUrl,
-            platform: { id: 1, name: 'PC', slug: 'pc' },
+            platform: { id: testId(1), name: 'PC', slug: 'pc' },
           },
         ])
         .mockResolvedValueOnce([]);
@@ -371,12 +374,12 @@ describe('GamesService (unit)', () => {
       const result = await service.list({});
 
       expect(result.items[0]).toEqual({
-        id: 1,
+        id: testId(1),
         title: 'HK',
         edition: null,
         coverUrl,
         coverThumbUrl: `/api/covers/thumbs/${'c'.repeat(32)}.jpg`,
-        platform: { id: 1, name: 'PC', slug: 'pc' },
+        platform: { id: testId(1), name: 'PC', slug: 'pc' },
       });
     });
   });
@@ -384,18 +387,18 @@ describe('GamesService (unit)', () => {
   describe('findOne', () => {
     it('returns the game with its platform projection', async () => {
       const game = {
-        id: 7,
+        id: testId(7),
         title: 'Hollow Knight',
-        platform: { id: 1, name: 'PS5', slug: 'ps5' },
+        platform: { id: testId(1), name: 'PS5', slug: 'ps5' },
         images: [],
         videos: [],
       };
       mock.game.findUnique.mockResolvedValue(game);
 
-      const result = await service.findOne(7);
+      const result = await service.findOne(testId(7));
 
       expect(mock.game.findUnique).toHaveBeenCalledWith({
-        where: { id: 7 },
+        where: { id: testId(7) },
         include: GAME_DETAIL_INCLUDE,
       });
       expect(result).toEqual({
@@ -409,34 +412,37 @@ describe('GamesService (unit)', () => {
     it('throws 404 for an unknown id', async () => {
       mock.game.findUnique.mockResolvedValue(null);
 
-      await expect(service.findOne(7)).rejects.toThrow(
-        new NotFoundException('Game with id 7 not found'),
+      await expect(service.findOne(testId(7))).rejects.toThrow(
+        new NotFoundException(`Game with id ${testId(7)} not found`),
       );
     });
   });
 
   describe('create', () => {
     it('creates with null defaults for omitted optional fields', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 1 });
+      mock.platform.findUnique.mockResolvedValue({ id: testId(1) });
       const created = {
-        id: 1,
+        id: testId(1),
         title: 'HK',
-        platformId: 1,
+        platformId: testId(1),
         images: [],
         videos: [],
       };
       mock.game.create.mockResolvedValue(created);
 
-      const result = await service.create({ title: 'HK', platformId: 1 });
+      const result = await service.create({
+        title: 'HK',
+        platformId: testId(1),
+      });
 
       expect(mock.platform.findUnique).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: { id: testId(1) },
         select: { id: true },
       });
       expect(mock.game.create).toHaveBeenCalledWith({
         data: {
           title: 'HK',
-          platformId: 1,
+          platformId: testId(1),
           edition: null,
           releaseYear: null,
           publisher: null,
@@ -457,15 +463,15 @@ describe('GamesService (unit)', () => {
     });
 
     it('passes every provided field through and records provenance', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 2 });
-      const created = { id: 1, images: [], videos: [] };
+      mock.platform.findUnique.mockResolvedValue({ id: testId(2) });
+      const created = { id: testId(1), images: [], videos: [] };
       mock.game.create.mockResolvedValue(created);
       covers.cacheFromUrl.mockResolvedValue(
         `/api/covers/${'a'.repeat(32)}.jpg`,
       );
       const dto: CreateGameDto = {
         title: 'HK',
-        platformId: 2,
+        platformId: testId(2),
         edition: 'GOTY',
         releaseYear: 2017,
         publisher: 'Team Cherry',
@@ -485,7 +491,7 @@ describe('GamesService (unit)', () => {
       expect(mock.game.create).toHaveBeenCalledWith({
         data: {
           title: 'HK',
-          platformId: 2,
+          platformId: testId(2),
           edition: 'GOTY',
           releaseYear: 2017,
           publisher: 'Team Cherry',
@@ -501,11 +507,19 @@ describe('GamesService (unit)', () => {
     });
 
     it('keeps a same-origin cover path as-is without a download', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 2 });
-      mock.game.create.mockResolvedValue({ id: 1, images: [], videos: [] });
+      mock.platform.findUnique.mockResolvedValue({ id: testId(2) });
+      mock.game.create.mockResolvedValue({
+        id: testId(1),
+        images: [],
+        videos: [],
+      });
       const local = `/api/covers/${'b'.repeat(32)}.png`;
 
-      await service.create({ title: 'HK', platformId: 2, coverUrl: local });
+      await service.create({
+        title: 'HK',
+        platformId: testId(2),
+        coverUrl: local,
+      });
 
       expect(covers.cacheFromUrl).not.toHaveBeenCalled();
       expect(mock.game.create).toHaveBeenCalledWith(
@@ -519,13 +533,17 @@ describe('GamesService (unit)', () => {
     });
 
     it('keeps a failed cover download as a placeholder with a source link', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 2 });
-      mock.game.create.mockResolvedValue({ id: 1, images: [], videos: [] });
+      mock.platform.findUnique.mockResolvedValue({ id: testId(2) });
+      mock.game.create.mockResolvedValue({
+        id: testId(1),
+        images: [],
+        videos: [],
+      });
       covers.cacheFromUrl.mockResolvedValue(null);
 
       await service.create({
         title: 'HK',
-        platformId: 2,
+        platformId: testId(2),
         coverUrl: 'https://example.com/hk.jpg',
       });
 
@@ -543,24 +561,26 @@ describe('GamesService (unit)', () => {
       mock.platform.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.create({ title: 'HK', platformId: 999 }),
+        service.create({ title: 'HK', platformId: testId(999) }),
       ).rejects.toThrow(
-        new BadRequestException('Platform with id 999 does not exist'),
+        new BadRequestException(
+          `Platform with id ${testId(999)} does not exist`,
+        ),
       );
       expect(mock.game.create).not.toHaveBeenCalled();
     });
 
     it('rejects a duplicate unlinked identity with 409 carrying the existing game', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 1 });
-      identity.findExisting.mockResolvedValue({ id: 9, copyCount: 3 });
+      mock.platform.findUnique.mockResolvedValue({ id: testId(1) });
+      identity.findExisting.mockResolvedValue({ id: testId(9), copyCount: 3 });
       const existingGame = {
-        id: 9,
+        id: testId(9),
         title: 'HK',
-        platformId: 1,
+        platformId: testId(1),
         copyCount: 3,
         sourceCoverUrl: null,
         userEditedFields: null,
-        platform: { id: 1, name: 'PS5', slug: 'ps5' },
+        platform: { id: testId(1), name: 'PS5', slug: 'ps5' },
         images: [],
         videos: [],
       };
@@ -568,7 +588,7 @@ describe('GamesService (unit)', () => {
 
       let caught: unknown;
       try {
-        await service.create({ title: 'HK', platformId: 1 });
+        await service.create({ title: 'HK', platformId: testId(1) });
       } catch (error) {
         caught = error;
       }
@@ -576,14 +596,14 @@ describe('GamesService (unit)', () => {
       expect(caught).toBeInstanceOf(ConflictException);
       const response = (caught as ConflictException).getResponse() as {
         code: string;
-        game: { id: number; copyCount: number };
+        game: { id: string; copyCount: number };
       };
       expect(response.code).toBe('GAME_ALREADY_IN_CATALOG');
-      expect(response.game.id).toBe(9);
+      expect(response.game.id).toBe(testId(9));
       expect(response.game.copyCount).toBe(3);
       expect(identity.findExisting).toHaveBeenCalledWith({
         title: 'HK',
-        platformId: 1,
+        platformId: testId(1),
         edition: null,
         source: 'MANUAL',
         externalId: null,
@@ -607,14 +627,14 @@ describe('GamesService (unit)', () => {
     };
 
     it('creates a linked game from a verified pick (enrichment is the source)', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 3 });
+      mock.platform.findUnique.mockResolvedValue({ id: testId(3) });
       catalogSearch.search.mockResolvedValue({
         kind: 'matches',
         candidates: [linkedCandidate],
       });
       const enriched = {
         title: 'Halo: Combat Evolved',
-        platformId: 3,
+        platformId: testId(3),
         edition: 'GOTY',
         releaseYear: 2001,
         publisher: 'Bungie',
@@ -630,11 +650,11 @@ describe('GamesService (unit)', () => {
         externalId: 1036,
       };
       enrichment.enrichCandidate.mockResolvedValue(enriched);
-      mock.game.create.mockResolvedValue({ id: 42, ...enriched });
+      mock.game.create.mockResolvedValue({ id: testId(42), ...enriched });
 
       const result = await service.create({
         title: 'Halo',
-        platformId: 3,
+        platformId: testId(3),
         edition: 'GOTY',
         candidate: { source: 'IGDB', externalId: 1036 },
       });
@@ -642,25 +662,25 @@ describe('GamesService (unit)', () => {
       expect(catalogSearch.search).toHaveBeenCalledWith('Halo');
       expect(identity.findExisting).toHaveBeenCalledWith({
         title: 'Halo: Combat Evolved',
-        platformId: 3,
+        platformId: testId(3),
         edition: 'GOTY',
         source: 'IGDB',
         externalId: 1036,
       });
       expect(enrichment.enrichCandidate).toHaveBeenCalledWith(
         linkedCandidate,
-        3,
+        testId(3),
         'GOTY',
       );
       expect(mock.game.create).toHaveBeenCalledWith({
         data: { ...enriched, images: { create: [] }, videos: { create: [] } },
         include: GAME_DETAIL_INCLUDE,
       });
-      expect(result.id).toBe(42);
+      expect(result.id).toBe(testId(42));
     });
 
     it('threads the candidate gallery into a nested create and returns images', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 3 });
+      mock.platform.findUnique.mockResolvedValue({ id: testId(3) });
       const galleryCandidate: CatalogCandidate = {
         ...linkedCandidate,
         images: ['https://images.igdb.com/igdb/image/upload/t_1080p/art.jpg'],
@@ -671,7 +691,7 @@ describe('GamesService (unit)', () => {
       });
       const galleryEnriched = {
         title: 'Halo: Combat Evolved',
-        platformId: 3,
+        platformId: testId(3),
         edition: 'GOTY',
         releaseYear: 2001,
         publisher: 'Bungie',
@@ -693,11 +713,14 @@ describe('GamesService (unit)', () => {
         externalId: 1036,
       };
       enrichment.enrichCandidate.mockResolvedValue(galleryEnriched);
-      mock.game.create.mockResolvedValue({ id: 42, ...galleryEnriched });
+      mock.game.create.mockResolvedValue({
+        id: testId(42),
+        ...galleryEnriched,
+      });
 
       const result = await service.create({
         title: 'Halo',
-        platformId: 3,
+        platformId: testId(3),
         edition: 'GOTY',
         candidate: { source: 'IGDB', externalId: 1036 },
       });
@@ -728,7 +751,7 @@ describe('GamesService (unit)', () => {
     });
 
     it('rejects a pick that no longer appears in a fresh search (409)', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 3 });
+      mock.platform.findUnique.mockResolvedValue({ id: testId(3) });
       catalogSearch.search.mockResolvedValue({
         kind: 'matches',
         candidates: [],
@@ -737,7 +760,7 @@ describe('GamesService (unit)', () => {
       await expect(
         service.create({
           title: 'Halo',
-          platformId: 3,
+          platformId: testId(3),
           candidate: { source: 'IGDB', externalId: 999 },
         }),
       ).rejects.toThrow(ConflictException);
@@ -746,15 +769,15 @@ describe('GamesService (unit)', () => {
     });
 
     it('rejects a duplicate linked identity without downloading the cover', async () => {
-      mock.platform.findUnique.mockResolvedValue({ id: 3 });
+      mock.platform.findUnique.mockResolvedValue({ id: testId(3) });
       catalogSearch.search.mockResolvedValue({
         kind: 'matches',
         candidates: [linkedCandidate],
       });
-      identity.findExisting.mockResolvedValue({ id: 9, copyCount: 1 });
+      identity.findExisting.mockResolvedValue({ id: testId(9), copyCount: 1 });
       mock.game.findUnique.mockResolvedValue({
-        id: 9,
-        platform: { id: 3, name: 'Xbox', slug: 'xbox' },
+        id: testId(9),
+        platform: { id: testId(3), name: 'Xbox', slug: 'xbox' },
         sourceCoverUrl: null,
         userEditedFields: null,
         images: [],
@@ -764,7 +787,7 @@ describe('GamesService (unit)', () => {
       await expect(
         service.create({
           title: 'Halo',
-          platformId: 3,
+          platformId: testId(3),
           candidate: { source: 'IGDB', externalId: 1036 },
         }),
       ).rejects.toThrow(ConflictException);
@@ -862,21 +885,21 @@ describe('GamesService (unit)', () => {
 
   describe('addCopy', () => {
     it('increments copyCount atomically and returns the detail', async () => {
-      mock.game.findUnique.mockResolvedValue({ id: 5 });
+      mock.game.findUnique.mockResolvedValue({ id: testId(5) });
       mock.game.update.mockResolvedValue({
-        id: 5,
+        id: testId(5),
         copyCount: 2,
         sourceCoverUrl: null,
         userEditedFields: null,
-        platform: { id: 1, name: 'PS5', slug: 'ps5' },
+        platform: { id: testId(1), name: 'PS5', slug: 'ps5' },
         images: [],
         videos: [],
       });
 
-      const result = await service.addCopy(5);
+      const result = await service.addCopy(testId(5));
 
       expect(mock.game.update).toHaveBeenCalledWith({
-        where: { id: 5 },
+        where: { id: testId(5) },
         data: { copyCount: { increment: 1 } },
         include: GAME_DETAIL_INCLUDE,
       });
@@ -886,8 +909,8 @@ describe('GamesService (unit)', () => {
     it('throws 404 for an unknown game', async () => {
       mock.game.findUnique.mockResolvedValue(null);
 
-      await expect(service.addCopy(5)).rejects.toThrow(
-        new NotFoundException('Game with id 5 not found'),
+      await expect(service.addCopy(testId(5))).rejects.toThrow(
+        new NotFoundException(`Game with id ${testId(5)} not found`),
       );
       expect(mock.game.update).not.toHaveBeenCalled();
     });
@@ -896,9 +919,9 @@ describe('GamesService (unit)', () => {
   describe('update', () => {
     it('rejects an explicit null title with 400', async () => {
       await expect(
-        service.update(1, {
+        service.update(testId(1), {
           title: null,
-          platformId: 1,
+          platformId: testId(1),
         } as unknown as UpdateGameDto),
       ).rejects.toThrow(new BadRequestException('title must not be null'));
       expect(mock.game.findUnique).not.toHaveBeenCalled();
@@ -906,7 +929,7 @@ describe('GamesService (unit)', () => {
 
     it('rejects an explicit null platformId with 400', async () => {
       await expect(
-        service.update(1, {
+        service.update(testId(1), {
           title: 'HK',
           platformId: null,
         } as unknown as UpdateGameDto),
@@ -917,32 +940,34 @@ describe('GamesService (unit)', () => {
     it('throws 404 for an unknown game', async () => {
       mock.game.findUnique.mockResolvedValue(null);
 
-      await expect(service.update(7, { title: 'New' })).rejects.toThrow(
-        new NotFoundException('Game with id 7 not found'),
+      await expect(service.update(testId(7), { title: 'New' })).rejects.toThrow(
+        new NotFoundException(`Game with id ${testId(7)} not found`),
       );
       expect(mock.game.update).not.toHaveBeenCalled();
     });
 
     it('validates the new platform before updating', async () => {
-      mock.game.findUnique.mockResolvedValue({ id: 3 });
+      mock.game.findUnique.mockResolvedValue({ id: testId(3) });
       mock.platform.findUnique.mockResolvedValue(null);
 
-      await expect(service.update(3, { platformId: 5 })).rejects.toThrow(
-        new BadRequestException('Platform with id 5 does not exist'),
+      await expect(
+        service.update(testId(3), { platformId: testId(5) }),
+      ).rejects.toThrow(
+        new BadRequestException(`Platform with id ${testId(5)} does not exist`),
       );
       expect(mock.game.update).not.toHaveBeenCalled();
     });
 
     it('sends only the provided fields (partial dto)', async () => {
-      mock.game.findUnique.mockResolvedValue({ id: 3 });
-      const updated = { id: 3, title: 'New', images: [], videos: [] };
+      mock.game.findUnique.mockResolvedValue({ id: testId(3) });
+      const updated = { id: testId(3), title: 'New', images: [], videos: [] };
       mock.game.update.mockResolvedValue(updated);
 
-      const result = await service.update(3, { title: 'New' });
+      const result = await service.update(testId(3), { title: 'New' });
 
       expect(mock.platform.findUnique).not.toHaveBeenCalled();
       expect(mock.game.update).toHaveBeenCalledWith({
-        where: { id: 3 },
+        where: { id: testId(3) },
         data: { title: 'New' },
         include: GAME_DETAIL_INCLUDE,
       });
@@ -955,17 +980,19 @@ describe('GamesService (unit)', () => {
     });
 
     it('downloads and keeps an external cover same-origin on update', async () => {
-      mock.game.findUnique.mockResolvedValue({ id: 3, coverUrl: null });
+      mock.game.findUnique.mockResolvedValue({ id: testId(3), coverUrl: null });
       const local = `/api/covers/${'d'.repeat(32)}.jpg`;
       covers.cacheFromUrl.mockResolvedValue(local);
       mock.game.update.mockResolvedValue({
-        id: 3,
+        id: testId(3),
         coverUrl: local,
         images: [],
         videos: [],
       });
 
-      await service.update(3, { coverUrl: 'https://example.com/new.jpg' });
+      await service.update(testId(3), {
+        coverUrl: 'https://example.com/new.jpg',
+      });
 
       expect(covers.cacheFromUrl).toHaveBeenCalledWith(
         'https://example.com/new.jpg',
@@ -979,23 +1006,23 @@ describe('GamesService (unit)', () => {
         }),
       );
       expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(null, {
-        exceptCoverGameId: 3,
+        exceptCoverGameId: testId(3),
       });
     });
 
     it('clears the cover and source link with an explicit null', async () => {
       mock.game.findUnique.mockResolvedValue({
-        id: 3,
+        id: testId(3),
         coverUrl: `/api/covers/${'e'.repeat(32)}.jpg`,
       });
       mock.game.update.mockResolvedValue({
-        id: 3,
+        id: testId(3),
         coverUrl: null,
         images: [],
         videos: [],
       });
 
-      await service.update(3, {
+      await service.update(testId(3), {
         coverUrl: null,
       } as unknown as UpdateGameDto);
 
@@ -1012,7 +1039,7 @@ describe('GamesService (unit)', () => {
       // from the cover count so its gallery can still keep the file.
       expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(
         `/api/covers/${'e'.repeat(32)}.jpg`,
-        { exceptCoverGameId: 3 },
+        { exceptCoverGameId: testId(3) },
       );
     });
 
@@ -1021,18 +1048,18 @@ describe('GamesService (unit)', () => {
       const source =
         'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg';
       mock.game.findUnique.mockResolvedValue({
-        id: 3,
+        id: testId(3),
         coverUrl: local,
         sourceCoverUrl: source,
       });
       mock.game.update.mockResolvedValue({
-        id: 3,
+        id: testId(3),
         coverUrl: local,
         images: [],
         videos: [],
       });
 
-      await service.update(3, { coverUrl: local });
+      await service.update(testId(3), { coverUrl: local });
 
       expect(covers.cacheFromUrl).not.toHaveBeenCalled();
       expect(mock.game.update).toHaveBeenCalledWith(
@@ -1051,19 +1078,19 @@ describe('GamesService (unit)', () => {
       const oldLocal = `/api/covers/${'a'.repeat(32)}.jpg`;
       const newLocal = `/api/covers/${'b'.repeat(32)}.jpg`;
       mock.game.findUnique.mockResolvedValue({
-        id: 3,
+        id: testId(3),
         coverUrl: oldLocal,
         sourceCoverUrl:
           'https://images.igdb.com/igdb/image/upload/t_thumb/co61gh.jpg',
       });
       mock.game.update.mockResolvedValue({
-        id: 3,
+        id: testId(3),
         coverUrl: newLocal,
         images: [],
         videos: [],
       });
 
-      await service.update(3, { coverUrl: newLocal });
+      await service.update(testId(3), { coverUrl: newLocal });
 
       expect(mock.game.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1074,32 +1101,40 @@ describe('GamesService (unit)', () => {
         }),
       );
       expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(oldLocal, {
-        exceptCoverGameId: 3,
+        exceptCoverGameId: testId(3),
       });
     });
 
     it('changes the platform when platformId is provided and clears the unverified flag', async () => {
-      mock.game.findUnique.mockResolvedValue({ id: 3 });
-      mock.platform.findUnique.mockResolvedValue({ id: 5 });
-      mock.game.update.mockResolvedValue({ id: 3, images: [], videos: [] });
+      mock.game.findUnique.mockResolvedValue({ id: testId(3) });
+      mock.platform.findUnique.mockResolvedValue({ id: testId(5) });
+      mock.game.update.mockResolvedValue({
+        id: testId(3),
+        images: [],
+        videos: [],
+      });
 
-      await service.update(3, { platformId: 5 });
+      await service.update(testId(3), { platformId: testId(5) });
 
       expect(mock.game.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: { platformId: 5, platformUnverified: false },
+          data: { platformId: testId(5), platformUnverified: false },
         }),
       );
     });
 
     it('merges newly edited tracked fields into the provenance column', async () => {
       mock.game.findUnique.mockResolvedValue({
-        id: 3,
+        id: testId(3),
         userEditedFields: '["publisher"]',
       });
-      mock.game.update.mockResolvedValue({ id: 3, images: [], videos: [] });
+      mock.game.update.mockResolvedValue({
+        id: testId(3),
+        images: [],
+        videos: [],
+      });
 
-      await service.update(3, { genre: 'Metroidvania' });
+      await service.update(testId(3), { genre: 'Metroidvania' });
 
       expect(mock.game.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1112,12 +1147,16 @@ describe('GamesService (unit)', () => {
     });
 
     it('clears optional fields with explicit null and records provenance', async () => {
-      mock.game.findUnique.mockResolvedValue({ id: 3 });
-      mock.game.update.mockResolvedValue({ id: 3, images: [], videos: [] });
+      mock.game.findUnique.mockResolvedValue({ id: testId(3) });
+      mock.game.update.mockResolvedValue({
+        id: testId(3),
+        images: [],
+        videos: [],
+      });
 
       // `null` is not in the static type (it only reaches the service at
       // runtime, where @IsOptional lets it through) — hence the cast.
-      await service.update(3, {
+      await service.update(testId(3), {
         edition: null,
         releaseYear: null,
       } as unknown as UpdateGameDto);
@@ -1134,10 +1173,14 @@ describe('GamesService (unit)', () => {
     });
 
     it('writes the summary and records it as hand-edited', async () => {
-      mock.game.findUnique.mockResolvedValue({ id: 3 });
-      mock.game.update.mockResolvedValue({ id: 3, images: [], videos: [] });
+      mock.game.findUnique.mockResolvedValue({ id: testId(3) });
+      mock.game.update.mockResolvedValue({
+        id: testId(3),
+        images: [],
+        videos: [],
+      });
 
-      await service.update(3, { summary: 'x' });
+      await service.update(testId(3), { summary: 'x' });
 
       expect(mock.game.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1150,10 +1193,14 @@ describe('GamesService (unit)', () => {
     });
 
     it('clears the summary with an explicit null and marks it edited', async () => {
-      mock.game.findUnique.mockResolvedValue({ id: 3 });
-      mock.game.update.mockResolvedValue({ id: 3, images: [], videos: [] });
+      mock.game.findUnique.mockResolvedValue({ id: testId(3) });
+      mock.game.update.mockResolvedValue({
+        id: testId(3),
+        images: [],
+        videos: [],
+      });
 
-      await service.update(3, {
+      await service.update(testId(3), {
         summary: null,
       } as unknown as UpdateGameDto);
 
@@ -1185,7 +1232,7 @@ describe('GamesService (unit)', () => {
 
     const enriched = {
       title: 'Halo: Combat Evolved',
-      platformId: 3,
+      platformId: testId(3),
       edition: null,
       releaseYear: 2001,
       publisher: 'Bungie',
@@ -1204,9 +1251,9 @@ describe('GamesService (unit)', () => {
 
     function gameRow(overrides: Record<string, unknown> = {}) {
       return {
-        id: 5,
+        id: testId(5),
         title: 'Halo: Combat Evolved',
-        platformId: 3,
+        platformId: testId(3),
         edition: null,
         releaseYear: null,
         publisher: null,
@@ -1222,7 +1269,7 @@ describe('GamesService (unit)', () => {
         userEditedFields: null as string | null,
         createdAt: new Date('2026-10-01T00:00:00.000Z'),
         updatedAt: new Date('2026-10-01T00:00:00.000Z'),
-        platform: { id: 3, name: 'Xbox', slug: 'xbox' },
+        platform: { id: testId(3), name: 'Xbox', slug: 'xbox' },
         images: [],
         videos: [],
         ...overrides,
@@ -1237,7 +1284,7 @@ describe('GamesService (unit)', () => {
         candidates: [candidate],
       });
 
-      const result = await service.enrich(5, {});
+      const result = await service.enrich(testId(5), {});
 
       expect(catalog.search).toHaveBeenCalledWith('Halo: Combat Evolved');
       expect(result.status).toBe('matched');
@@ -1278,7 +1325,7 @@ describe('GamesService (unit)', () => {
         candidates: [candidate, second],
       });
 
-      const result = await service.enrich(5, {});
+      const result = await service.enrich(testId(5), {});
 
       expect(result.status).toBe('matched');
       expect(result.candidates).toHaveLength(2);
@@ -1302,7 +1349,7 @@ describe('GamesService (unit)', () => {
         candidates: [candidate, noCover],
       });
 
-      const result = await service.enrich(5, {});
+      const result = await service.enrich(testId(5), {});
 
       expect(result.status).toBe('matched');
       expect(result.candidates[0]?.coverUrl).toBe(PREVIEW_URL);
@@ -1335,11 +1382,15 @@ describe('GamesService (unit)', () => {
         externalId: 2222,
       });
 
-      const result = await service.enrich(5, {
+      const result = await service.enrich(testId(5), {
         candidate: { source: 'IGDB', externalId: 2222 },
       });
 
-      expect(enrichment.enrichCandidate).toHaveBeenCalledWith(second, 3, null);
+      expect(enrichment.enrichCandidate).toHaveBeenCalledWith(
+        second,
+        testId(3),
+        null,
+      );
       expect(result.applied).toBe(true);
       expect(result.game.externalId).toBe(2222);
     });
@@ -1365,19 +1416,19 @@ describe('GamesService (unit)', () => {
         externalId: 1036,
       });
 
-      const result = await service.enrich(5, {
+      const result = await service.enrich(testId(5), {
         candidate: { source: 'IGDB', externalId: 1036 },
       });
 
       expect(enrichment.enrichCandidate).toHaveBeenCalledWith(
         candidate,
-        3,
+        testId(3),
         null,
       );
       // Exact data equality proves the protected identity fields are omitted.
       expect(mock.game.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 5 },
+          where: { id: testId(5) },
           data: {
             releaseYear: 2001,
             publisher: 'Bungie',
@@ -1399,7 +1450,7 @@ describe('GamesService (unit)', () => {
       // The previous (null) cover is unchanged, so the maintenance hook is a
       // no-op.
       expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(null, {
-        exceptCoverGameId: 5,
+        exceptCoverGameId: testId(5),
       });
     });
 
@@ -1436,7 +1487,7 @@ describe('GamesService (unit)', () => {
         images: [{ url: '/api/covers/new.jpg' }],
       });
 
-      await service.enrich(5, {
+      await service.enrich(testId(5), {
         candidate: { source: 'IGDB', externalId: 1036 },
       });
 
@@ -1460,7 +1511,7 @@ describe('GamesService (unit)', () => {
       // A dropped gallery file is excluded from the gallery count only, so a
       // current cover reference would still keep it.
       expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(oldImage, {
-        exceptImageGameId: 5,
+        exceptImageGameId: testId(5),
       });
     });
 
@@ -1469,7 +1520,7 @@ describe('GamesService (unit)', () => {
       mock.game.findUnique.mockResolvedValue(row);
       catalog.search.mockResolvedValue({ kind: 'matches', candidates: [] });
 
-      const result = await service.enrich(5, {});
+      const result = await service.enrich(testId(5), {});
 
       expect(result.status).toBe('unrecognized');
       expect(result.reason).toBe('No game matched the title in any source');
@@ -1489,7 +1540,7 @@ describe('GamesService (unit)', () => {
       mock.game.findUnique.mockResolvedValue(gameRow());
       catalog.search.mockResolvedValue({ kind: 'matches', candidates: [] });
 
-      const result = await service.enrich(5, {
+      const result = await service.enrich(testId(5), {
         candidate: { source: 'IGDB', externalId: 1036 },
       });
 
@@ -1508,7 +1559,7 @@ describe('GamesService (unit)', () => {
         reason: 'IGDB rate-limited the request',
       });
 
-      await expect(service.enrich(5, {})).rejects.toThrow(
+      await expect(service.enrich(testId(5), {})).rejects.toThrow(
         new ServiceUnavailableException('IGDB rate-limited the request'),
       );
       expect(mock.game.update).not.toHaveBeenCalled();
@@ -1522,7 +1573,7 @@ describe('GamesService (unit)', () => {
         reason: 'IGDB credentials rejected',
       });
 
-      await expect(service.enrich(5, {})).rejects.toThrow(
+      await expect(service.enrich(testId(5), {})).rejects.toThrow(
         new ServiceUnavailableException('IGDB credentials rejected'),
       );
       expect(mock.game.update).not.toHaveBeenCalled();
@@ -1536,7 +1587,9 @@ describe('GamesService (unit)', () => {
       });
 
       await expect(
-        service.enrich(5, { candidate: { source: 'IGDB', externalId: 999 } }),
+        service.enrich(testId(5), {
+          candidate: { source: 'IGDB', externalId: 999 },
+        }),
       ).rejects.toThrow(
         new ConflictException(
           'The selected candidate is no longer available; run the search again',
@@ -1566,7 +1619,7 @@ describe('GamesService (unit)', () => {
       });
       enrichment.enrichCandidate.mockResolvedValue(enriched);
 
-      const result = await service.enrich(5, {
+      const result = await service.enrich(testId(5), {
         candidate: { source: 'IGDB', externalId: 1036 },
       });
 
@@ -1595,14 +1648,14 @@ describe('GamesService (unit)', () => {
         externalId: 1036,
       });
 
-      await service.enrich(5, {
+      await service.enrich(testId(5), {
         candidate: { source: 'IGDB', externalId: 1036 },
       });
 
       // Exact data equality proves the hand-edited publisher is omitted.
       expect(mock.game.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 5 },
+          where: { id: testId(5) },
           data: {
             releaseYear: 2001,
             genre: 'Shooter',
@@ -1638,7 +1691,7 @@ describe('GamesService (unit)', () => {
         playerCount: 16,
       });
 
-      await service.enrich(5, {
+      await service.enrich(testId(5), {
         candidate: { source: 'IGDB', externalId: 1036 },
       });
 
@@ -1647,7 +1700,7 @@ describe('GamesService (unit)', () => {
       // proves `coverUrl`/`sourceCoverUrl` were omitted.
       expect(mock.game.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 5 },
+          where: { id: testId(5) },
           data: {
             releaseYear: 2001,
             publisher: 'Bungie',
@@ -1662,20 +1715,20 @@ describe('GamesService (unit)', () => {
       );
       expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(
         enriched.coverUrl,
-        { exceptCoverGameId: 5 },
+        { exceptCoverGameId: testId(5) },
       );
       // The still-referenced existing cover is never removed.
       expect(maintenance.removeIfUnreferenced).not.toHaveBeenCalledWith(
         oldCover,
-        { exceptCoverGameId: 5 },
+        { exceptCoverGameId: testId(5) },
       );
     });
 
     it('throws 404 for an unknown game', async () => {
       mock.game.findUnique.mockResolvedValue(null);
 
-      await expect(service.enrich(7, {})).rejects.toThrow(
-        new NotFoundException('Game with id 7 not found'),
+      await expect(service.enrich(testId(7), {})).rejects.toThrow(
+        new NotFoundException(`Game with id ${testId(7)} not found`),
       );
       expect(catalog.search).not.toHaveBeenCalled();
     });
@@ -1685,20 +1738,26 @@ describe('GamesService (unit)', () => {
     it('throws 404 for an unknown game', async () => {
       mock.game.findUnique.mockResolvedValue(null);
 
-      await expect(service.remove(7)).rejects.toThrow(
-        new NotFoundException('Game with id 7 not found'),
+      await expect(service.remove(testId(7))).rejects.toThrow(
+        new NotFoundException(`Game with id ${testId(7)} not found`),
       );
       expect(mock.game.delete).not.toHaveBeenCalled();
     });
 
     it('deletes the game when it exists', async () => {
       const coverUrl = `/api/covers/${'f'.repeat(32)}.jpg`;
-      mock.game.findUnique.mockResolvedValue({ id: 3, coverUrl, images: [] });
-      mock.game.delete.mockResolvedValue({ id: 3 });
+      mock.game.findUnique.mockResolvedValue({
+        id: testId(3),
+        coverUrl,
+        images: [],
+      });
+      mock.game.delete.mockResolvedValue({ id: testId(3) });
 
-      await service.remove(3);
+      await service.remove(testId(3));
 
-      expect(mock.game.delete).toHaveBeenCalledWith({ where: { id: 3 } });
+      expect(mock.game.delete).toHaveBeenCalledWith({
+        where: { id: testId(3) },
+      });
       expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(coverUrl);
     });
 
@@ -1707,13 +1766,13 @@ describe('GamesService (unit)', () => {
       const imageA = `/api/covers/${'1'.repeat(32)}.jpg`;
       const imageB = `/api/covers/${'2'.repeat(32)}.jpg`;
       mock.game.findUnique.mockResolvedValue({
-        id: 3,
+        id: testId(3),
         coverUrl,
         images: [{ url: imageA }, { url: imageB }],
       });
-      mock.game.delete.mockResolvedValue({ id: 3 });
+      mock.game.delete.mockResolvedValue({ id: testId(3) });
 
-      await service.remove(3);
+      await service.remove(testId(3));
 
       expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(coverUrl);
       expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(imageA);

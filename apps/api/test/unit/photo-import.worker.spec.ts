@@ -12,6 +12,7 @@ import {
 } from '../../src/queue/photo-import.worker';
 import type { QueueControlService } from '../../src/queue/queue-control.service';
 import { photoImportQueueOptions } from '../../src/queue/queue.options';
+import { testId } from '../helpers/ids';
 
 interface WorkerMocks {
   queue: {
@@ -79,7 +80,7 @@ describe('PhotoImportWorker (unit)', () => {
     it('runs a claimed row and releases the lease on success', async () => {
       const { worker, mocks } = createWorker();
       mocks.queue.claimNext.mockResolvedValue({
-        id: 1,
+        id: testId(1),
         photoRef: 'p.png',
         attempts: 1,
       });
@@ -87,12 +88,12 @@ describe('PhotoImportWorker (unit)', () => {
       await expect(worker.processNext()).resolves.toBe('processed');
 
       expect(mocks.handler.handle).toHaveBeenCalledWith({
-        importJobId: 1,
+        importJobId: testId(1),
         photoRef: 'p.png',
         attempt: 1,
         maxAttempts: 3,
       });
-      expect(mocks.queue.release).toHaveBeenCalledWith(1);
+      expect(mocks.queue.release).toHaveBeenCalledWith(testId(1));
       expect(mocks.queue.scheduleRetry).not.toHaveBeenCalled();
       expect(mocks.jobs.markFailed).not.toHaveBeenCalled();
     });
@@ -100,7 +101,7 @@ describe('PhotoImportWorker (unit)', () => {
     it('schedules a retry with exponential backoff on attempt 1', async () => {
       const { worker, mocks } = createWorker();
       mocks.queue.claimNext.mockResolvedValue({
-        id: 1,
+        id: testId(1),
         photoRef: 'p.png',
         attempts: 1,
       });
@@ -108,14 +109,14 @@ describe('PhotoImportWorker (unit)', () => {
 
       await expect(worker.processNext()).resolves.toBe('processed');
 
-      expect(mocks.queue.scheduleRetry).toHaveBeenCalledWith(1, 5_000);
+      expect(mocks.queue.scheduleRetry).toHaveBeenCalledWith(testId(1), 5_000);
       expect(mocks.jobs.markFailed).not.toHaveBeenCalled();
     });
 
     it('schedules the doubled backoff on attempt 2', async () => {
       const { worker, mocks } = createWorker();
       mocks.queue.claimNext.mockResolvedValue({
-        id: 1,
+        id: testId(1),
         photoRef: 'p.png',
         attempts: 2,
       });
@@ -123,13 +124,13 @@ describe('PhotoImportWorker (unit)', () => {
 
       await expect(worker.processNext()).resolves.toBe('processed');
 
-      expect(mocks.queue.scheduleRetry).toHaveBeenCalledWith(1, 10_000);
+      expect(mocks.queue.scheduleRetry).toHaveBeenCalledWith(testId(1), 10_000);
     });
 
     it('fails the row after the last attempt instead of retrying', async () => {
       const { worker, mocks } = createWorker();
       mocks.queue.claimNext.mockResolvedValue({
-        id: 1,
+        id: testId(1),
         photoRef: 'p.png',
         attempts: 3,
       });
@@ -140,20 +141,22 @@ describe('PhotoImportWorker (unit)', () => {
 
       await expect(worker.processNext()).resolves.toBe('processed');
 
-      expect(mocks.jobs.summarizeRecognizedItems).toHaveBeenCalledWith(1);
+      expect(mocks.jobs.summarizeRecognizedItems).toHaveBeenCalledWith(
+        testId(1),
+      );
       expect(mocks.jobs.markFailed).toHaveBeenCalledWith(
-        1,
+        testId(1),
         'transient',
         COUNTS,
       );
-      expect(mocks.queue.release).toHaveBeenCalledWith(1);
+      expect(mocks.queue.release).toHaveBeenCalledWith(testId(1));
       expect(mocks.queue.scheduleRetry).not.toHaveBeenCalled();
     });
 
     it('does not re-fail a row the pipeline already marked failed on a permanent error', async () => {
       const { worker, mocks } = createWorker();
       mocks.queue.claimNext.mockResolvedValue({
-        id: 1,
+        id: testId(1),
         photoRef: 'p.png',
         attempts: 1,
       });
@@ -166,13 +169,13 @@ describe('PhotoImportWorker (unit)', () => {
 
       expect(mocks.jobs.markFailed).not.toHaveBeenCalled();
       expect(mocks.queue.scheduleRetry).not.toHaveBeenCalled();
-      expect(mocks.queue.release).toHaveBeenCalledWith(1);
+      expect(mocks.queue.release).toHaveBeenCalledWith(testId(1));
     });
 
     it('swallows a ConflictException from markFailed', async () => {
       const { worker, mocks } = createWorker();
       mocks.queue.claimNext.mockResolvedValue({
-        id: 1,
+        id: testId(1),
         photoRef: 'p.png',
         attempts: 3,
       });
@@ -183,13 +186,13 @@ describe('PhotoImportWorker (unit)', () => {
 
       await expect(worker.processNext()).resolves.toBe('processed');
 
-      expect(mocks.queue.release).toHaveBeenCalledWith(1);
+      expect(mocks.queue.release).toHaveBeenCalledWith(testId(1));
     });
 
     it('keeps the lease when marking failed throws a DB error', async () => {
       const { worker, mocks } = createWorker();
       mocks.queue.claimNext.mockResolvedValue({
-        id: 1,
+        id: testId(1),
         photoRef: 'p.png',
         attempts: 3,
       });
@@ -198,7 +201,11 @@ describe('PhotoImportWorker (unit)', () => {
 
       await expect(worker.processNext()).resolves.toBe('processed');
 
-      expect(mocks.jobs.markFailed).toHaveBeenCalledWith(1, 'x', COUNTS);
+      expect(mocks.jobs.markFailed).toHaveBeenCalledWith(
+        testId(1),
+        'x',
+        COUNTS,
+      );
       // The row is not settled, so the lease must stay for stall recovery.
       expect(mocks.queue.release).not.toHaveBeenCalled();
     });
@@ -208,7 +215,7 @@ describe('PhotoImportWorker (unit)', () => {
       const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
       try {
         mocks.queue.claimNext.mockResolvedValue({
-          id: 1,
+          id: testId(1),
           photoRef: 'p.png',
           attempts: 1,
         });
@@ -234,7 +241,7 @@ describe('PhotoImportWorker (unit)', () => {
       const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
       try {
         mocks.queue.claimNext.mockResolvedValue({
-          id: 1,
+          id: testId(1),
           photoRef: 'p.png',
           attempts: 1,
         });
@@ -281,20 +288,24 @@ describe('PhotoImportWorker (unit)', () => {
   describe('recoverStalled', () => {
     it('re-queues a stalled row that still has attempts left', async () => {
       const { worker, mocks } = createWorker();
-      mocks.queue.findStalled.mockResolvedValue([{ id: 1, attempts: 1 }]);
+      mocks.queue.findStalled.mockResolvedValue([
+        { id: testId(1), attempts: 1 },
+      ]);
 
       await expect(worker.recoverStalled()).resolves.toEqual({
         requeued: 1,
         failed: 0,
       });
 
-      expect(mocks.queue.requeueStalled).toHaveBeenCalledWith(1, 5_000);
+      expect(mocks.queue.requeueStalled).toHaveBeenCalledWith(testId(1), 5_000);
       expect(mocks.jobs.markFailed).not.toHaveBeenCalled();
     });
 
     it('fails a stalled row that ran out of attempts', async () => {
       const { worker, mocks } = createWorker();
-      mocks.queue.findStalled.mockResolvedValue([{ id: 2, attempts: 3 }]);
+      mocks.queue.findStalled.mockResolvedValue([
+        { id: testId(2), attempts: 3 },
+      ]);
 
       await expect(worker.recoverStalled()).resolves.toEqual({
         requeued: 0,
@@ -302,17 +313,19 @@ describe('PhotoImportWorker (unit)', () => {
       });
 
       expect(mocks.jobs.markFailed).toHaveBeenCalledWith(
-        2,
+        testId(2),
         IMPORT_STALLED_FAILURE_REASON,
         COUNTS,
       );
-      expect(mocks.queue.release).toHaveBeenCalledWith(2);
+      expect(mocks.queue.release).toHaveBeenCalledWith(testId(2));
       expect(mocks.queue.requeueStalled).not.toHaveBeenCalled();
     });
 
     it('keeps the lease when failing an out-of-attempts stalled row errors', async () => {
       const { worker, mocks } = createWorker();
-      mocks.queue.findStalled.mockResolvedValue([{ id: 2, attempts: 3 }]);
+      mocks.queue.findStalled.mockResolvedValue([
+        { id: testId(2), attempts: 3 },
+      ]);
       mocks.jobs.markFailed.mockRejectedValue(new Error('db down'));
 
       await expect(worker.recoverStalled()).resolves.toEqual({

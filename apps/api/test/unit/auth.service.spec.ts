@@ -7,6 +7,7 @@ import {
 import type { PasswordService } from '../../src/auth/password.service';
 import type { SessionsService } from '../../src/auth/sessions.service';
 import type { UsersService } from '../../src/auth/users.service';
+import { testId } from '../helpers/ids';
 
 interface UsersMock {
   findByEmail: jest.Mock;
@@ -23,7 +24,7 @@ interface SessionsMock {
 }
 
 const USER = {
-  id: 7,
+  id: testId(7),
   email: 'ash@example.com',
   passwordHash: 'ARGON2HASH',
   language: 'pl',
@@ -76,12 +77,12 @@ describe('AuthService (unit)', () => {
 
     expect(users.findByEmail).toHaveBeenCalledWith('ash@example.com');
     expect(passwords.verify).toHaveBeenCalledWith('ARGON2HASH', 'pikachu123');
-    expect(sessions.create).toHaveBeenCalledWith(7, {
+    expect(sessions.create).toHaveBeenCalledWith(testId(7), {
       userAgent: 'jest-agent',
     });
     expect(result).toEqual({
       user: {
-        id: 7,
+        id: testId(7),
         email: 'ash@example.com',
         language: 'pl',
         theme: 'system',
@@ -134,10 +135,12 @@ describe('AuthService (unit)', () => {
 
   it('me() returns the user and 401s when the user is gone', async () => {
     users.findById.mockResolvedValue(USER);
-    await expect(service.me(7)).resolves.toEqual(USER);
+    await expect(service.me(testId(7))).resolves.toEqual(USER);
 
     users.findById.mockResolvedValue(null);
-    await expect(service.me(7)).rejects.toBeInstanceOf(UnauthorizedException);
+    await expect(service.me(testId(7))).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
   });
 
   it('coerces a corrupt stored language and theme to the defaults in login and me', async () => {
@@ -154,7 +157,7 @@ describe('AuthService (unit)', () => {
     expect(result.user.theme).toBe('system');
 
     users.findById.mockResolvedValue(corrupt);
-    await expect(service.me(7)).resolves.toEqual({
+    await expect(service.me(testId(7))).resolves.toEqual({
       ...corrupt,
       language: 'pl',
       theme: 'system',

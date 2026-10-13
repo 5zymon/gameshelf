@@ -3,6 +3,7 @@ import {
   COVER_PREVIEW_HOSTS_ENV,
   COVER_RETRY_SWEEP_MAX_PAGES,
 } from '../../src/covers/covers.options';
+import { testId } from '../helpers/ids';
 
 const LOCAL = `/api/covers/${'a'.repeat(32)}.jpg`;
 
@@ -52,9 +53,9 @@ describe('CoverRecoveryService (unit)', () => {
       h.prisma.game.count.mockResolvedValue(2);
       h.prisma.game.findMany
         .mockResolvedValueOnce([
-          { id: 1, coverUrl: LOCAL, sourceCoverUrl: SOURCE_A },
-          { id: 2, coverUrl: null, sourceCoverUrl: SOURCE_B },
-          { id: 3, coverUrl: null, sourceCoverUrl: SOURCE_C },
+          { id: testId(1), coverUrl: LOCAL, sourceCoverUrl: SOURCE_A },
+          { id: testId(2), coverUrl: null, sourceCoverUrl: SOURCE_B },
+          { id: testId(3), coverUrl: null, sourceCoverUrl: SOURCE_C },
         ])
         .mockResolvedValueOnce([]);
       // Game 1's file is present; game 3's re-download fails.
@@ -79,7 +80,7 @@ describe('CoverRecoveryService (unit)', () => {
       );
       expect(h.cache.ensureThumbnail).toHaveBeenCalledWith('new.jpg');
       expect(h.prisma.game.update).toHaveBeenCalledWith({
-        where: { id: 2 },
+        where: { id: testId(2) },
         data: { coverUrl: '/api/covers/new.jpg' },
       });
     });
@@ -104,8 +105,8 @@ describe('CoverRecoveryService (unit)', () => {
       h.prisma.game.count.mockResolvedValue(0);
       h.prisma.game.findMany
         .mockResolvedValueOnce([
-          { id: 1, coverUrl: null, sourceCoverUrl: SOURCE_A },
-          { id: 2, coverUrl: null, sourceCoverUrl: SOURCE_B },
+          { id: testId(1), coverUrl: null, sourceCoverUrl: SOURCE_A },
+          { id: testId(2), coverUrl: null, sourceCoverUrl: SOURCE_B },
         ])
         .mockResolvedValueOnce([]);
       h.cache.cacheFromUrl.mockResolvedValue('/api/covers/ok.jpg');
@@ -132,7 +133,7 @@ describe('CoverRecoveryService (unit)', () => {
       h.prisma.game.findMany
         .mockResolvedValueOnce([
           {
-            id: 1,
+            id: testId(1),
             coverUrl: null,
             sourceCoverUrl: 'https://evil.example/x.jpg',
           },
@@ -158,7 +159,7 @@ describe('CoverRecoveryService (unit)', () => {
       h.prisma.game.findMany
         .mockResolvedValueOnce([
           {
-            id: 1,
+            id: testId(1),
             coverUrl: null,
             sourceCoverUrl: 'https://cdn.example.com/a.jpg',
           },
@@ -179,23 +180,23 @@ describe('CoverRecoveryService (unit)', () => {
     it('returns false on a failed download, then true once it succeeds', async () => {
       const h = harness();
       h.prisma.game.findUnique.mockResolvedValue({
-        id: 1,
+        id: testId(1),
         coverUrl: null,
         sourceCoverUrl: SOURCE_A,
       });
       h.cache.cacheFromUrl.mockResolvedValueOnce(null);
-      await expect(h.service.refreshGame(1)).resolves.toBe(false);
+      await expect(h.service.refreshGame(testId(1))).resolves.toBe(false);
       expect(h.prisma.game.update).not.toHaveBeenCalled();
 
       h.prisma.game.findUnique.mockResolvedValue({
-        id: 1,
+        id: testId(1),
         coverUrl: null,
         sourceCoverUrl: SOURCE_A,
       });
       h.cache.cacheFromUrl.mockResolvedValueOnce(LOCAL);
-      await expect(h.service.refreshGame(1)).resolves.toBe(true);
+      await expect(h.service.refreshGame(testId(1))).resolves.toBe(true);
       expect(h.prisma.game.update).toHaveBeenCalledWith({
-        where: { id: 1 },
+        where: { id: testId(1) },
         data: { coverUrl: LOCAL },
       });
       expect(h.cache.ensureThumbnail).toHaveBeenCalledWith(
@@ -206,26 +207,26 @@ describe('CoverRecoveryService (unit)', () => {
     it('is a no-op for a missing game or one without a source link', async () => {
       const h = harness();
       h.prisma.game.findUnique.mockResolvedValueOnce(null);
-      await expect(h.service.refreshGame(1)).resolves.toBe(true);
+      await expect(h.service.refreshGame(testId(1))).resolves.toBe(true);
 
       h.prisma.game.findUnique.mockResolvedValueOnce({
-        id: 2,
+        id: testId(2),
         coverUrl: null,
         sourceCoverUrl: null,
       });
-      await expect(h.service.refreshGame(2)).resolves.toBe(true);
+      await expect(h.service.refreshGame(testId(2))).resolves.toBe(true);
       expect(h.cache.cacheFromUrl).not.toHaveBeenCalled();
     });
 
     it('treats an off-allowlist source as resolved without attempting the download', async () => {
       const h = harness();
       h.prisma.game.findUnique.mockResolvedValue({
-        id: 1,
+        id: testId(1),
         coverUrl: null,
         sourceCoverUrl: 'https://evil.example/x.jpg',
       });
 
-      await expect(h.service.refreshGame(1)).resolves.toBe(true);
+      await expect(h.service.refreshGame(testId(1))).resolves.toBe(true);
       expect(h.cache.cacheFromUrl).not.toHaveBeenCalled();
       expect(h.prisma.game.update).not.toHaveBeenCalled();
     });
@@ -234,7 +235,10 @@ describe('CoverRecoveryService (unit)', () => {
   describe('retryMissing', () => {
     it('retries the placeholder games and counts successes', async () => {
       const h = harness();
-      h.prisma.game.findMany.mockResolvedValue([{ id: 1 }, { id: 2 }]);
+      h.prisma.game.findMany.mockResolvedValue([
+        { id: testId(1) },
+        { id: testId(2) },
+      ]);
       const spy = jest
         .spyOn(h.service, 'refreshGame')
         .mockResolvedValueOnce(true)
@@ -253,12 +257,12 @@ describe('CoverRecoveryService (unit)', () => {
     it('pages past a full first batch so low-id failures do not starve higher ids', async () => {
       const h = harness();
       h.prisma.game.findMany
-        .mockResolvedValueOnce([{ id: 1 }, { id: 2 }])
-        .mockResolvedValueOnce([{ id: 3 }, { id: 4 }])
+        .mockResolvedValueOnce([{ id: testId(1) }, { id: testId(2) }])
+        .mockResolvedValueOnce([{ id: testId(3) }, { id: testId(4) }])
         .mockResolvedValueOnce([]);
       const spy = jest
         .spyOn(h.service, 'refreshGame')
-        .mockImplementation((id: number) => Promise.resolve(id >= 3));
+        .mockImplementation((id: string) => Promise.resolve(id >= testId(3)));
 
       await expect(h.service.retryMissing(2)).resolves.toBe(2);
 
@@ -270,7 +274,7 @@ describe('CoverRecoveryService (unit)', () => {
           where: {
             coverUrl: null,
             sourceCoverUrl: { not: null },
-            id: { gt: 2 },
+            id: { gt: testId(2) },
           },
           take: 2,
         }),
@@ -283,7 +287,7 @@ describe('CoverRecoveryService (unit)', () => {
       const spy = jest.spyOn(h.service, 'refreshGame').mockResolvedValue(false);
       // COVER_RETRY_SWEEP_MAX_PAGES full one-row pages hit the sweep cap.
       for (let id = 1; id <= COVER_RETRY_SWEEP_MAX_PAGES; id += 1) {
-        h.prisma.game.findMany.mockResolvedValueOnce([{ id }]);
+        h.prisma.game.findMany.mockResolvedValueOnce([{ id: testId(id) }]);
       }
 
       await h.service.retryMissing(1);
@@ -301,7 +305,7 @@ describe('CoverRecoveryService (unit)', () => {
           where: {
             coverUrl: null,
             sourceCoverUrl: { not: null },
-            id: { gt: COVER_RETRY_SWEEP_MAX_PAGES },
+            id: { gt: testId(COVER_RETRY_SWEEP_MAX_PAGES) },
           },
         }),
       );

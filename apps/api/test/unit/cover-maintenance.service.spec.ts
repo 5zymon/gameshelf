@@ -1,5 +1,6 @@
 import { CoverMaintenanceService } from '../../src/covers/cover-maintenance.service';
 import type { CoverCacheService } from '../../src/covers/cover-cache.service';
+import { testId } from '../helpers/ids';
 
 function harness() {
   const prisma = {
@@ -32,12 +33,12 @@ describe('CoverMaintenanceService (unit)', () => {
     h.prisma.game.count.mockResolvedValue(0);
     h.prisma.gameImage.count.mockResolvedValue(0);
 
-    await h.service.removeIfUnreferenced(URL, { exceptCoverGameId: 5 });
+    await h.service.removeIfUnreferenced(URL, { exceptCoverGameId: testId(5) });
 
     // The exclusion applies only to the relation it was scoped for: the cover
     // count skips game 5, the gallery count does not.
     expect(h.prisma.game.count).toHaveBeenCalledWith({
-      where: { coverUrl: URL, id: { not: 5 } },
+      where: { coverUrl: URL, id: { not: testId(5) } },
     });
     expect(h.prisma.gameImage.count).toHaveBeenCalledWith({
       where: { url: URL },
@@ -75,13 +76,13 @@ describe('CoverMaintenanceService (unit)', () => {
     h.prisma.game.count.mockResolvedValue(0);
     h.prisma.gameImage.count.mockResolvedValue(1);
 
-    await h.service.removeIfUnreferenced(URL, { exceptCoverGameId: 5 });
+    await h.service.removeIfUnreferenced(URL, { exceptCoverGameId: testId(5) });
 
     expect(h.prisma.gameImage.count).toHaveBeenCalledWith({
       where: { url: URL },
     });
     expect(h.prisma.gameImage.count).not.toHaveBeenCalledWith({
-      where: { url: URL, gameId: { not: 5 } },
+      where: { url: URL, gameId: { not: testId(5) } },
     });
     expect(h.cache.removeByServedUrl).not.toHaveBeenCalled();
   });
@@ -94,13 +95,13 @@ describe('CoverMaintenanceService (unit)', () => {
     h.prisma.game.count.mockResolvedValue(1);
     h.prisma.gameImage.count.mockResolvedValue(0);
 
-    await h.service.removeIfUnreferenced(URL, { exceptImageGameId: 5 });
+    await h.service.removeIfUnreferenced(URL, { exceptImageGameId: testId(5) });
 
     expect(h.prisma.game.count).toHaveBeenCalledWith({
       where: { coverUrl: URL },
     });
     expect(h.prisma.gameImage.count).toHaveBeenCalledWith({
-      where: { url: URL, gameId: { not: 5 } },
+      where: { url: URL, gameId: { not: testId(5) } },
     });
     expect(h.cache.removeByServedUrl).not.toHaveBeenCalled();
   });
@@ -111,15 +112,15 @@ describe('CoverMaintenanceService (unit)', () => {
     h.prisma.gameImage.count.mockResolvedValue(0);
 
     await h.service.removeIfUnreferenced(URL, {
-      exceptCoverGameId: 5,
-      exceptImageGameId: 5,
+      exceptCoverGameId: testId(5),
+      exceptImageGameId: testId(5),
     });
 
     expect(h.prisma.game.count).toHaveBeenCalledWith({
-      where: { coverUrl: URL, id: { not: 5 } },
+      where: { coverUrl: URL, id: { not: testId(5) } },
     });
     expect(h.prisma.gameImage.count).toHaveBeenCalledWith({
-      where: { url: URL, gameId: { not: 5 } },
+      where: { url: URL, gameId: { not: testId(5) } },
     });
     expect(h.cache.removeByServedUrl).toHaveBeenCalledWith(URL);
   });
