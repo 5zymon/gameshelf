@@ -158,14 +158,8 @@ export function FlaggedItemLookup({
         : t('lookup.noMatches', { title: results.query });
 
   return (
-    <div className="space-y-2">
-      <div className="space-y-1">
-        <h3 className="text-xs font-medium tracking-wide text-muted uppercase">
-          {t('lookup.heading')}
-        </h3>
-        <p className="text-xs text-muted">{t('lookup.hint')}</p>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-2 border-t border-edge-soft pt-3">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
         <button
           type="button"
           disabled={
@@ -178,9 +172,9 @@ export function FlaggedItemLookup({
         >
           {searching ? t('lookup.searching') : t('lookup.search')}
         </button>
-        {q.length < 2 && (
-          <p className="text-xs text-muted">{t('lookup.titleTooShort')}</p>
-        )}
+        <p className="min-w-0 flex-1 basis-60 text-xs text-muted">
+          {q.length < 2 ? t('lookup.titleTooShort') : t('lookup.hint')}
+        </p>
       </div>
       {/* Persistent live regions, filled in place: a region that mounts
           together with its text is often not announced. `sr-only` keeps the

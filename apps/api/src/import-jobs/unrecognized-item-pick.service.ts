@@ -33,7 +33,9 @@ import { preferPlatform, type PreferredPlatform } from './platform-preference';
  * Resolves a flagged (unrecognized) import item by picking a catalog candidate:
  * one of its tied candidates (card 105) or a candidate from a re-search with a
  * corrected title. Behaves like "Add manually": it creates the game and marks
- * the item reviewed, without touching `recognized_items` or the job counters.
+ * the item reviewed, without touching `recognized_items` or the stored job
+ * counters; once the job's last open item is reviewed,
+ * `ImportJobsService.settleReviewedJob` settles its status.
  * The picked candidate is re-confirmed against a fresh catalog search before any
  * game is written, so a candidate that dropped out of the source can never be
  * imported blindly. `search` runs the same catalog search for the review UI,
@@ -143,6 +145,7 @@ export class UnrecognizedItemPickService {
         if (claim.count === 0) {
           throw new ConflictException('This flagged item was already reviewed');
         }
+        await this.importJobs.settleReviewedJob(jobId);
         return toGameDetail(existingGame);
       }
       // The row was deleted in the race window: fall through and create.
@@ -202,6 +205,7 @@ export class UnrecognizedItemPickService {
     if (!adopted) {
       await this.cleanupAssets(downloaded);
     }
+    await this.importJobs.settleReviewedJob(jobId);
 
     // 8. Return the created/linked game.
     const game = await this.prisma.game.findUnique({

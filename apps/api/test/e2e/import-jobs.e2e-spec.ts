@@ -26,6 +26,7 @@ interface ImportJobBody {
   recognizedCount: number;
   importedCount: number;
   unrecognizedCount: number;
+  openFlaggedCount: number;
   pendingCount: number;
   needsAttention: boolean;
   declaredCountMismatch: boolean;
@@ -564,6 +565,167 @@ describe('ImportJobs API (e2e)', () => {
         pendingCount: 2,
         needsAttention: false,
       });
+    });
+  });
+
+  describe('review settles the job (open flagged items)', () => {
+    it('settles a needs_attention job once the last flagged item is reviewed', async () => {
+      const job = await importJobs.createJob({ batchId: 'batch-settle' });
+      const item1 = await importJobs.addUnrecognizedItem(job.id, {
+        rawTitle: 'One',
+      });
+      const item2 = await importJobs.addUnrecognizedItem(job.id, {
+        rawTitle: 'Two',
+      });
+      await importJobs.markCompleted(job.id, {
+        recognizedCount: 3,
+        importedCount: 1,
+        unrecognizedCount: 2,
+      });
+
+      const first = await test.request
+        .patch(`/import-jobs/${job.id}/unrecognized/${item1.id}`)
+        .send({ dismissed: true });
+      expect(first.status).toBe(200);
+
+      const detailBefore = await test.request.get(`/import-jobs/${job.id}`);
+      expect(detailBefore.body).toMatchObject({
+        status: 'needs_attention',
+        needsAttention: true,
+        unrecognizedCount: 2,
+        openFlaggedCount: 1,
+      });
+      const batchBefore = await test.request.get(
+        '/import-jobs/batches/batch-settle',
+      );
+      expect(batchBefore.body).toMatchObject({ needsAttention: 1, done: 0 });
+
+      const second = await test.request
+        .patch(`/import-jobs/${job.id}/unrecognized/${item2.id}`)
+        .send({ dismissed: true });
+      expect(second.status).toBe(200);
+
+      const detailAfter = await test.request.get(`/import-jobs/${job.id}`);
+      expect(detailAfter.body).toMatchObject({
+        status: 'done',
+        needsAttention: false,
+        unrecognizedCount: 2,
+        openFlaggedCount: 0,
+        declaredCountMismatch: false,
+      });
+      const batchAfter = await test.request.get(
+        '/import-jobs/batches/batch-settle',
+      );
+      expect(batchAfter.body).toMatchObject({
+        needsAttention: 0,
+        done: 1,
+        allCompleted: true,
+      });
+
+      const list = (
+        await test.request
+          .get('/import-jobs')
+          .query({ batchId: 'batch-settle' })
+      ).body as ImportJobsListBody;
+      expect(list.items[0]?.openFlaggedCount).toBe(0);
+    });
+
+    it('keeps needs_attention when the declared count still differs', async () => {
+      const job = await importJobs.createJob({ declaredCount: 5 });
+      const item = await importJobs.addUnrecognizedItem(job.id, {
+        rawTitle: 'One',
+      });
+      await importJobs.markCompleted(job.id, {
+        recognizedCount: 3,
+        importedCount: 2,
+        unrecognizedCount: 1,
+      });
+
+      const res = await test.request
+        .patch(`/import-jobs/${job.id}/unrecognized/${item.id}`)
+        .send({ dismissed: true });
+      expect(res.status).toBe(200);
+
+      const detail = await test.request.get(`/import-jobs/${job.id}`);
+      expect(detail.body).toMatchObject({
+        status: 'needs_attention',
+        openFlaggedCount: 0,
+        declaredCountMismatch: true,
+      });
+    });
+
+    it('keeps needs_attention when nothing was recognized', async () => {
+      const job = await importJobs.createJob({});
+      const item = await importJobs.addUnrecognizedItem(job.id, {
+        rawTitle: 'One',
+      });
+      await importJobs.markCompleted(job.id, {
+        recognizedCount: 0,
+        importedCount: 0,
+        unrecognizedCount: 1,
+      });
+
+      const res = await test.request
+        .patch(`/import-jobs/${job.id}/unrecognized/${item.id}`)
+        .send({ dismissed: true });
+      expect(res.status).toBe(200);
+
+      const detail = await test.request.get(`/import-jobs/${job.id}`);
+      expect(detail.body).toMatchObject({ status: 'needs_attention' });
+    });
+
+    it('leaves a failed job failed but reports no open items', async () => {
+      const job = await importJobs.createJob({});
+      const item = await importJobs.addUnrecognizedItem(job.id, {
+        rawTitle: 'One',
+      });
+      await importJobs.markFailed(job.id, 'boom', {
+        recognizedCount: 2,
+        importedCount: 1,
+        unrecognizedCount: 1,
+      });
+
+      const res = await test.request
+        .patch(`/import-jobs/${job.id}/unrecognized/${item.id}`)
+        .send({ dismissed: true });
+      expect(res.status).toBe(200);
+
+      const detail = await test.request.get(`/import-jobs/${job.id}`);
+      expect(detail.body).toMatchObject({
+        status: 'failed',
+        openFlaggedCount: 0,
+      });
+    });
+
+    it('self-heals an already-settled needs_attention row on a re-dismiss', async () => {
+      const job = await importJobs.createJob({});
+      const item = await importJobs.addUnrecognizedItem(job.id, {
+        rawTitle: 'One',
+      });
+      await importJobs.markCompleted(job.id, {
+        recognizedCount: 2,
+        importedCount: 1,
+        unrecognizedCount: 1,
+      });
+      // A pre-fix review: the item was dismissed but the job was never settled.
+      await test.prisma.unrecognizedItem.update({
+        where: { id: item.id },
+        data: { dismissedAt: new Date() },
+      });
+
+      const before = await test.request.get(`/import-jobs/${job.id}`);
+      expect(before.body).toMatchObject({
+        status: 'needs_attention',
+        openFlaggedCount: 0,
+      });
+
+      const again = await test.request
+        .patch(`/import-jobs/${job.id}/unrecognized/${item.id}`)
+        .send({ dismissed: true });
+      expect(again.status).toBe(200);
+
+      const after = await test.request.get(`/import-jobs/${job.id}`);
+      expect(after.body).toMatchObject({ status: 'done' });
     });
   });
 

@@ -1,10 +1,10 @@
 ---
 type: Feature
 title: Import Jobs API
-description: GET/PATCH/POST /import-jobs — persisted import runs with live status/counts, batch progress, retry, flagged-item review, dismissal, and the retention policy.
+description: GET/PATCH/POST /import-jobs — persisted import runs with live status/counts, batch progress, retry, flagged-item review, post-review settling, dismissal, and the retention policy.
 tags: [api, import]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-09T20:32:19Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-13T22:15:26Z }
 ---
 
 # Overview
@@ -68,6 +68,7 @@ otherwise the pick is a `400`.
   "recognizedCount": 11,
   "importedCount": 9,
   "unrecognizedCount": 2,
+  "openFlaggedCount": 1,
   "pendingCount": 0,
   "needsAttention": true,
   "declaredCountMismatch": true,
@@ -91,8 +92,16 @@ Ticket 3.6 adds the computed progress fields:
   flagged. For a terminal job it is `max(0, recognized − imported −
 unrecognized)`; for a running job it is the live count of `pending`
   recognized items.
-- `needsAttention` — `status === 'needs_attention'` (the status-derived flag
-  for the review UI).
+- `openFlaggedCount` — flagged items still awaiting review: the
+  `unrecognized_items` rows of this job with `dismissed_at IS NULL`, counted
+  live for **every** status (one `groupBy(['importJobId'])` for the whole list,
+  no N+1). It is what the review UI acts on: it reaches `0` as items are
+  dismissed, picked or added by hand, while `unrecognizedCount` keeps its
+  historical value.
+- `needsAttention` — `status === 'needs_attention'`, the status-derived flag
+  for the review UI. It is truthful after review too: the settle step (below)
+  moves a job to `done` once its last open flagged item is reviewed and no
+  other trigger holds.
 - `declaredCountMismatch` — terminal job whose `declaredCount` is set and
   differs from `recognizedCount` (the ticket 4.8 comparison; `needsAttention`
   is the status-derived flag the UI acts on).
@@ -109,24 +118,38 @@ sorting).
 
 # Status lifecycle
 
-| Status            | Set by   | Meaning                                                   |
-| ----------------- | -------- | --------------------------------------------------------- |
-| `queued`          | pipeline | Created for the photo (ticket 3.2); waiting for the queue |
-| `processing`      | pipeline | The processor picked the job up (ticket 3.5)              |
-| `done`            | pipeline | Completed with no needs-attention trigger (see below)     |
-| `needs_attention` | pipeline | Completed with at least one trigger; awaits user review   |
-| `failed`          | pipeline | The run failed; `errorMessage` carries the reason         |
-| `dismissed`       | user     | User dismissed a `needs_attention`/`failed` job           |
+| Status            | Set by              | Meaning                                                                                                           |
+| ----------------- | ------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `queued`          | pipeline            | Created for the photo (ticket 3.2); waiting for the queue                                                         |
+| `processing`      | pipeline            | The processor picked the job up (ticket 3.5)                                                                      |
+| `done`            | pipeline; or review | Completed with no needs-attention trigger — or the last open flagged item was reviewed and no other trigger holds |
+| `needs_attention` | pipeline            | Completed with at least one trigger; awaits user review                                                           |
+| `failed`          | pipeline            | The run failed; `errorMessage` carries the reason                                                                 |
+| `dismissed`       | user                | User dismissed a `needs_attention`/`failed` job                                                                   |
 
 Allowed transitions (anything else is a `409`):
 
-| From                        | To                                          |
-| --------------------------- | ------------------------------------------- |
-| `queued`, `processing`      | `processing` (idempotent re-entry on retry) |
-| `queued`, `processing`      | `done`, `needs_attention`, `failed`         |
-| `failed`                    | `queued` (user-initiated retry)             |
-| `needs_attention`, `failed` | `dismissed`                                 |
-| `dismissed`                 | (none)                                      |
+| From                        | To                                                   |
+| --------------------------- | ---------------------------------------------------- |
+| `queued`, `processing`      | `processing` (idempotent re-entry on retry)          |
+| `queued`, `processing`      | `done`, `needs_attention`, `failed`                  |
+| `needs_attention`           | `done` (system, via `settleReviewedJob` — see below) |
+| `failed`                    | `queued` (user-initiated retry)                      |
+| `needs_attention`, `failed` | `dismissed`                                          |
+| `dismissed`                 | (none)                                               |
+
+**Post-review settling.** Dismissing a flagged item, picking a candidate and
+adding a game by hand each call `settleReviewedJob(jobId)` **after** the
+caller's claim has committed (not inside its transaction, so two racing reviews
+of the last two items both count). It loads the job, counts the still-open
+items, and — only while the job is `needs_attention` and the §4.2.4 rule is now
+clear (`recognizedCount > 0`, `declaredCount` null or equal, zero open items) —
+runs a guarded `updateMany({ where: { id, status: 'needs_attention' }, data: {
+status: 'done' } })`. Stored counters and `completedAt` are untouched, and the
+step is best-effort: a failure is logged and never surfaced, because the review
+itself already succeeded. An old `needs_attention` row whose items were all
+reviewed before this step existed is corrected by the next dismissal on any of
+its items (the idempotent re-dismiss path also settles).
 
 **Stays dismissed:** `dismissed` is a terminal state. The pipeline methods
 (`markProcessing`, `markCompleted`, `markFailed`) refuse to touch any job
@@ -215,6 +238,11 @@ to `imported` or `unrecognized`. The two residual cases are not silent successes
 
 `raw_title` stays `NOT NULL` in the schema.
 
+`unrecognizedCount` is the flagged total **at completion** and is never
+decremented by review — it is the historical record of what the photo flagged.
+The live "still to review" number is `openFlaggedCount` (see _Endpoint
+contract_).
+
 The failure path also carries counts: `markFailed(jobId, errorMessage, counts?)`
 accepts the same `JobCompletionResult`, so a run that committed earlier batches
 and then failed permanently persists the counters it reached (pending items
@@ -234,7 +262,9 @@ job reports **live** counts aggregated from `recognized_items`
 (`groupBy(['importJobId', 'status'])`), so a running import shows progress
 before the counters are written. `pendingCount` is always derived
 (`max(0, recognized − imported − unrecognized)` for terminal rows; the live
-`pending` group otherwise).
+`pending` group otherwise). `openFlaggedCount` is the exception to the split:
+it is always counted live from `unrecognized_items`, for terminal and running
+rows alike.
 
 # Batch progress
 
@@ -306,7 +336,12 @@ configuration is not re-failed. Full behaviour in
 - **Item dismissal** — `PATCH /import-jobs/:id/unrecognized/:itemId` with
   `{"dismissed":true}` stamps `dismissed_at` (one-way; there is no
   un-dismiss, and `{"dismissed":false}` is a `400`). `404` if the item does
-  not exist **or belongs to another job**.
+  not exist **or belongs to another job**. It is idempotent, and the re-dismiss
+  path also runs the settle step, so it self-heals old rows.
+- **Settling after review** — item dismissal, a candidate pick and a manual
+  add each run `settleReviewedJob` after their write commits: when the last
+  open flagged item is reviewed and no other §4.2.4 trigger holds, the job
+  moves `needs_attention → done` (see _Status lifecycle_).
 - **Review queue vs full trace** — `GET /import-jobs/:id/unrecognized` is
   the review queue and returns **non-dismissed** items only (spec §5:
   items "remain visible until the user resolves or dismisses them").
@@ -375,4 +410,4 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
   _Status is durable_, and _Batch progress_.)
 - **Auth guards** (2.x) and the **frontend views** — the API serves the
   data. The progress view is implemented ([Import Progress UI](/import-progress-ui.md));
-  flagged-item review remains a frontend ticket.
+  flagged-item review is implemented too (the same view's Photos list).

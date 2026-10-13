@@ -1,6 +1,7 @@
 import {
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, type UnrecognizedItem } from '../generated/prisma/client';
@@ -52,6 +53,20 @@ export interface JobCompletionResult {
   importedCount: number;
   /** Flagged items: recognized rows with status 'unrecognized'. */
   unrecognizedCount: number;
+}
+
+/** Spec §4.2.4 review triggers, shared by completion and post-review settling. */
+export function needsAttentionFor(input: {
+  recognizedCount: number;
+  declaredCount: number | null;
+  flaggedCount: number;
+}): boolean {
+  return (
+    input.recognizedCount === 0 ||
+    (input.declaredCount !== null &&
+      input.recognizedCount !== input.declaredCount) ||
+    input.flaggedCount > 0
+  );
 }
 
 /** One persisted recognized item as listed for batch resolution. */
@@ -225,10 +240,14 @@ export interface JobProgressCounts {
   importedCount: number;
   unrecognizedCount: number;
   pendingCount: number;
+  /** Flagged items not yet reviewed (dismissed_at NULL); live for every status. */
+  openFlaggedCount: number;
 }
 
 @Injectable()
 export class ImportJobsService {
+  private readonly logger = new Logger(ImportJobsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly photoQueue: PhotoImportQueue,
@@ -420,6 +439,7 @@ export class ImportJobsService {
         throw error;
       }
     }
+    await this.settleReviewedJob(jobId);
     const updated = await this.prisma.unrecognizedItem.findUnique({
       where: { id: itemId },
     });
@@ -429,6 +449,44 @@ export class ImportJobsService {
       );
     }
     return this.toUnrecognizedItemModel(updated);
+  }
+
+  /**
+   * Moves a `needs_attention` job to `done` once its last open flagged item is
+   * reviewed (dismissed, picked, or added by hand) and no other trigger holds.
+   * Called after the caller's claim has committed, so whichever of two racing
+   * reviews counts last settles the job. Dismissal is one-way and a terminal job
+   * gets no new flagged items, so a zero count cannot reopen. Best-effort: a
+   * failure is logged, never surfaced — the review itself already succeeded.
+   */
+  async settleReviewedJob(jobId: string): Promise<void> {
+    try {
+      const job = await this.prisma.importJob.findUnique({
+        where: { id: jobId },
+        select: { status: true, declaredCount: true, recognizedCount: true },
+      });
+      if (job?.status !== 'needs_attention') return;
+      const openFlaggedCount = await this.prisma.unrecognizedItem.count({
+        where: { importJobId: jobId, dismissedAt: null },
+      });
+      if (
+        needsAttentionFor({
+          recognizedCount: job.recognizedCount,
+          declaredCount: job.declaredCount,
+          flaggedCount: openFlaggedCount,
+        })
+      ) {
+        return;
+      }
+      await this.prisma.importJob.updateMany({
+        where: { id: jobId, status: 'needs_attention' },
+        data: { status: 'done' },
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Could not settle import job ${jobId} after review: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
   }
 
   /**
@@ -560,11 +618,11 @@ export class ImportJobsService {
     result: JobCompletionResult,
   ): Promise<ImportJobRow> {
     const job = await this.getJobForTransition(jobId, ['queued', 'processing']);
-    const needsAttention =
-      result.recognizedCount === 0 ||
-      (job.declaredCount !== null &&
-        result.recognizedCount !== job.declaredCount) ||
-      result.unrecognizedCount > 0;
+    const needsAttention = needsAttentionFor({
+      recognizedCount: result.recognizedCount,
+      declaredCount: job.declaredCount,
+      flaggedCount: result.unrecognizedCount,
+    });
     // Conditional write: a read-then-unconditional `update` would clobber a
     // `failed` marking committed by a racing abandoned attempt (see
     // `markFailed`). Only an active row may transition.
@@ -1133,6 +1191,7 @@ export class ImportJobsService {
             0,
             row.recognizedCount - row.importedCount - row.unrecognizedCount,
           ),
+          openFlaggedCount: 0,
         });
       } else {
         liveIds.push(row.id);
@@ -1144,7 +1203,33 @@ export class ImportJobsService {
         counts.set(id, entry);
       }
     }
+    const open = await this.openFlaggedCountsFor(rows.map((row) => row.id));
+    for (const [id, entry] of counts) {
+      entry.openFlaggedCount = open.get(id) ?? 0;
+    }
     return counts;
+  }
+
+  /**
+   * Live `openFlaggedCount` per job: flagged items with `dismissed_at IS NULL`,
+   * in one aggregate query (no N+1) and for every status.
+   */
+  private async openFlaggedCountsFor(
+    ids: string[],
+  ): Promise<Map<string, number>> {
+    const open = new Map<string, number>();
+    if (ids.length === 0) {
+      return open;
+    }
+    const groups = await this.prisma.unrecognizedItem.groupBy({
+      by: ['importJobId'],
+      where: { importJobId: { in: ids }, dismissedAt: null },
+      _count: { _all: true },
+    });
+    for (const group of groups) {
+      open.set(group.importJobId, group._count._all);
+    }
+    return open;
   }
 
   /**
@@ -1164,6 +1249,7 @@ export class ImportJobsService {
       recognizedCount: counts.recognizedCount,
       importedCount: counts.importedCount,
       unrecognizedCount: counts.unrecognizedCount,
+      openFlaggedCount: counts.openFlaggedCount,
       errorMessage: row.errorMessage,
       createdAt: row.createdAt,
       completedAt: row.completedAt,
@@ -1266,5 +1352,6 @@ function emptyCounts(): JobProgressCounts {
     importedCount: 0,
     unrecognizedCount: 0,
     pendingCount: 0,
+    openFlaggedCount: 0,
   };
 }

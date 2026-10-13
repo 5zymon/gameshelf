@@ -278,6 +278,13 @@ describe('Unrecognized item pick (e2e)', () => {
       where: { id: itemId },
     });
     expect(stored.dismissedAt).not.toBeNull();
+
+    const job = await test.request.get(`/import-jobs/${jobId}`);
+    expect(job.body).toMatchObject({
+      status: 'done',
+      needsAttention: false,
+      openFlaggedCount: 0,
+    });
   });
 
   it('creates the game, dismisses the item, and clears it from the review queue', async () => {
@@ -304,6 +311,13 @@ describe('Unrecognized item pick (e2e)', () => {
     const queue = await test.request.get(`/import-jobs/${jobId}/unrecognized`);
     expect(queue.status).toBe(200);
     expect(queue.body).toEqual([]);
+
+    const job = await test.request.get(`/import-jobs/${jobId}`);
+    expect(job.body).toMatchObject({
+      status: 'done',
+      needsAttention: false,
+      openFlaggedCount: 0,
+    });
   });
 
   it('picks a tied candidate with a confirmed platformId and no query', async () => {

@@ -331,6 +331,7 @@
     "savedAndAnother": "Dodano „{title}”.",
     "notLinked": "Niespowiązana z bazą gier.",
     "viewGame": "Zobacz grę",
+    "compactHint": "Dodaje grę tylko z tytułem i platformą. Resztę uzupełnisz później w katalogu.",
     "conflict": {
       "title": "„{title}” jest już w katalogu.",
       "body": "{meta}. Dodać kolejny egzemplarz?"
@@ -413,9 +414,9 @@
     "progressAria": "Przetworzono {done} z {total, plural, one {# zdjęcia} few {# zdjęć} many {# zdjęć} other {# zdjęć}}",
     "processed": "Przetworzono {done} z {total, plural, one {# zdjęcia} few {# zdjęć} many {# zdjęć} other {# zdjęć}}",
     "counts": {
-      "added": "Dodane",
-      "needsReview": "Wymaga weryfikacji",
-      "failed": "Błędy",
+      "added": "Dodane automatycznie",
+      "needsReview": "Tytuły do sprawdzenia",
+      "failed": "Nieudane zdjęcia",
       "pending": "Do przetworzenia"
     },
     "photos": "Zdjęcia",
@@ -424,24 +425,6 @@
     "reconnecting": "Ponowne łączenie…",
     "backToCatalog": "Wróć do katalogu",
     "importMore": "Importuj więcej zdjęć",
-    "status": {
-      "queued": "W kolejce",
-      "processing": "Odczytywanie",
-      "done": "Zakończono",
-      "needs_attention": "Zakończono · wymaga weryfikacji",
-      "failed": "Błąd",
-      "dismissed": "Odrzucone"
-    },
-    "photoCounts": {
-      "queued": "Oczekuje w kolejce.",
-      "processing": "Odczytywanie zdjęcia…",
-      "added": "Dodano {count, plural, one {# grę} few {# gry} many {# gier} other {# gier}}.",
-      "flagged": "{count, plural, one {# gra wymaga} few {# gry wymagają} many {# gier wymaga} other {# gier wymaga}} weryfikacji."
-    },
-    "recognition": {
-      "recognized": "Rozpoznano {count, plural, one {# grę} few {# gry} many {# gier} other {# gier}}.",
-      "declared": "Zadeklarowano {declared}; rozpoznano {recognized}."
-    },
     "pause": {
       "llm": {
         "reason": "Model językowy odrzucił żądanie.",
@@ -458,38 +441,71 @@
     }
   },
   "importAttention": {
-    "heading": "Wymaga uwagi",
-    "summary": "{count, plural, one {# zdjęcie wymaga} few {# zdjęcia wymagają} many {# zdjęć wymaga} other {# zdjęć wymaga}} decyzji. Dodaj brakujące gry, ponów nieudane zdjęcie albo odrzuć to, co nie wymaga działania.",
-    "flaggedItems": "Oznaczone pozycje",
-    "loading": "Ładowanie oznaczonych pozycji…",
-    "loadError": "Nie udało się wczytać oznaczonych pozycji dla tego zdjęcia.",
-    "allReviewed": "Wszystkie oznaczone pozycje dla tego zdjęcia zostały sprawdzone.",
+    "summary": {
+      "decision": "{count, plural, one {# zdjęcie wymaga} few {# zdjęcia wymagają} many {# zdjęć wymaga} other {# zdjęć wymaga}} Twojej decyzji.",
+      "working": "Na razie nic nie wymaga Twojej decyzji. Oznaczymy to, co będzie jej wymagać, gdy zdjęcia się przetworzą.",
+      "allDone": "Gotowe. Nic nie wymaga Twojej decyzji."
+    },
+    "jumpTo": "Zdjęcia wymagające decyzji",
+    "state": {
+      "queued": "W kolejce",
+      "processing": "Odczytywanie",
+      "failed": "Nie powiodło się",
+      "decision": "Wymaga decyzji",
+      "ready": "Gotowe",
+      "dismissed": "Odrzucone"
+    },
+    "photoSummary": {
+      "queued": "Czeka na odczytanie.",
+      "processing": "Odczytywanie zdjęcia…",
+      "added": "{count, plural, =0 {Nie dodano żadnej gry.} one {Dodano # grę.} few {Dodano # gry.} many {Dodano # gier.} other {Dodano # gier.}}",
+      "open": "{count, plural, one {# tytuł wymaga} few {# tytuły wymagają} many {# tytułów wymaga} other {# tytułów wymaga}} decyzji.",
+      "reviewed": "Sprawdzono {count, plural, one {# oznaczony tytuł} few {# oznaczone tytuły} many {# oznaczonych tytułów} other {# oznaczonych tytułów}}.",
+      "nothingFound": "Nie rozpoznano żadnej gry.",
+      "dismissed": "To zdjęcie zostało odrzucone."
+    },
+    "why": {
+      "failed": "Nie udało się dokończyć tego zdjęcia. Ponów je. Gry już dodane nie zostaną dodane drugi raz.",
+      "unmatched": "Tych tytułów nie udało się dopasować do bazy gier. Dla każdego wybierz dopasowanie, dodaj go ręcznie albo odrzuć, jeśli to nie jest Twoja gra.",
+      "nothingFound": "Nie rozpoznaliśmy na tym zdjęciu żadnej gry. Spróbuj z ostrzejszym zdjęciem, na którym grzbiety są zwrócone do aparatu, albo odrzuć to zdjęcie.",
+      "countFewer": "Według Ciebie na zdjęciu {declared, plural, one {jest # gra} few {są # gry} many {jest # gier} other {jest # gier}}, a rozpoznaliśmy {recognized}. Dodaj brakujące gry ręcznie, a potem odrzuć to zdjęcie.",
+      "countMore": "Według Ciebie na zdjęciu {declared, plural, one {jest # gra} few {są # gry} many {jest # gier} other {jest # gier}}, a rozpoznaliśmy {recognized}. Sprawdź gry dodane z tego zdjęcia, a potem je odrzuć."
+    },
+    "technicalDetails": "Szczegóły techniczne",
+    "item": {
+      "platform": "Platforma: {platform}",
+      "reason": {
+        "ambiguous": "Ten tytuł pasuje do kilku gier. Wybierz właściwą.",
+        "noPlatform": "Znaleźliśmy grę, ale nie wiadomo, na jaką platformę. Dodaj ją ręcznie i wybierz platformę.",
+        "notFound": "Nie znaleziono w bazie gier. Sprawdź pisownię i wyszukaj ponownie albo dodaj grę ręcznie."
+      }
+    },
+    "itemDismissed": "Odrzucono „{title}”.",
+    "added": "Dodano „{title}” do katalogu.",
+    "loading": "Ładowanie oznaczonych tytułów…",
+    "loadError": "Nie udało się wczytać oznaczonych tytułów dla tego zdjęcia.",
+    "allReviewed": "Wszystkie oznaczone tytuły z tego zdjęcia są sprawdzone.",
     "dismiss": "Odrzuć",
     "dismissing": "Odrzucanie…",
     "addManually": "Dodaj ręcznie",
     "close": "Zamknij",
     "addToCatalog": "Dodaj do katalogu",
-    "countMismatch": "Niezgodna liczba",
     "retry": "Ponów zdjęcie",
     "retrying": "Ponawianie…",
-    "retryHint": "Ponowienie uruchamia tylko gry, które nie są jeszcze zapisane. Gry już w Twoim katalogu nie zostaną dodane ponownie.",
     "dismissPhoto": "Odrzuć zdjęcie",
-    "confirmTitle": "Odrzucić to zdjęcie?",
-    "confirmBody": "Opuści listę do weryfikacji i nie da się go przywrócić. Jego rekord zostanie zachowany.",
+    "confirmTitle": "Odrzucić zdjęcie {n}?",
+    "confirmBody": "Zdjęcie przestanie wymagać decyzji. Gry już z niego dodane zostaną w katalogu, a niesprawdzone tytuły zostaną pominięte. Tego nie można cofnąć.",
     "cancel": "Anuluj",
-    "added": "Dodano „{title}”. Ta pozycja została oznaczona jako sprawdzona.",
-    "candidatesHeading": "Wybierz dopasowanie",
     "pick": "Wybierz",
     "picking": "Wybieranie…",
     "coverAlt": "Okładka: {title}",
     "lookup": {
-      "heading": "Szukaj w bazie gier",
-      "hint": "Popraw tytuł powyżej i wyszukaj ponownie. Dopasowania na wybraną platformę są pokazywane jako pierwsze.",
-      "search": "Szukaj ponownie",
+      "search": "Szukaj w bazie gier",
+      "hint": "Znajduje grę z okładką i danymi. Najpierw popraw tytuł, jeśli zawiera błąd. Dopasowania dla wybranej platformy są pokazywane jako pierwsze.",
       "searching": "Wyszukiwanie…",
       "titleTooShort": "Wpisz co najmniej 2 znaki, aby wyszukać.",
       "results": "{count, plural, one {# dopasowanie} few {# dopasowania} many {# dopasowań} other {# dopasowania}} dla „{title}”. Wybierz jedno, aby dodać grę z jej danymi.",
-      "noMatches": "Nic nie znaleziono dla „{title}”. Popraw tytuł i wyszukaj ponownie albo uzupełnij dane poniżej i dodaj grę ręcznie.",
+      "noMatches": "Nic nie znaleziono dla „{title}”. Popraw tytuł i wyszukaj ponownie albo użyj przycisku Dodaj do katalogu.",
       "error": {
         "search": "Nie udało się połączyć z bazą gier. Spróbuj ponownie albo dodaj grę ręcznie."
       }
@@ -498,7 +514,7 @@
       "retry": "Nie udało się ponowić tego zdjęcia. Sprawdź połączenie i spróbuj ponownie.",
       "dismissPhoto": "Nie udało się odrzucić tego zdjęcia. Sprawdź połączenie i spróbuj ponownie.",
       "dismissItem": "Nie udało się odrzucić tej pozycji. Sprawdź połączenie i spróbuj ponownie.",
-      "processing": "Nie udało się przetworzyć zdjęcia.",
+      "savedDismissFailed": "Dodano „{title}” do katalogu, ale nie udało się odrzucić tego oznaczonego tytułu. Odrzuć go, aby dokończyć przegląd tego zdjęcia.",
       "pick": "Nie udało się wybrać tego kandydata. Sprawdź połączenie i spróbuj ponownie."
     }
   },

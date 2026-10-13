@@ -1,6 +1,9 @@
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../../src/generated/prisma/client';
-import { ImportJobsService } from '../../src/import-jobs/import-jobs.service';
+import {
+  ImportJobsService,
+  needsAttentionFor,
+} from '../../src/import-jobs/import-jobs.service';
 import { RetryableImportError } from '../../src/queue/photo-import.failure';
 import type { PhotoImportQueue } from '../../src/queue/photo-import.queue';
 import type { PlatformsService } from '../../src/platforms/platforms.service';
@@ -25,6 +28,8 @@ interface ImportJobsPrismaMock {
     findUnique: jest.Mock;
     create: jest.Mock;
     update: jest.Mock;
+    count: jest.Mock;
+    groupBy: jest.Mock;
   };
   recognizedItem: {
     findMany: jest.Mock;
@@ -80,6 +85,8 @@ function createService(): {
       findUnique: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      count: jest.fn(),
+      groupBy: jest.fn(),
     },
     recognizedItem: {
       findMany: jest.fn(),
@@ -107,6 +114,8 @@ function createService(): {
   // No batch/aggregate by default; tests that need it override the result.
   mock.importJob.groupBy.mockResolvedValue([]);
   mock.recognizedItem.groupBy.mockResolvedValue([]);
+  mock.unrecognizedItem.groupBy.mockResolvedValue([]);
+  mock.unrecognizedItem.count.mockResolvedValue(0);
   const photoQueue = { wake: jest.fn() };
   const queueControl: QueueControlMock = {
     pauseForConfig: jest.fn(),
@@ -228,6 +237,58 @@ describe('ImportJobsService (unit)', () => {
     } = createService());
   });
 
+  describe('needsAttentionFor', () => {
+    it('is true when nothing was recognized', () => {
+      expect(
+        needsAttentionFor({
+          recognizedCount: 0,
+          declaredCount: null,
+          flaggedCount: 0,
+        }),
+      ).toBe(true);
+    });
+
+    it('is true on a declared-count mismatch', () => {
+      expect(
+        needsAttentionFor({
+          recognizedCount: 2,
+          declaredCount: 3,
+          flaggedCount: 0,
+        }),
+      ).toBe(true);
+    });
+
+    it('is true when at least one item was flagged', () => {
+      expect(
+        needsAttentionFor({
+          recognizedCount: 3,
+          declaredCount: null,
+          flaggedCount: 1,
+        }),
+      ).toBe(true);
+    });
+
+    it('is false when every trigger is clear (no declaration)', () => {
+      expect(
+        needsAttentionFor({
+          recognizedCount: 3,
+          declaredCount: null,
+          flaggedCount: 0,
+        }),
+      ).toBe(false);
+    });
+
+    it('is false when the declaration matches and nothing is flagged', () => {
+      expect(
+        needsAttentionFor({
+          recognizedCount: 3,
+          declaredCount: 3,
+          flaggedCount: 0,
+        }),
+      ).toBe(false);
+    });
+  });
+
   describe('list', () => {
     it('applies defaults: newest first, page 1, limit 20', async () => {
       mock.importJob.findMany.mockResolvedValue([]);
@@ -279,6 +340,23 @@ describe('ImportJobsService (unit)', () => {
         total: 12,
         totalPages: 3,
       });
+    });
+
+    it('reports open flagged items live for a terminal row', async () => {
+      mock.importJob.findMany.mockResolvedValue([JOB]);
+      mock.importJob.count.mockResolvedValue(1);
+      mock.unrecognizedItem.groupBy.mockResolvedValue([
+        { importJobId: testId(1), _count: { _all: 1 } },
+      ]);
+
+      const result = await service.list({});
+
+      expect(mock.unrecognizedItem.groupBy).toHaveBeenCalledWith({
+        by: ['importJobId'],
+        where: { importJobId: { in: [testId(1)] }, dismissedAt: null },
+        _count: { _all: true },
+      });
+      expect(result.items[0]?.openFlaggedCount).toBe(1);
     });
   });
 
@@ -533,6 +611,134 @@ describe('ImportJobsService (unit)', () => {
           `Unrecognized item with id ${testId(5)} not found`,
         ),
       );
+    });
+
+    it('settles a needs_attention job to done once nothing is open', async () => {
+      const dismissedAt = new Date('2026-01-02T00:00:00.000Z');
+      const updated = { ...ITEM, dismissedAt };
+      mock.unrecognizedItem.findUnique
+        .mockResolvedValueOnce({
+          id: testId(5),
+          importJobId: testId(1),
+          dismissedAt: null,
+        })
+        .mockResolvedValueOnce(updated);
+      mock.unrecognizedItem.update.mockResolvedValue(updated);
+      mock.importJob.findUnique.mockResolvedValue({
+        status: 'needs_attention',
+        declaredCount: null,
+        recognizedCount: 3,
+      });
+      mock.unrecognizedItem.count.mockResolvedValue(0);
+      mock.importJob.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.dismissUnrecognizedItem(
+        testId(1),
+        testId(5),
+      );
+
+      expect(mock.unrecognizedItem.count).toHaveBeenCalledWith({
+        where: { importJobId: testId(1), dismissedAt: null },
+      });
+      expect(mock.importJob.updateMany).toHaveBeenCalledWith({
+        where: { id: testId(1), status: 'needs_attention' },
+        data: { status: 'done' },
+      });
+      expect(result).toEqual({ ...ITEM_MODEL, dismissedAt });
+    });
+
+    it('keeps needs_attention on a declared-count mismatch', async () => {
+      const dismissedAt = new Date('2026-01-02T00:00:00.000Z');
+      const updated = { ...ITEM, dismissedAt };
+      mock.unrecognizedItem.findUnique
+        .mockResolvedValueOnce({
+          id: testId(5),
+          importJobId: testId(1),
+          dismissedAt: null,
+        })
+        .mockResolvedValueOnce(updated);
+      mock.unrecognizedItem.update.mockResolvedValue(updated);
+      mock.importJob.findUnique.mockResolvedValue({
+        status: 'needs_attention',
+        declaredCount: 3,
+        recognizedCount: 2,
+      });
+      mock.unrecognizedItem.count.mockResolvedValue(0);
+
+      await service.dismissUnrecognizedItem(testId(1), testId(5));
+
+      expect(mock.unrecognizedItem.count).toHaveBeenCalled();
+      expect(mock.importJob.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('keeps needs_attention while another flagged item is open', async () => {
+      const dismissedAt = new Date('2026-01-02T00:00:00.000Z');
+      const updated = { ...ITEM, dismissedAt };
+      mock.unrecognizedItem.findUnique
+        .mockResolvedValueOnce({
+          id: testId(5),
+          importJobId: testId(1),
+          dismissedAt: null,
+        })
+        .mockResolvedValueOnce(updated);
+      mock.unrecognizedItem.update.mockResolvedValue(updated);
+      mock.importJob.findUnique.mockResolvedValue({
+        status: 'needs_attention',
+        declaredCount: null,
+        recognizedCount: 3,
+      });
+      mock.unrecognizedItem.count.mockResolvedValue(1);
+
+      await service.dismissUnrecognizedItem(testId(1), testId(5));
+
+      expect(mock.importJob.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('does not settle a job that is not needs_attention', async () => {
+      const dismissedAt = new Date('2026-01-02T00:00:00.000Z');
+      const updated = { ...ITEM, dismissedAt };
+      mock.unrecognizedItem.findUnique
+        .mockResolvedValueOnce({
+          id: testId(5),
+          importJobId: testId(1),
+          dismissedAt: null,
+        })
+        .mockResolvedValueOnce(updated);
+      mock.unrecognizedItem.update.mockResolvedValue(updated);
+      mock.importJob.findUnique.mockResolvedValue({
+        status: 'failed',
+        declaredCount: null,
+        recognizedCount: 3,
+      });
+
+      await service.dismissUnrecognizedItem(testId(1), testId(5));
+
+      expect(mock.unrecognizedItem.count).not.toHaveBeenCalled();
+      expect(mock.importJob.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('still returns the dismissed item when the settle step fails', async () => {
+      const dismissedAt = new Date('2026-01-02T00:00:00.000Z');
+      const updated = { ...ITEM, dismissedAt };
+      mock.unrecognizedItem.findUnique
+        .mockResolvedValueOnce({
+          id: testId(5),
+          importJobId: testId(1),
+          dismissedAt: null,
+        })
+        .mockResolvedValueOnce(updated);
+      mock.unrecognizedItem.update.mockResolvedValue(updated);
+      mock.importJob.findUnique.mockResolvedValue({
+        status: 'needs_attention',
+        declaredCount: null,
+        recognizedCount: 3,
+      });
+      mock.unrecognizedItem.count.mockRejectedValue(new Error('db down'));
+
+      await expect(
+        service.dismissUnrecognizedItem(testId(1), testId(5)),
+      ).resolves.toEqual({ ...ITEM_MODEL, dismissedAt });
+      expect(mock.importJob.updateMany).not.toHaveBeenCalled();
     });
   });
 

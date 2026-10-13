@@ -243,6 +243,8 @@ export interface ImportJob {
   recognizedCount: number;
   importedCount: number;
   unrecognizedCount: number;
+  /** Flagged items still awaiting review (not dismissed, picked or added); live for every status. */
+  openFlaggedCount: number;
   errorMessage: string | null;
   createdAt: string;
   completedAt: string | null;

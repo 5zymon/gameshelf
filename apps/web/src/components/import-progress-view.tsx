@@ -9,49 +9,20 @@ import {
   type GamePlatform,
   type ImportBatchProgress,
   type ImportJob,
-  type ImportJobStatus,
 } from '@/lib/api';
 import { api } from '@/lib/api/browser';
-import { ImportAttentionReview } from '@/components/import-attention-review';
-import {
-  batchCounts,
-  pauseCopy,
-  photoCountsLine,
-  recognitionLine,
-  sortPhotos,
-  statusView,
-  type ProgressTone,
-} from '@/lib/import/progress';
+import { ImportPhotoReview } from '@/components/import-photo-review';
+import { batchCounts, pauseCopy, sortPhotos } from '@/lib/import/progress';
 
 const POLL_RUNNING_MS = 2000;
 const POLL_PAUSED_MS = 15000;
 /** The API caps a page at 100 — one page covers a full 50-photo batch. */
 const PHOTO_LIMIT = 100;
 
-const TONE_DOT: Readonly<Record<ProgressTone, string>> = {
-  muted: 'bg-edge',
-  active: 'bg-accent',
-  success: 'bg-ink',
-  warning: 'bg-accent',
-  danger: 'bg-danger',
-};
-
-const TONE_TEXT: Readonly<Record<ProgressTone, string>> = {
-  muted: 'text-muted',
-  active: 'text-accent-text',
-  success: 'text-ink',
-  warning: 'text-accent-text',
-  danger: 'text-danger',
-};
-
 const PRIMARY_BUTTON =
   'inline-flex items-center justify-center rounded-control bg-accent px-4 py-2.5 text-sm leading-none font-semibold text-accent-ink transition-colors duration-[140ms] ease-[ease] hover:bg-accent-strong motion-reduce:transition-none disabled:opacity-60';
 const SECONDARY_BUTTON =
   'inline-flex items-center justify-center rounded-control border border-edge bg-surface px-4 py-2.5 text-sm leading-none font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60';
-
-function isTerminal(status: ImportJobStatus): boolean {
-  return status !== 'queued' && status !== 'processing';
-}
 
 interface BatchSnapshot {
   progress: ImportBatchProgress;
@@ -268,7 +239,10 @@ export function ImportProgressView({
         router.replace('/login');
         return;
       }
-      setReconnecting(true);
+      // Polling stops once the batch completes, so nothing would ever clear
+      // the banner after a failed post-resolution refresh: only claim a
+      // reconnect while a poll is still scheduled to run.
+      if (!progress.allCompleted) setReconnecting(true);
     }
   }
 
@@ -346,7 +320,7 @@ export function ImportProgressView({
         </p>
         <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <CountCell label={t('counts.added')} value={counts.added} />
-          <CountCell label={t('counts.needsReview')} value={counts.flagged} />
+          <CountCell label={t('counts.needsReview')} value={counts.toReview} />
           <CountCell label={t('counts.failed')} value={counts.failed} />
           <CountCell
             label={t('counts.pending')}
@@ -355,71 +329,15 @@ export function ImportProgressView({
         </dl>
       </div>
 
-      <ImportAttentionReview
-        photos={photos}
-        platforms={platforms}
-        photoIndex={photoIndex}
-        onChanged={refreshSnapshot}
-      />
-
       {photos.length === 0 ? (
         <p className="text-sm text-muted">{t('waiting')}</p>
       ) : (
-        <div className="space-y-2">
-          <h2 className="text-lg font-medium text-ink">{t('photos')}</h2>
-          <ul className="space-y-2">
-            {photos.map((photo) => {
-              const view = statusView(photo.status, t);
-              const recognition = recognitionLine(photo, t);
-              const tone = photo.needsAttention
-                ? 'border-accent/40 bg-accent-soft'
-                : photo.status === 'failed'
-                  ? 'border-danger/40 bg-danger/10'
-                  : 'border-edge bg-surface-2';
-              return (
-                <li
-                  key={photo.id}
-                  className={`flex items-start gap-3 rounded-control border p-3 ${tone}`}
-                >
-                  <span
-                    aria-hidden
-                    className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${TONE_DOT[view.tone]} ${view.busy ? 'animate-pulse motion-reduce:animate-none' : ''}`}
-                  />
-                  <div className="min-w-0 flex-1 space-y-1">
-                    <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                      <p className="text-sm font-medium text-ink">
-                        {t('photo', { n: photoIndex.get(photo.id) ?? 0 })}
-                      </p>
-                      <p className={`text-xs ${TONE_TEXT[view.tone]}`}>
-                        {view.label}
-                      </p>
-                    </div>
-                    <p className="text-sm text-muted">
-                      {photoCountsLine(photo, t)}
-                    </p>
-                    {isTerminal(photo.status) && (
-                      <p
-                        className={
-                          recognition.mismatch
-                            ? 'text-sm text-danger'
-                            : 'text-sm text-muted'
-                        }
-                      >
-                        {recognition.text}
-                      </p>
-                    )}
-                    {photo.status === 'failed' &&
-                      photo.errorMessage !== null && (
-                        <p className="text-sm text-danger">
-                          {photo.errorMessage}
-                        </p>
-                      )}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+        <ImportPhotoReview
+          photos={photos}
+          platforms={platforms}
+          photoIndex={photoIndex}
+          onChanged={refreshSnapshot}
+        />
       )}
 
       <div className="flex flex-wrap items-center gap-3 border-t border-edge pt-4">

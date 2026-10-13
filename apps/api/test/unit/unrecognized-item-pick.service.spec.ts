@@ -143,7 +143,10 @@ function createService() {
     (callback: (tx: typeof mock) => unknown) => callback(mock),
   );
   const catalogSearch = { search: jest.fn() };
-  const importJobs = { resolvePlatformId: jest.fn() };
+  const importJobs = {
+    resolvePlatformId: jest.fn(),
+    settleReviewedJob: jest.fn(() => Promise.resolve()),
+  };
   const identity = {
     findExisting: jest.fn<Promise<IdentityMatch | null>, [GameIdentity]>(() =>
       Promise.resolve(null),
@@ -216,6 +219,7 @@ describe('UnrecognizedItemPickService (unit)', () => {
       where: { id: testId(5), dismissedAt: null },
       data: { dismissedAt: expect.any(Date) as Date },
     });
+    expect(importJobs.settleReviewedJob).toHaveBeenCalledWith(testId(1));
     expect(result).toEqual(toGameDetail(gameRow(testId(42))));
   });
 
@@ -243,7 +247,31 @@ describe('UnrecognizedItemPickService (unit)', () => {
       where: { id: testId(5), dismissedAt: null },
       data: { dismissedAt: expect.any(Date) as Date },
     });
+    expect(importJobs.settleReviewedJob).toHaveBeenCalledWith(testId(1));
     expect(result).toEqual(toGameDetail(gameRow(testId(7))));
+  });
+
+  it('409s without settling when the existing-game claim fails', async () => {
+    const { service, mock, catalogSearch, importJobs, identity } =
+      createService();
+    mock.unrecognizedItem.findUnique.mockResolvedValue(ITEM);
+    catalogSearch.search.mockResolvedValue({
+      kind: 'matches',
+      candidates: [candidate()],
+    });
+    importJobs.resolvePlatformId.mockResolvedValue({
+      platformId: testId(10),
+      provenance: 'photo',
+    });
+    identity.findExisting.mockResolvedValue({ id: testId(7), copyCount: 1 });
+    mock.game.findUnique.mockResolvedValue(gameRow(testId(7)));
+    mock.unrecognizedItem.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(service.pick(testId(1), testId(5), REF)).rejects.toThrow(
+      new ConflictException('This flagged item was already reviewed'),
+    );
+    // A lost claim leaves the job alone: only a committed claim settles it.
+    expect(importJobs.settleReviewedJob).not.toHaveBeenCalled();
   });
 
   it('400s when the ref is not one of the stored tied candidates', async () => {
@@ -260,7 +288,7 @@ describe('UnrecognizedItemPickService (unit)', () => {
   });
 
   it('409s for an already-reviewed item', async () => {
-    const { service, mock } = createService();
+    const { service, mock, importJobs } = createService();
     mock.unrecognizedItem.findUnique.mockResolvedValue({
       ...ITEM,
       dismissedAt: new Date('2026-01-02T00:00:00.000Z'),
@@ -269,6 +297,7 @@ describe('UnrecognizedItemPickService (unit)', () => {
     await expect(service.pick(testId(1), testId(5), REF)).rejects.toThrow(
       new ConflictException('This flagged item was already reviewed'),
     );
+    expect(importJobs.settleReviewedJob).not.toHaveBeenCalled();
   });
 
   it('404s when the item belongs to another job', async () => {
@@ -373,6 +402,8 @@ describe('UnrecognizedItemPickService (unit)', () => {
     await expect(service.pick(testId(1), testId(5), REF)).rejects.toThrow(
       new ConflictException('This flagged item was already reviewed'),
     );
+    // A rollback leaves the job alone: only a committed claim settles it.
+    expect(importJobs.settleReviewedJob).not.toHaveBeenCalled();
     // The downloaded assets are cleaned up after the rollback.
     expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(
       '/api/covers/cover.jpg',

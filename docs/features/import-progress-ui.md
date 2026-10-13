@@ -1,10 +1,10 @@
 ---
 type: Feature
 title: Import Progress UI
-description: The authenticated /import/progress/[batchId] view — aggregate X-of-Y progress, per-photo status and counts, a needs-attention review section (flagged-item review, inline manual add, retry, dismiss), live polling with a throttled heartbeat while the queue is paused, and a queue-paused banner with resume.
+description: The authenticated /import/progress/[batchId] view — aggregate X-of-Y progress, one Photos list with a per-photo state (chip, summary, why line, actions), inline flagged-title review with a compact add form, live polling with a throttled heartbeat while the queue is paused, and a queue-paused banner with resume.
 tags: [web, import, ui]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T21:54:58Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-13T22:15:26Z }
 ---
 
 # Overview
@@ -18,11 +18,12 @@ because every fact on the page is server-backed.
 The view answers four questions at a glance:
 
 1. **How far along is the batch?** — an X-of-Y progress bar and a counts grid.
-2. **What is each photo doing?** — one row per photo with a status, counts, and a
-   declared-vs-recognized line.
-3. **What needs a decision?** — a **Needs attention** section listing every
-   review-flagged or failed photo, with its flagged items, an inline manual add,
-   and retry/dismiss actions.
+2. **What is each photo doing?** — one **Photos** list with one entry per photo:
+   a state chip, a plain-language summary, and the actions that photo allows.
+3. **What needs a decision?** — the same list marks the photos that need one
+   (failed, unmatched titles, nothing recognized, count mismatch) with an accent
+   or danger bar, a "why" line, and its actions; the section summary counts them
+   and links to each one.
 4. **Why did everything stop?** — a "Queue paused" banner naming the integration
    to fix, with a resume action.
 
@@ -33,13 +34,13 @@ The view answers four questions at a glance:
 | `/import/progress/[batchId]` | `(app)/import/progress/[batchId]/page.tsx` (server, `force-dynamic`, `requireUser`) → `ImportProgressView` (client). Calls `getImportBatch` (404/400 → `notFound()`), `getImportJobsForBatch`, and `getPlatforms` in sequence, then hands the snapshot to the client. |
 | `/import`                    | `PhotoImportForm` persists the last successful `batchId` under `localStorage` key `gameshelf.lastImportBatchId` and shows a **Check your most recent import** link back to the progress view.                                                                         |
 
-The pure view helpers live in `apps/web/src/lib/import/progress.ts` (`statusView`,
-`jobCounts`, `batchCounts`, `sortPhotos`, `plural`, `pauseCopy`,
-`photoCountsLine`, `recognitionLine`, `needsReview`, `matchPlatformId` — no side
-effects, so a future test runner can cover them). The client components are
+The pure view helpers live in `apps/web/src/lib/import/progress.ts`
+(`photoState`, `needsDecision`, `canDismissPhoto`, `photoReviewCounts`,
+`batchCounts`, `mismatchDirection`, `flaggedItemReason`, `isTerminalStatus`,
+`sortPhotos`, `pauseCopy`, `matchPlatformId` — no side effects, covered by
+`apps/web/test/import-progress.test.mjs`). The client components are
 `apps/web/src/components/import-progress-view.tsx` (page shell and polling) and
-`apps/web/src/components/import-attention-review.tsx` (the needs-attention
-section).
+`apps/web/src/components/import-photo-review.tsx` (the Photos list).
 
 # Polling
 
@@ -68,31 +69,56 @@ section).
   and `document` `visibilitychange` listener refetches once, so a user who fixes
   the configuration in another tab sees it without waiting for the heartbeat.
 
-# Per-photo status and counts
+# Photo states
 
-`statusView(status)` maps every `ImportJobStatus` to a label, a tone token and a
-`busy` flag (the row dot pulses while `busy`):
+Every photo appears exactly once, in one **Photos** list. Rows are ordered by
+ascending job `id` (a UUIDv7, so ascending id is upload order — ADR-006) and
+labelled **Photo 1, Photo 2 …**. The API stores no original filename and
+`photoRef` is opaque internal data, so the stable id order is the only identity
+shown — the browsed filename is deliberately never surfaced.
 
-| Status            | Label                    | Tone    | Busy |
-| ----------------- | ------------------------ | ------- | ---- |
-| `queued`          | Queued                   | muted   | no   |
-| `processing`      | Reading                  | active  | yes  |
-| `done`            | Completed                | success | no   |
-| `needs_attention` | Completed · needs review | warning | no   |
-| `failed`          | Failed                   | danger  | no   |
-| `dismissed`       | Dismissed                | muted   | no   |
+`photoState(photo)` derives exactly one state per photo (first match wins), and
+each state maps to one chip, one summary sentence, an optional "why" line, and
+the photo-level actions:
 
-Rows are ordered by ascending job `id` (a UUIDv7, so ascending id is upload
-order — ADR-006) and labelled **Photo 1, Photo 2 …**. The API stores no original
-filename and `photoRef` is opaque internal data, so the stable id order is the
-only identity shown — the browsed filename is deliberately never surfaced.
+| State           | Condition                                                                        | Chip                         | Summary                                                    | Why line                           | Actions                           |
+| --------------- | -------------------------------------------------------------------------------- | ---------------------------- | ---------------------------------------------------------- | ---------------------------------- | --------------------------------- |
+| `queued`        | `status === 'queued'`                                                            | Waiting                      | Waiting to be read.                                        | —                                  | —                                 |
+| `processing`    | `status === 'processing'`                                                        | Reading (pulsing dot)        | Reading the photo…                                         | —                                  | —                                 |
+| `failed`        | `status === 'failed'`                                                            | Failed (danger bar)          | Added N games.                                             | `why.failed`                       | Retry photo, Dismiss photo        |
+| `unmatched`     | `needs_attention` and `openFlaggedCount > 0`                                     | Needs your decision (accent) | Added N games. K titles need your decision. [+ reviewed M] | `why.unmatched`                    | Dismiss photo                     |
+| `nothingFound`  | `needs_attention`, nothing open, `recognizedCount === 0`                         | Needs your decision (accent) | No games recognized.                                       | `why.nothingFound`                 | Dismiss photo                     |
+| `countMismatch` | `needs_attention`, nothing open, `declaredCountMismatch`                         | Needs your decision (accent) | Added N games. [+ reviewed M]                              | `why.countFewer` / `why.countMore` | Add a game by hand, Dismiss photo |
+| `ready`         | `status === 'done'`, or `needs_attention` with nothing open and no other trigger | Done                         | Added N games. [You reviewed M flagged titles.]            | —                                  | —                                 |
+| `dismissed`     | `status === 'dismissed'`                                                         | Dismissed                    | Added N games. You dismissed this photo.                   | —                                  | —                                 |
 
-Counts come from `jobCounts(job)` / `batchCounts(items, progress)`:
+- The bracketed summary parts appear only when their count is above zero:
+  `photoSummary.added` (with `=0 {No games added.}`), `photoSummary.open`,
+  `photoSummary.reviewed`, `photoSummary.dismissed`.
+- The `ready` row covers a pre-fix `needs_attention` row whose items were all
+  reviewed before the settle step existed: nothing is open and no other trigger
+  holds, so it reads as done.
+- Photos that need a decision carry a left accent bar (`unmatched`,
+  `nothingFound`, `countMismatch`) or a danger bar (`failed`); their titles are
+  jump targets, and the section summary links to each one.
+- A `failed` photo's raw `errorMessage` is tucked into a **Technical details**
+  `<details>` disclosure — never the headline.
+- `canDismissPhoto(photo)` mirrors the API's `dismissJob` guard
+  (`needs_attention` or `failed`), so **Dismiss photo** appears only where the
+  API accepts it. A stale button that loses a race gets the API's `409` message
+  in the card's error line, and the next refresh hides the control.
 
-- **Added** = `importedCount` — games committed to the catalog.
-- **Needs review** = `unrecognizedCount` — recognized but unresolved titles.
-- **Failed** = the count of photos whose `status === 'failed'`; failure is a
-  photo-level outcome, not a per-title counter.
+# Counts
+
+The counts grid comes from `batchCounts(items, progress)`:
+
+- **Added automatically** = Σ `importedCount` over the batch's photos.
+- **Titles to review** = Σ `openFlaggedCount` over the non-dismissed photos
+  (`photoReviewCounts(photo).open`) — flagged items with `dismissed_at IS NULL`.
+  A reviewed title is never counted, so the cell can reach 0 while
+  `unrecognizedCount` stays at its historical value.
+- **Failed photos** = the aggregate `failed` count; failure is a photo-level
+  outcome, not a per-title counter.
 - **Still to process** = the aggregate `pendingCount` (photos, not the summed
   per-job `pendingCount`).
 
@@ -100,89 +126,68 @@ Counts come from `jobCounts(job)` / `batchCounts(items, progress)`:
 > titles for review, or fails whole. Anything that looks like "skipped" is one
 > of those three; do not invent a fourth bucket.
 
-Each terminal row also shows a **recognized** line: with no declared count it
-reads "Recognized N games."; with a declared count it reads "You declared D;
-recognized N." and turns danger-coloured when `declaredCountMismatch` is set.
+# Flagged titles
 
-Rows carry a tone so a flagged photo is visually distinct in the timeline as
-well as in the review section: a `needsAttention` row uses the warning tone
-(`border-accent/40 bg-accent-soft`), a `failed` row the danger tone
-(`border-danger/40 bg-danger/10`), and every other row the neutral surface tone
-(`border-edge bg-surface-2`).
+A card loads its open flagged titles (`GET /import-jobs/:id/unrecognized`) only
+while it needs them: the photo is terminal, not dismissed, and has
+`openFlaggedCount > 0`. Each item row shows:
 
-# Needs attention review
+- the raw title and a plain-language reason from `flaggedItemReason(item)`:
+  - `ambiguous` — several games match this title (the item has tied
+    candidates);
+  - `noPlatform` — the game was found but the platform was not
+    (`platform_not_in_catalog`);
+  - `notFound` — not found in the game database.
 
-After the counts grid and before the `Photos` timeline, `ImportAttentionReview`
-renders a **Needs attention** section. A photo is in the section when
-`needsReview(photo)` is true — that is, the backend `needsAttention` boolean is
-`true` **or** `status === 'failed'` (a failure is action-required even though the
-API does not set `needsAttention` for it). When no photo qualifies the section
-is not rendered at all.
+  The raw `reason` (provider text such as `IGDB: …`) is **never** rendered; the
+  item's `rawPlatform`, when present, is shown as `Platform: …`.
 
-**`needsAttention` is the single source of truth.** It is the backend computed
-field (`status === 'needs_attention'`), derived from the flag rule
-`recognizedCount === 0 || (declaredCount !== null && recognizedCount !==
-declaredCount) || unrecognizedCount > 0`. The client adds **no** rule keyed on
-`declaredCount`; `declaredCountMismatch` is `false` whenever `declaredCount` is
-`null`, so a photo with no declared count and some recognized games is
-`done`/`needsAttention: false` and never appears here. A no-declared photo that
-recognizes **nothing** is flagged by the backend (anti-silent-failure) and is
-shown as-is — that is a backend contract, not a client rule. The
-declared-vs-recognized line with a **Count mismatch** chip is shown for
-non-failed cards.
+- **Pick** buttons for tied candidates, listed inline (cover, title, `Pick`);
+  picking calls `POST /import-jobs/:id/unrecognized/:itemId/pick` and removes
+  the item with an "Added …" status.
+- **Add manually** — a disclosure that mounts the shared `ManualAddForm` in its
+  `variant="compact"` mode: Title and Platform (+ **New platform**) and the
+  catalog lookup (search with **Search the game database**, platform-first
+  matches, **Pick**). The full form's Edition/year/players/publisher/genre
+  fields and its card chrome are not rendered here; the compact hint says the
+  rest can be filled in later. Prefill comes from the item's `rawTitle` and
+  `matchPlatformId(platforms, rawPlatform)` (unknown → empty, the user picks).
+  - **Add to catalog** saves the game and then dismisses the item (the manual
+    add is the review decision), reporting `Added “…” to your catalog.`
+  - **Save and add another** saves the game and keeps the item open for the
+    next one; the form shows its own "Added …" status. The last game is saved
+    with **Add to catalog**.
+- **Dismiss** — `PATCH /import-jobs/:id/unrecognized/:itemId { dismissed: true }`,
+  removing the row and reporting `Dismissed “…”`.
+- A per-card error line (`role="alert"`) and status line (`role="status"`) stay
+  mounted (visually hidden when empty), so assistive tech announces the outcome.
+  Every resolution calls `onChanged()` (a snapshot refetch); when the last open
+  item is reviewed, the API settles the job `needs_attention → done` and the
+  card's chip becomes **Done** without a reload.
 
-Each card shows:
+# State through polling
 
-- the photo number and its `statusView` label/tone;
-- the counts line (`photoCountsLine`) and, for non-failed cards, the
-  declared-vs-recognized line (`recognitionLine`) — danger-coloured with a
-  **Count mismatch** chip on `declaredCountMismatch`; for failed cards the
-  `errorMessage`;
-- **Flagged items** (only when `unrecognizedCount > 0`): the card fetches
-  `GET /import-jobs/:id/unrecognized` on mount (aborting on unmount/change; a
-  `401` redirects to `/login`). Each item shows its raw title plus
-  `rawPlatform`/`reason` when present. An item can be **Dismissed**
-  (`PATCH /import-jobs/:id/unrecognized/:itemId { dismissed: true }`, removed
-  from the list locally) or opened for **Add manually**;
-- **Choose a match** (only when `item.candidates.length > 0`): a disclosure
-  that lists the tied candidates with their cover, title, and source. Each
-  candidate has a **Pick** button that calls
-  `POST /import-jobs/:id/unrecognized/:itemId/pick` with the candidate's
-  `{ source, externalId }`. On success the item is removed from the list and
-  the created game is reported (same "Added …" status as manual add);
-- **Search again** (inside the **Add manually** form): a `type="button"`
-  **Search again** button searches with the form's current title via
-  `GET /import-jobs/:id/unrecognized/:itemId/search?q=&platformId=` (the
-  form's selected platform is sent; matches on it are listed first). Results
-  are a candidate list (cover, title, year, platforms, **Pick**); **Pick**
-  calls `POST …/pick` with `{ source, externalId, query, platformId }` — the
-  query and platform the list was searched with, not the live form values, so
-  editing the form after a search cannot pick against a ranking the user never
-  saw. A sent `platformId` becomes the game's platform (`platformUnverified`
-  false); without one the photo/catalog resolution applies. With no match, the
-  inline status reads "Nothing found for …" and the manual fields plus **Add
-  to catalog** keep working (the manual path remains the fallback). A query
-  below 2 characters disables the button and shows the minimum-length hint;
-- **Add manually**: a disclosure that mounts the shared `ManualAddForm` inline,
-  prefilled with the item's `rawTitle` and the platform resolved by
-  `matchPlatformId` (case-insensitive match on platform name or slug; unknown →
-  empty, the user picks). On success the created game is reported and the
-  item is auto-dismissed (the manual add is treated as the review decision);
-- **Retry photo** (failed cards only): `POST /import-jobs/:id/retry` (the API
-  returns `409` for any non-`failed` status, so the control is not shown
-  elsewhere), followed by a snapshot refetch. A note states that retry re-runs
-  only the games not yet saved and never duplicates games already in the
-  catalog (backend guarantee: pending-only re-run + vision marker + guarded
-  `updateMany`);
-- **Dismiss photo** (`needs_attention`/`failed` cards): a two-step inline
-  `role="alertdialog"` confirm (Cancel focused on open, Escape cancels) calling
-  `PATCH /import-jobs/:id { status: 'dismissed' }`, then a snapshot refetch.
-  Dismissal is sticky — the backend refuses to move a terminal row and
-  `needsAttention` becomes `false`, so the card leaves the section and stays
-  out after a reload.
+Polling replaces the whole snapshot, so the list is built to keep user state:
 
-The old standalone "Photos that failed" list has been absorbed: failed photos
-now appear only in the timeline and in this section.
+- **Stable identity:** every photo is always rendered by the same card in one
+  list, keyed by `photo.id`. A state change never moves a photo between
+  sections, so nothing remounts.
+- **Item rows** are keyed by `item.id`; the open panel is card state
+  (`addItemId`). The form draft, the new-platform input and the lookup results
+  live inside `ManualAddForm`/`FlaggedItemLookup`, which stay mounted while the
+  row and panel exist; `ManualAddForm` reads `initialTitle`/`initialPlatformId`
+  only in its `useState` initializer, so new props after a poll never reset the
+  input.
+- **No item refetch on poll:** the item-list effect depends on a boolean
+  (`loadItems`) rather than `photo.status`/`unrecognizedCount`, so it only
+  refetches when that boolean goes false → true (a photo finishes, or a retried
+  photo finishes again).
+- **Confirm dialog:** `confirmingDismiss` is card state and the dialog renders
+  only while `canDismissPhoto(photo)` still holds, so a confirmation for a
+  photo that is no longer dismissable disappears.
+- **Freshness after an action:** every resolution calls `onChanged()`
+  (`refreshSnapshot`); the view's snapshot sequence guard keeps an older poll
+  from overwriting it.
 
 # Queue-paused banner
 
@@ -206,17 +211,29 @@ stays false and the page keeps polling at the throttled heartbeat.
   `aria-valuenow/min/max` and an accessible label naming X and Y.
 - The aggregate "X of Y photos processed" line is the **only** polled
   `aria-live` region (`role="status"`, `aria-live="polite"`); the footer
-  "Reconnecting…" line and per-photo rows are not live, so a noisy list never
-  announces on every poll. The needs-attention section adds its own action
-  feedback: `role="alert"` for load/action errors and `role="status"
-aria-live="polite"` for the post-save and loading messages.
+  "Reconnecting…" line and the photo rows are not live, so a noisy list never
+  announces on every poll. Each photo card instead keeps **persistent** live
+  regions, filled in place: `role="alert"` for load/action errors and
+  `role="status" aria-live="polite"` for the post-action and loading messages
+  (`sr-only` while empty, so a region that mounts together with its text is
+  still announced).
 - The paused banner is `role="alert"`; the resume error is `role="alert"`.
 - The dismiss-photo confirmation is a `role="alertdialog"` with labelled and
   described ids, focuses its Cancel button (least-destructive) on open, and
-  closes on Escape; the flagged-item **Add manually** disclosure is a real
-  button with `aria-expanded`.
+  closes on Escape; the flagged-title **Add manually** disclosure is a real
+  button with `aria-expanded`/`aria-controls`.
+- The section summary's jump links (`Photos that need your decision`) anchor to
+  each decision photo's heading; item action buttons carry
+  `aria-describedby` pointing at the item's title/reason line, so "Dismiss"
+  names what it dismisses; tied-candidate Pick buttons describe their
+  candidate.
+- When a resolved item row (or its panel) unmounts, focus would fall to
+  `<body>`; the card moves it to the photo heading instead (`tabIndex={-1}`).
 - Status is conveyed by text as well as the colour dot; the dot is
-  `aria-hidden`. The busy dot uses `animate-pulse motion-reduce:animate-none`.
+  `aria-hidden`. The busy dot uses `animate-pulse motion-reduce:animate-none`,
+  and the decision bars are decorative (`before:` pseudo-elements).
+- A failed photo's raw `errorMessage` is only inside a native **Technical
+  details** `<details>` disclosure, not exposed as a live region.
 - All controls are real links/buttons with focus-visible rings; the counts grid
   is a `<dl>`.
 
@@ -224,22 +241,28 @@ aria-live="polite"` for the post-save and loading messages.
 
 - Batch progress and the job list: [Import Jobs API](/import-jobs-api.md)
   (`GET /import-jobs/batches/:batchId`, `GET /import-jobs?batchId=…`).
-- Needs-attention review reuses existing endpoints: `GET
-/import-jobs/:id/unrecognized`, `PATCH /import-jobs/:id` (`{ status:
-'dismissed' }`), `PATCH /import-jobs/:id/unrecognized/:itemId` (`{ dismissed:
-true }`), and `POST /import-jobs/:id/retry` — see [Import Jobs
+- The per-photo state needs `openFlaggedCount` on every job payload (flagged
+  items with `dismissed_at IS NULL`, counted live for every status) alongside
+  the historical `unrecognizedCount` — see [Import Jobs
   API](/import-jobs-api.md).
+- Review reuses existing endpoints: `GET /import-jobs/:id/unrecognized`,
+  `PATCH /import-jobs/:id` (`{ status: 'dismissed' }`),
+  `PATCH /import-jobs/:id/unrecognized/:itemId` (`{ dismissed: true }`), and
+  `POST /import-jobs/:id/retry` — see [Import Jobs API](/import-jobs-api.md).
 - Flagged-item re-search and pick are the two newer endpoints:
   `GET /import-jobs/:id/unrecognized/:itemId/search?q=&platformId=` returns the
   ranked candidates (platform first), and
   `POST /import-jobs/:id/unrecognized/:itemId/pick` accepts the optional
   re-search `query` and user-confirmed `platformId` — see
   [Import Jobs API](/import-jobs-api.md).
+- **Settling:** dismissing an item, picking a candidate and adding a game by
+  hand each make the API re-check the job after the write commits; when the
+  last open flagged item is reviewed and no other trigger holds
+  (`recognizedCount === 0` or a declared-count mismatch), the job moves
+  `needs_attention → done` (`settleReviewedJob`). This is why the page's
+  "Titles to review" cell and the chip can reach **Done** without a reload.
 - `paused` / `pauseReason` / `pauseSource` and `POST /import-jobs/resume`:
   [Queue Pause on Configuration Error](/queue-pause-on-config-error.md).
-
-No API or contract change was required for the progress view itself; the
-flagged-item re-search endpoints above are a later addition.
 
 # Manual acceptance script
 
@@ -259,12 +282,12 @@ npm run dev               # API :3001, web :3000
    counts grid, and one row per photo **before** hydration.
 3. **Live counts.** Watch the bar and the "X of Y photos processed" line advance
    without a manual reload; rows move Queued → Reading → Completed.
-4. **Per-photo detail.** A completed row shows "Added N games." and the
-   recognized/declared line. Now do the same upload with an over-declared count
-   and confirm the mismatch line turns red.
-5. **Failure.** Upload a corrupt/unreadable photo. Expect a `Failed` row with its
-   reason, and the same photo in the **Needs attention** section (the old
-   standalone "Photos that failed" list is gone).
+4. **Per-photo detail.** A completed row shows the **Done** chip and "Added N
+   games." Now do the same upload with an over-declared count and confirm the
+   row's why line explains the mismatch.
+5. **Failure.** Upload a corrupt/unreadable photo. Expect a `Failed` row with a
+   danger bar, a plain-language why line, the raw reason inside **Technical
+   details**, and **Retry photo** / **Dismiss photo** actions.
 6. **Reload safety.** Reload the page mid-import; expect the same state, and a
    second tab opened on the URL to converge.
 7. **Leave and return.** Navigate to `/`, wait, then use **Check your most recent
@@ -281,10 +304,10 @@ npm run dev               # API :3001, web :3000
 12. **Re-search and pick.** With real IGDB credentials, trigger a no-match
     flagged item (or seed `raw_title='Filary Ziemi'`, `raw_platform='PC'` as
     below). Open **Add manually**, change the title to "The Pillars of the
-    Earth", press **Search again**, then **Pick** on a result. Expect the item
-    to disappear, the status `Added “…”`, and the created game (`/games/<id>`)
-    to have a cover and IGDB metadata. Matches on the selected platform are
-    listed first.
+    Earth", press **Search the game database**, then **Pick** on a result.
+    Expect the item to disappear, the status `Added “…”`, and the created game
+    (`/games/<id>`) to have a cover and IGDB metadata. Matches on the selected
+    platform are listed first.
 13. **Nothing found.** Search `zzzz qqqq`: the inline text reads "Nothing found
     for …" and **Add to catalog** still saves a MANUAL game with the form's
     fields.
@@ -293,58 +316,97 @@ npm run dev               # API :3001, web :3000
 
 ## Deterministic seed (no LLM/IGDB needed)
 
-A seeded batch exercises the review section without a provider. After `npm run
-dev` and `npm run user:create`:
+A seeded batch exercises the Photos list without a provider. Start everything
+with:
 
 ```bash
-docker compose exec -T mysql mysql -ugameshelf -pgameshelf gameshelf <<'SQL'
-INSERT INTO platforms (name, slug) VALUES ('Nintendo Switch', 'nintendo-switch')
-  ON DUPLICATE KEY UPDATE name = name;
+docker compose up -d mysql && npm run db:deploy && npm run db:seed && npm run dev
+```
 
-INSERT INTO import_jobs (status, declared_count, recognized_count, imported_count, unrecognized_count, batch_id, created_at, completed_at)
-VALUES ('needs_attention', 5, 3, 2, 2, 'qa-attention', NOW(), NOW());
-SET @job = LAST_INSERT_ID();
-INSERT INTO unrecognized_items (import_job_id, raw_title, raw_platform, reason) VALUES
-  (@job, 'PlayStaton 5', 'PS4', 'No game matched the title in any source — IGDB: no match'),
-  (@job, 'Zorblax Chronicles 9000', NULL, 'No game matched the title in any source');
+The seed creates the QA account and the PC / PlayStation 5 / Nintendo Switch
+platforms. Then load the fixture (re-runnable; the UUIDv7 ids are valid for
+`@IsUUID('7')`):
 
-INSERT INTO import_jobs (status, declared_count, recognized_count, imported_count, unrecognized_count, batch_id, created_at, completed_at)
-VALUES ('done', NULL, 2, 2, 0, 'qa-attention', NOW(), NOW());
-
-INSERT INTO import_jobs (status, error_message, declared_count, recognized_count, imported_count, unrecognized_count, photo_ref, batch_id, created_at, completed_at)
-VALUES ('failed', 'LLM request timed out', 4, 2, 2, 0, 'qa-missing.png', 'qa-attention', NOW(), NOW());
+```bash
+docker compose exec -T mysql mysql --default-character-set=utf8mb4 -ugameshelf -pgameshelf gameshelf <<'SQL'
+DELETE FROM import_jobs WHERE batch_id = 'qa-review';
+INSERT INTO import_jobs (id,status,declared_count,photo_ref,recognized_count,imported_count,unrecognized_count,error_message,batch_id,created_at,completed_at,next_run_at) VALUES
+('01990000-0000-7000-8000-000000000001','done',NULL,NULL,3,3,0,NULL,'qa-review',NOW(3),NOW(3),NULL),
+('01990000-0000-7000-8000-000000000002','needs_attention',NULL,NULL,5,2,3,NULL,'qa-review',NOW(3),NOW(3),NULL),
+('01990000-0000-7000-8000-000000000003','needs_attention',6,NULL,4,3,1,NULL,'qa-review',NOW(3),NOW(3),NULL),
+('01990000-0000-7000-8000-000000000004','needs_attention',NULL,NULL,0,0,0,NULL,'qa-review',NOW(3),NOW(3),NULL),
+('01990000-0000-7000-8000-000000000005','failed',4,'qa-missing.png',2,2,0,'LLM request timed out','qa-review',NOW(3),NOW(3),NULL),
+('01990000-0000-7000-8000-000000000006','dismissed',NULL,NULL,1,1,0,NULL,'qa-review',NOW(3),NOW(3),NULL),
+('01990000-0000-7000-8000-000000000007','queued',NULL,NULL,0,0,0,NULL,'qa-review',NOW(3),NULL,NULL);
+INSERT INTO unrecognized_items (id,import_job_id,raw_title,raw_platform,candidates,reason,created_at) VALUES
+('01990000-0000-7000-8000-000000000101','01990000-0000-7000-8000-000000000002','PlayStaton 5','PS4',NULL,'No game matched the title in any source — IGDB: No IGDB game matched the title',NOW(3)),
+('01990000-0000-7000-8000-000000000102','01990000-0000-7000-8000-000000000002','Zorblax Chronicles 9000','PlayStation 5',NULL,'No game matched the title in any source — IGDB: No IGDB game matched the title',NOW(3)),
+('01990000-0000-7000-8000-000000000103','01990000-0000-7000-8000-000000000002','Rise of Legends','PC','[{"source":"IGDB","externalId":18797,"title":"Rise of Nations: Rise of Legends","slug":"rise-of-nations-rise-of-legends","coverUrl":null,"score":0.95}]','Multiple IGDB candidates matched equally well — choose one',NOW(3)),
+('01990000-0000-7000-8000-000000000104','01990000-0000-7000-8000-000000000003','Filary Ziemi',NULL,NULL,'platform_not_in_catalog',NOW(3));
 SQL
 ```
 
-Open `http://localhost:3000/import/progress/qa-attention` and verify:
+If `.env` uses different MySQL credentials, change `-u`/`-p`.
 
-1. **Distinct + comparison.** The mismatch photo is a warning-bordered **Needs
-   attention** card; its line reads `You declared 5; recognized 3.` in red with
-   a **Count mismatch** chip; it also has a warning-toned row in the `Photos`
-   timeline.
-2. **Unrecognized list.** The card lists `PlayStaton 5` (with `PS4` and the
-   reason) and `Zorblax Chronicles 9000` — raw titles, not imported.
-3. **Manual add.** Click **Add manually** on `PlayStaton 5`; the title is
-   prefilled, the platform is empty (PS4 not in the seeded list). Pick
-   `Nintendo Switch`, **Add to catalog**. Expect a status
-   `Added “…”. This flagged item is now marked as reviewed.` and the item
-   disappears. `GET /games` shows one new manual game.
-4. **Retry.** The failed card shows **Retry photo** plus the no-duplicate note.
-   Click it; Network shows `POST /api/import-jobs/<id>/retry` → **202**; the
-   card/row leaves the attention list into the queue (it fails again shortly —
-   expected with no provider/real photo).
-5. **Dismiss photo.** On the mismatch card click **Dismiss photo** → confirm.
-   Network `PATCH /api/import-jobs/<id>` → 200; the card leaves the section and
-   the timeline row shows `Dismissed`. Reload: still `Dismissed` (sticky).
-6. **No declared count.** The `done` photo appears only as `Completed` in the
-   timeline, never in **Needs attention**.
-7. **No console/CSP errors.**
+Log in at `http://localhost:3000/login` as `qa@gameshelf.local` /
+`gameshelf-qa-password`, then open
+`http://localhost:3000/import/progress/qa-review`. Photo 7 is queued with
+`next_run_at NULL`, so it is never claimed and the page keeps polling every 2 s
+— which is what makes the state-survival check possible.
+
+Verify:
+
+1. **Overview.** Seven rows, each photo once. Summary: "4 photos need your
+   decision.", with links to Photos 2, 3, 4 and 5. Grid: Titles to review = 4.
+2. **Photo 2 (unmatched titles).** Reasons show no "IGDB:" text. Dismiss
+   `PlayStaton 5` → "Dismissed “PlayStaton 5”." On `Zorblax Chronicles 9000`
+   open **Add manually**: only Title and Platform, with PlayStation 5
+   prefilled. **Add to catalog** → "Added … to your catalog." `Rise of Legends`
+   shows its tied candidate inline; picking needs IGDB credentials (otherwise
+   expect an error message), so dismiss it instead. After the last item the chip
+   reads **Done** and the summary "Added 2 games. You reviewed 3 flagged
+   titles."; Photo 2 leaves the jump links. Network tab: `GET
+/api/import-jobs?batchId=qa-review…` shows Photo 2 with
+   `"status":"done","openFlaggedCount":0`; `GET
+/api/import-jobs/batches/qa-review` shows `needsAttention` lower by 1.
+3. **Photo 3 (count mismatch).** Resolve `Filary Ziemi` (the `noPlatform`
+   reason). The photo stays **Needs your decision** with the "fewer" why line
+   and the **Add a game by hand** link. Dismiss photo → confirm "Dismiss Photo
+   3?" → the row reads "Dismissed".
+4. **Photo 4.** Nothing-recognized copy, then Dismiss photo.
+5. **Photo 5.** Retry → Waiting/Reading, then failed again within about 20 s
+   (the photo file does not exist). **Technical details** shows "LLM request
+   timed out" or the new reason.
+6. **State survives polling.** Open a panel, type in the title, open New
+   platform, run a search, and open a dismiss confirmation on another photo.
+   Wait at least 6 s (at least 3 polls in the Network tab). Nothing collapses
+   and all input is kept.
+7. **Other.** Reload: same state. `/games/new`: still shows Edition, Release
+   year, Players, Publisher, Genre and the card styling. Switch language
+   (Settings → Preferences): Polish copy, no missing keys. Dark theme readable.
+   To see "Import finished":
+   `DELETE FROM import_jobs WHERE id='01990000-0000-7000-8000-000000000007';`,
+   then reload.
+8. **No console/CSP errors.**
+
+Cleanup: `DELETE FROM import_jobs WHERE batch_id='qa-review';` (items cascade).
+For a clean catalog: `npm run db:clear-dev -- --force && npm run db:seed`.
+
+Optional, dev database only: fix old jobs that were resolved before the settle
+step.
+
+```sql
+UPDATE import_jobs j SET j.status='done' WHERE j.status='needs_attention' AND j.recognized_count > 0
+  AND (j.declared_count IS NULL OR j.declared_count = j.recognized_count)
+  AND NOT EXISTS (SELECT 1 FROM unrecognized_items u WHERE u.import_job_id = j.id AND u.dismissed_at IS NULL);
+```
 
 # Out of scope
 
 - Blocking uploads while the queue is paused.
-- A frontend unit/integration test runner (the pure helpers are ready for one).
 - Un-dismissing a photo or item — dismissal is one-way in the backend.
-- A compact variant of the inline manual-add widget (the full form is mounted
-  inline, one item at a time).
-- Internationalization.
+- Resolving a declared-count mismatch inside the import: the count-mismatch row
+  links to `/games/new` and offers **Dismiss photo**; there is no in-app
+  reconciliation flow.
+- Recording _how_ a flagged title was resolved (picked, added by hand, or
+  dismissed) — there is no column for it, so the copy says "reviewed".
