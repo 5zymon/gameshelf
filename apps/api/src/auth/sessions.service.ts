@@ -10,7 +10,7 @@ export interface CreateSessionResult {
 }
 
 export interface ValidatedSession {
-  userId: number;
+  userId: string;
   expiresAt: Date;
 }
 
@@ -22,7 +22,7 @@ export class SessionsService {
   ) {}
 
   async create(
-    userId: number,
+    userId: string,
     options: { userAgent?: string | null; now?: Date } = {},
   ): Promise<CreateSessionResult> {
     const now = options.now ?? new Date();

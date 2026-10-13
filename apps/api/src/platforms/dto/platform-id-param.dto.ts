@@ -1,11 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsInt, Min } from 'class-validator';
+import { IsUUID } from 'class-validator';
+
+import { UUID_V7_EXAMPLE } from '../../common/uuid-v7';
 
 export class PlatformIdParamDto {
-  @ApiProperty({ example: 1 })
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  id!: number;
+  @ApiProperty({ format: 'uuid', example: UUID_V7_EXAMPLE })
+  @IsUUID('7')
+  id!: string;
 }

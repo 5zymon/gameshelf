@@ -205,7 +205,7 @@ export class PhotoImportWorker
       await this.queue.release(claimed.id);
     } catch (error) {
       this.logger.warn(
-        `Could not release photo-import job ${String(claimed.id)}: ${describe(error)}`,
+        `Could not release photo-import job ${claimed.id}: ${describe(error)}`,
       );
       return 'idle';
     }
@@ -229,7 +229,7 @@ export class PhotoImportWorker
         if (await this.failSafely(job.id, reason)) {
           await this.queue.release(job.id);
           this.logger.warn(
-            `Photo import job ${String(job.id)} failed ${
+            `Photo import job ${job.id} failed ${
               permanent
                 ? 'permanently'
                 : `after ${String(job.attempts)} attempts`
@@ -241,13 +241,13 @@ export class PhotoImportWorker
       const delay = retryDelayMs(job.attempts, this.options.retryBackoffMs);
       await this.queue.scheduleRetry(job.id, delay);
       this.logger.warn(
-        `Photo import job ${String(job.id)} attempt ${String(job.attempts)}/${String(
+        `Photo import job ${job.id} attempt ${String(job.attempts)}/${String(
           this.options.maxAttempts,
         )} failed; retry in ${String(delay)} ms: ${describe(error)}`,
       );
     } catch (settleError) {
       this.logger.error(
-        `Failed to settle photo-import job ${String(job.id)}: ${describe(settleError)}`,
+        `Failed to settle photo-import job ${job.id}: ${describe(settleError)}`,
       );
     }
   }
@@ -259,7 +259,7 @@ export class PhotoImportWorker
    * it untouched. A `false` result tells the caller to keep the lease so the
    * stall-recovery path can reclaim the row later.
    */
-  private async failSafely(id: number, reason: string): Promise<boolean> {
+  private async failSafely(id: string, reason: string): Promise<boolean> {
     try {
       const state = await this.jobs.getPipelineJob(id);
       if (state === null || isTerminalImportJobStatus(state.status)) {
@@ -276,7 +276,7 @@ export class PhotoImportWorker
         return true;
       }
       this.logger.warn(
-        `Failed to mark photo-import job ${String(id)} failed: ${describe(error)}`,
+        `Failed to mark photo-import job ${id} failed: ${describe(error)}`,
       );
       return false;
     }
@@ -299,7 +299,7 @@ export class PhotoImportWorker
           await this.queue.release(row.id);
           failed += 1;
           this.logger.warn(
-            `Photo import job ${String(row.id)} was interrupted and ran out of attempts`,
+            `Photo import job ${row.id} was interrupted and ran out of attempts`,
           );
         }
         continue;
@@ -311,7 +311,7 @@ export class PhotoImportWorker
       if (requeuedRow) {
         requeued += 1;
         this.logger.warn(
-          `Photo import job ${String(row.id)} was interrupted; re-queued (attempt ${String(
+          `Photo import job ${row.id} was interrupted; re-queued (attempt ${String(
             row.attempts,
           )}/${String(this.options.maxAttempts)})`,
         );

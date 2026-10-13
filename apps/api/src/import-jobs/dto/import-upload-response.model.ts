@@ -1,16 +1,20 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+import { UUID_V7_EXAMPLE } from '../../common/uuid-v7';
+
 export class ImportUploadJobModel {
   @ApiProperty({
-    example: 42,
+    format: 'uuid',
+    example: UUID_V7_EXAMPLE,
     description: 'ImportJob row id (poll GET /import-jobs/:id)',
   })
-  id!: number;
+  id!: string;
 
   @ApiProperty({
-    example: '42',
+    format: 'uuid',
+    example: UUID_V7_EXAMPLE,
     description:
-      'Queue job id; equals String(id), since the import_jobs row is the queue entry (ADR-005)',
+      'Queue job id; equals `id`, since the import_jobs row is the queue entry (ADR-005)',
   })
   jobId!: string;
 

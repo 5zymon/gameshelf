@@ -1,7 +1,7 @@
 import type { Request } from 'express';
 
 export interface SessionUser {
-  id: number;
+  id: string;
 }
 
 export interface SessionContext {

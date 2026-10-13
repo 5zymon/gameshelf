@@ -40,7 +40,7 @@ export class PlatformsService {
       }),
       this.prisma.game.groupBy({ by: ['platformId'], _count: { _all: true } }),
     ]);
-    const countByPlatformId = new Map<number, number>(
+    const countByPlatformId = new Map<string, number>(
       groups.map((g) => [g.platformId, g._count._all]),
     );
     return platforms.map((p) => ({
@@ -49,13 +49,13 @@ export class PlatformsService {
     }));
   }
 
-  async findOne(id: number): Promise<PlatformModel> {
+  async findOne(id: string): Promise<PlatformModel> {
     const [platform, gameCount] = await Promise.all([
       this.prisma.platform.findUnique({ where: { id } }),
       this.prisma.game.count({ where: { platformId: id } }),
     ]);
     if (!platform) {
-      throw new NotFoundException(`Platform with id ${String(id)} not found`);
+      throw new NotFoundException(`Platform with id ${id} not found`);
     }
     return { ...platform, gameCount };
   }
@@ -120,7 +120,7 @@ export class PlatformsService {
    * visible. Never touches `name` or `slug`.
    */
   async updateCanonical(
-    id: number,
+    id: string,
     input: CanonicalPlatformInput,
   ): Promise<boolean> {
     const existing = await this.prisma.platform.findUnique({
@@ -200,7 +200,7 @@ export class PlatformsService {
    * if a concurrent insert took the name, the existing row's id is returned.
    * Returns the platform id.
    */
-  async createFromImport(rawName: string): Promise<number> {
+  async createFromImport(rawName: string): Promise<string> {
     const name = rawName.trim();
     if (name === '') {
       throw new BadRequestException('name must not be blank');
@@ -253,7 +253,7 @@ export class PlatformsService {
    * `name`; the previous name is written as an alias (in the same
    * transaction) so matching against the old name keeps working (spec §4.6.4).
    */
-  async rename(id: number, dto: UpdatePlatformDto): Promise<PlatformModel> {
+  async rename(id: string, dto: UpdatePlatformDto): Promise<PlatformModel> {
     const name = dto.name.trim();
     if (name === '') {
       throw new BadRequestException('name must not be blank');
@@ -263,7 +263,7 @@ export class PlatformsService {
       select: { id: true, name: true },
     });
     if (!existing) {
-      throw new NotFoundException(`Platform with id ${String(id)} not found`);
+      throw new NotFoundException(`Platform with id ${id} not found`);
     }
     await this.assertNameNotAnAlias(name, id);
     const normalizedOld = normalizePlatformName(existing.name);
@@ -309,7 +309,7 @@ export class PlatformsService {
         );
       }
       if (this.isRecordNotFound(error)) {
-        throw new NotFoundException(`Platform with id ${String(id)} not found`);
+        throw new NotFoundException(`Platform with id ${id} not found`);
       }
       throw error;
     }
@@ -319,14 +319,12 @@ export class PlatformsService {
    * Clears the `addedByImport` flag: the user reviewed an import-created
    * platform and keeps it as is (spec §4.6.6).
    */
-  async confirm(id: number): Promise<PlatformModel> {
+  async confirm(id: string): Promise<PlatformModel> {
     const platform = await this.prisma.platform
       .update({ where: { id }, data: { addedByImport: false } })
       .catch((error: unknown) => {
         if (this.isRecordNotFound(error)) {
-          throw new NotFoundException(
-            `Platform with id ${String(id)} not found`,
-          );
+          throw new NotFoundException(`Platform with id ${id} not found`);
         }
         throw error;
       });
@@ -343,7 +341,7 @@ export class PlatformsService {
    * reading the merged-away name still resolves to the target. The source row
    * is deleted. Returns the target with a fresh game count.
    */
-  async merge(sourceId: number, targetId: number): Promise<PlatformModel> {
+  async merge(sourceId: string, targetId: string): Promise<PlatformModel> {
     if (sourceId === targetId) {
       throw new BadRequestException('Cannot merge a platform into itself');
     }
@@ -363,14 +361,10 @@ export class PlatformsService {
       }),
     ]);
     if (!source) {
-      throw new NotFoundException(
-        `Platform with id ${String(sourceId)} not found`,
-      );
+      throw new NotFoundException(`Platform with id ${sourceId} not found`);
     }
     if (!target) {
-      throw new NotFoundException(
-        `Platform with id ${String(targetId)} not found`,
-      );
+      throw new NotFoundException(`Platform with id ${targetId} not found`);
     }
     try {
       await this.prisma.$transaction(async (tx) => {
@@ -407,13 +401,11 @@ export class PlatformsService {
     } catch (error) {
       if (this.isForeignKeyViolation(error)) {
         throw new ConflictException(
-          `Platform with id ${String(sourceId)} has games that could not be moved`,
+          `Platform with id ${sourceId} has games that could not be moved`,
         );
       }
       if (this.isRecordNotFound(error)) {
-        throw new NotFoundException(
-          `Platform with id ${String(sourceId)} not found`,
-        );
+        throw new NotFoundException(`Platform with id ${sourceId} not found`);
       }
       throw error;
     }
@@ -428,20 +420,20 @@ export class PlatformsService {
    * `ON DELETE RESTRICT` is the backstop for the race where a game appears
    * between the count and the delete.
    */
-  async remove(id: number): Promise<void> {
+  async remove(id: string): Promise<void> {
     const existing = await this.prisma.platform.findUnique({
       where: { id },
       select: { id: true, igdbId: true },
     });
     if (!existing) {
-      throw new NotFoundException(`Platform with id ${String(id)} not found`);
+      throw new NotFoundException(`Platform with id ${id} not found`);
     }
     const gameCount = await this.prisma.game.count({
       where: { platformId: id },
     });
     if (gameCount > 0) {
       throw new ConflictException(
-        `Platform with id ${String(id)} has ${String(gameCount)} game(s); reassign or delete them before deleting the platform`,
+        `Platform with id ${id} has ${String(gameCount)} game(s); reassign or delete them before deleting the platform`,
       );
     }
     if (existing.igdbId !== null) {
@@ -457,11 +449,11 @@ export class PlatformsService {
     } catch (error) {
       if (this.isForeignKeyViolation(error)) {
         throw new ConflictException(
-          `Platform with id ${String(id)} has games; reassign or delete them before deleting the platform`,
+          `Platform with id ${id} has games; reassign or delete them before deleting the platform`,
         );
       }
       if (this.isRecordNotFound(error)) {
-        throw new NotFoundException(`Platform with id ${String(id)} not found`);
+        throw new NotFoundException(`Platform with id ${id} not found`);
       }
       throw error;
     }
@@ -503,7 +495,7 @@ export class PlatformsService {
    */
   private async assertNameNotAnAlias(
     name: string,
-    ownerId?: number,
+    ownerId?: string,
   ): Promise<void> {
     const normalized = normalizePlatformName(name);
     if (normalized === '') {

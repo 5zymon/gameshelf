@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { isSameGameIdentity, type GameIdentity } from './game-identity';
 
 export interface IdentityMatch {
-  id: number;
+  id: string;
   copyCount: number;
 }
 

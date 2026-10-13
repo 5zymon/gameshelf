@@ -31,8 +31,8 @@ export class CoverMaintenanceService {
   async removeIfUnreferenced(
     servedUrl: string | null,
     except?: {
-      exceptCoverGameId?: number;
-      exceptImageGameId?: number;
+      exceptCoverGameId?: string;
+      exceptImageGameId?: string;
     },
   ): Promise<void> {
     if (servedUrl === null) {

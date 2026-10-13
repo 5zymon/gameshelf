@@ -3,13 +3,13 @@ import { PrismaService } from '../prisma/prisma.service';
 import { IMPORT_JOB_STATUSES } from '../import-jobs/dto/list-import-jobs-query.dto';
 
 export interface ClaimedPhotoImport {
-  id: number;
+  id: string;
   photoRef: string | null;
   attempts: number;
 }
 
 export interface StalledPhotoImport {
-  id: number;
+  id: string;
   attempts: number;
 }
 
@@ -58,14 +58,15 @@ export class PhotoImportQueue {
 
   /**
    * One transaction: lock the oldest due queued row (SKIP LOCKED), mark it
-   * processing with a lease, count the attempt.
+   * processing with a lease, count the attempt. UUIDv7 ids sort by creation
+   * time (ADR-006), so `ORDER BY id` stays FIFO.
    */
   async claimNext(
     leaseMs: number,
     now = new Date(),
   ): Promise<ClaimedPhotoImport | null> {
     return this.prisma.$transaction(async (tx) => {
-      const rows = await tx.$queryRaw<{ id: number | bigint }[]>`
+      const rows = await tx.$queryRaw<{ id: string }[]>`
         SELECT id FROM import_jobs
         WHERE status = 'queued' AND next_run_at <= ${toMysqlUtcDateTime(now)}
         ORDER BY id
@@ -74,7 +75,7 @@ export class PhotoImportQueue {
       const first = rows[0];
       if (first === undefined) return null;
       return tx.importJob.update({
-        where: { id: Number(first.id) },
+        where: { id: first.id },
         data: {
           status: 'processing',
           attempts: { increment: 1 },
@@ -86,7 +87,7 @@ export class PhotoImportQueue {
   }
 
   /** Drop the lease after an attempt ended (success or terminal failure). */
-  async release(id: number): Promise<void> {
+  async release(id: string): Promise<void> {
     await this.prisma.importJob.updateMany({
       where: { id },
       data: { leaseUntil: null },
@@ -99,7 +100,7 @@ export class PhotoImportQueue {
    * Returns whether it re-queued.
    */
   async scheduleRetry(
-    id: number,
+    id: string,
     delayMs: number,
     now = new Date(),
   ): Promise<boolean> {
@@ -125,7 +126,7 @@ export class PhotoImportQueue {
 
   /** Guarded re-queue of one stalled row (status processing AND lease still expired). */
   async requeueStalled(
-    id: number,
+    id: string,
     delayMs: number,
     now = new Date(),
   ): Promise<boolean> {

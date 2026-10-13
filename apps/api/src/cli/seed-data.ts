@@ -159,7 +159,7 @@ export async function seedDevData(deps: SeedDeps): Promise<SeedResult> {
   // 2. Platforms: reuse by name (the same matcher `platforms:sync` uses),
   //    create the rest with their canonical fields.
   const candidates = await platforms.listMatchCandidates();
-  const ids = new Map<string, number>();
+  const ids = new Map<string, string>();
   let platformsCreated = 0;
   let platformsReused = 0;
   for (const input of SEED_PLATFORMS) {

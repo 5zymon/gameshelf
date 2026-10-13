@@ -39,7 +39,7 @@ export const PHOTO_SWEEPABLE_TERMINAL_STATUSES: ReadonlySet<string> = new Set([
 
 /** The job columns the sweep needs (newest row wins per photoRef). */
 export interface PhotoSweepOwner {
-  id: number;
+  id: string;
   status: string;
   createdAt: Date;
   /** Last enqueue/start; null on legacy rows (falls back to `createdAt`). */

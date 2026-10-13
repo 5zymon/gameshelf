@@ -82,7 +82,7 @@ export class ImportJobsController {
     description:
       'Includes dismissed items — the trace outlives dismissal (spec §4.2.5).',
   })
-  @ApiParam({ name: 'id', type: Number })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
   @ApiOkResponse({ type: ImportJobDetailModel })
   @ApiNotFoundResponse({ description: 'Import job not found' })
   findOne(@Param() params: ImportJobIdParamDto): Promise<ImportJobDetailModel> {
@@ -94,7 +94,7 @@ export class ImportJobsController {
   @ApiOperation({
     summary: 'Retry a failed import: re-runs only unresolved titles',
   })
-  @ApiParam({ name: 'id', type: Number })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
   @ApiAcceptedResponse({ type: ImportJobDetailModel })
   @ApiNotFoundResponse({ description: 'Import job not found' })
   @ApiConflictResponse({
@@ -121,7 +121,7 @@ export class ImportJobsController {
   @ApiOperation({
     summary: 'Flagged items awaiting review (non-dismissed only)',
   })
-  @ApiParam({ name: 'id', type: Number })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
   @ApiOkResponse({ type: [UnrecognizedItemModel] })
   @ApiNotFoundResponse({ description: 'Import job not found' })
   listUnrecognized(
@@ -138,7 +138,7 @@ export class ImportJobsController {
       'Idempotent: dismissing an already-dismissed job is a 200 no-op. ' +
       'Dismissal is sticky — no endpoint transitions it back.',
   })
-  @ApiParam({ name: 'id', type: Number })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
   @ApiOkResponse({ type: ImportJobDetailModel })
   @ApiBadRequestResponse({
     description: "Validation error (only status 'dismissed' is accepted)",
@@ -163,8 +163,8 @@ export class ImportJobsController {
       'One-way: stamps dismissed_at; there is no un-dismiss. ' +
       'Idempotent: re-dismissing is a 200 no-op.',
   })
-  @ApiParam({ name: 'id', type: Number })
-  @ApiParam({ name: 'itemId', type: Number })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiParam({ name: 'itemId', type: String, format: 'uuid' })
   @ApiOkResponse({ type: UnrecognizedItemModel })
   @ApiBadRequestResponse({
     description: 'Validation error (dismissed must be true)',
@@ -197,8 +197,8 @@ export class ImportJobsController {
       'marks the item reviewed, like "Add manually". The picked candidate is ' +
       're-confirmed against a fresh catalog search before any game is written.',
   })
-  @ApiParam({ name: 'id', type: Number })
-  @ApiParam({ name: 'itemId', type: Number })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
+  @ApiParam({ name: 'itemId', type: String, format: 'uuid' })
   @ApiOkResponse({ type: GameDetailModel })
   @ApiBadRequestResponse({
     description:

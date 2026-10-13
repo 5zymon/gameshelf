@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { uuidv7 } from '../common/uuid-v7';
 import { Prisma } from '../generated/prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EMAIL_MAX_LENGTH, PASSWORD_MAX_LENGTH } from './credentials';
@@ -32,7 +33,7 @@ export interface SetPasswordInput {
 }
 
 export interface CreatedUser {
-  id: number;
+  id: string;
   email: string;
   language: string;
   theme: string;
@@ -41,7 +42,7 @@ export interface CreatedUser {
 
 /** Full credential row used during login — never leaves the service. */
 export interface UserCredentials {
-  id: number;
+  id: string;
   email: string;
   passwordHash: string;
   language: string;
@@ -131,7 +132,8 @@ export class UsersService {
    *
    * Shares `prepareUser` with `createUser`, so hashing/validation cannot
    * diverge. The raw SQL mirrors the `User` model in `prisma/schema.prisma`
-   * (`@@map("users")`, `password_hash`).
+   * (`@@map("users")`, `password_hash`). `id` is supplied here because Prisma's
+   * `uuid(7)` default does not apply to raw SQL (ADR-006).
    */
   async createFirstUser(input: CreateUserInput): Promise<CreatedUser> {
     // Cheap fast path: closed setup must not pay for Argon2 or leak timing.
@@ -143,9 +145,10 @@ export class UsersService {
     let lastError: unknown;
     for (let attempt = 1; attempt <= MAX_SETUP_ATTEMPTS; attempt++) {
       try {
+        const id = uuidv7();
         const affected = await this.prisma.$executeRaw`
-          INSERT INTO users (email, password_hash)
-          SELECT ${email}, ${passwordHash} FROM DUAL
+          INSERT INTO users (id, email, password_hash)
+          SELECT ${id}, ${email}, ${passwordHash} FROM DUAL
           WHERE NOT EXISTS (SELECT 1 FROM users)`;
         if (affected === 0) {
           // The emptiness guard held: another caller won the race.
@@ -210,7 +213,7 @@ export class UsersService {
     });
   }
 
-  async findById(id: number): Promise<CreatedUser | null> {
+  async findById(id: string): Promise<CreatedUser | null> {
     return this.prisma.user.findUnique({
       where: { id },
       select: {

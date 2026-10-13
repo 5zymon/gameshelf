@@ -73,7 +73,7 @@ export class GamesController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a single game by id' })
-  @ApiParam({ name: 'id', type: Number })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
   @ApiOkResponse({ type: GameDetailModel })
   @ApiNotFoundResponse({ description: 'Game not found' })
   findOne(@Param() params: GameIdParamDto): Promise<GameDetailModel> {
@@ -102,7 +102,7 @@ export class GamesController {
   @ApiOperation({
     summary: 'Increment a game copy count (add another physical copy)',
   })
-  @ApiParam({ name: 'id', type: Number })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
   @ApiOkResponse({ type: GameDetailModel })
   @ApiNotFoundResponse({ description: 'Game not found' })
   addCopy(@Param() params: GameIdParamDto): Promise<GameDetailModel> {
@@ -111,7 +111,7 @@ export class GamesController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Partially update a game' })
-  @ApiParam({ name: 'id', type: Number })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
   @ApiOkResponse({ type: GameDetailModel })
   @ApiBadRequestResponse({
     description: 'Validation error or unknown platformId',
@@ -127,7 +127,7 @@ export class GamesController {
   @Delete(':id')
   @HttpCode(204)
   @ApiOperation({ summary: 'Delete a game' })
-  @ApiParam({ name: 'id', type: Number })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
   @ApiResponse({ status: 204, description: 'Game deleted' })
   @ApiNotFoundResponse({ description: 'Game not found' })
   remove(@Param() params: GameIdParamDto): Promise<void> {
@@ -141,7 +141,7 @@ export class GamesController {
     description:
       'Search (empty body) returns a ranked candidate list, best first, up to 10. Apply ({candidate:{source,externalId}}) re-runs the search and merges any listed candidate in place.',
   })
-  @ApiParam({ name: 'id', type: Number })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
   @ApiOkResponse({ type: EnrichGameResponseModel })
   @ApiConflictResponse({
     description: 'The selected candidate is no longer available',

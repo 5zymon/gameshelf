@@ -15,7 +15,7 @@ export class SetupService {
   async setup(dto: SetupDto): Promise<CreatedUser> {
     const user = await this.users.createFirstUser(dto);
     this.logger.log(
-      `First-run setup completed: created user ${String(user.id)} (${user.email})`,
+      `First-run setup completed: created user ${user.id} (${user.email})`,
     );
     return user;
   }

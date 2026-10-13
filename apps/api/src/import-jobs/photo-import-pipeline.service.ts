@@ -51,7 +51,7 @@ export type PhotoImportOutcome =
 
 /** A single structured per-job log entry (ticket 3.7). */
 export interface PhotoImportOutcomeLog {
-  importJobId: number | null;
+  importJobId: string | null;
   photoRef: string | null;
   outcome: PhotoImportOutcome;
   recognizedCount: number;
@@ -136,9 +136,7 @@ export class PhotoImportPipelineService {
     try {
       const state = await this.jobs.getPipelineJob(importJobId);
       if (state === null) {
-        throw new RetryableImportError(
-          `Import job ${String(importJobId)} not found`,
-        );
+        throw new RetryableImportError(`Import job ${importJobId} not found`);
       }
       if (TERMINAL_STATUSES.has(state.status)) {
         counts = toResult(state);
@@ -206,7 +204,7 @@ export class PhotoImportPipelineService {
 
   /** The one and only vision call for this job. */
   private async recognizeOnce(
-    jobId: number,
+    jobId: string,
     state: PipelineJobState,
     timings: PipelineTimings,
   ): Promise<void> {
@@ -238,7 +236,7 @@ export class PhotoImportPipelineService {
    * pending for the retry).
    */
   private async processBatches(
-    jobId: number,
+    jobId: string,
     signal: AbortSignal,
   ): Promise<boolean> {
     for (;;) {
@@ -334,7 +332,7 @@ export class PhotoImportPipelineService {
 
   /** The bounded unit of work: vision (once) + batched resolution + completion. */
   private async processJob(
-    jobId: number,
+    jobId: string,
     state: PipelineJobState,
     signal: AbortSignal,
     timings: PipelineTimings,
@@ -415,13 +413,13 @@ export class PhotoImportPipelineService {
   }
 
   private async summarizeSafely(
-    jobId: number,
+    jobId: string,
   ): Promise<JobCompletionResult | undefined> {
     try {
       return await this.jobs.summarizeRecognizedItems(jobId);
     } catch (error) {
       this.logger.warn(
-        `Failed to summarise import job ${String(jobId)} counters: ${
+        `Failed to summarise import job ${jobId} counters: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -459,7 +457,7 @@ export class PhotoImportPipelineService {
   }
 
   private async markFailedSafely(
-    jobId: number,
+    jobId: string,
     error: unknown,
     counts?: JobCompletionResult,
   ): Promise<void> {
@@ -472,7 +470,7 @@ export class PhotoImportPipelineService {
     } catch (markError) {
       // Never mask the original failure (e.g. the job turned terminal).
       this.logger.warn(
-        `Failed to mark import job ${String(jobId)} failed: ${
+        `Failed to mark import job ${jobId} failed: ${
           markError instanceof Error ? markError.message : String(markError)
         }`,
       );

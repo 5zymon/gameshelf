@@ -7,16 +7,16 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
 } from 'class-validator';
 
+import { UUID_V7_EXAMPLE } from '../../common/uuid-v7';
+
 /** Upper bound on repeated `platformId` values (a bounded SQL IN list). */
 export const MAX_PLATFORM_IDS = 100;
-
-/** Mirrors the signed 32-bit range of the `platform_id` column (Prisma `Int`). */
-export const MAX_PLATFORM_ID = 2147483647;
 
 export type GameSortField = 'title' | 'year' | 'platform' | 'createdAt';
 export type SortDirection = 'asc' | 'desc';
@@ -56,24 +56,25 @@ export class ListGamesQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'Filter by platform id (FK platforms.id, each ≥ 1). Repeat the parameter to match any of several platforms (`?platformId=1&platformId=2`, OR-combined, up to 100). Unknown ids match nothing; they are not a 400.',
-    type: Number,
+      'Filter by platform id (UUIDv7). Repeat the parameter to match any of several platforms (`?platformId=<uuid>&platformId=<uuid>`, OR-combined, up to 100). Unknown ids match nothing; a malformed id is a 400.',
+    type: String,
     isArray: true,
+    format: 'uuid',
     maxItems: MAX_PLATFORM_IDS,
-    example: [1, 2],
+    example: [UUID_V7_EXAMPLE],
   })
   @IsOptional()
   @Transform(({ value }: { value: unknown }) =>
     value === undefined || value === null
       ? undefined
-      : (Array.isArray(value) ? value : [value]).map(Number),
+      : Array.isArray(value)
+        ? value
+        : [value],
   )
   @IsArray()
   @ArrayMaxSize(MAX_PLATFORM_IDS)
-  @IsInt({ each: true })
-  @Min(1, { each: true })
-  @Max(MAX_PLATFORM_ID, { each: true })
-  platformId?: number[];
+  @IsUUID('7', { each: true })
+  platformId?: string[];
 
   @ApiPropertyOptional({
     description: 'Exact edition match (whitespace-trimmed)',

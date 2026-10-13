@@ -50,7 +50,7 @@ export class PlatformsController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a single platform by id' })
-  @ApiParam({ name: 'id', type: Number })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
   @ApiOkResponse({ type: PlatformModel })
   @ApiNotFoundResponse({ description: 'Platform not found' })
   findOne(@Param() params: PlatformIdParamDto): Promise<PlatformModel> {
@@ -75,7 +75,7 @@ export class PlatformsController {
     summary:
       'Rename a platform (slug is kept; the old name becomes an alias); optional canonical fields for the IGDB integration; toggle hidden',
   })
-  @ApiParam({ name: 'id', type: Number })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
   @ApiOkResponse({ type: PlatformModel })
   @ApiBadRequestResponse({
     description: 'Validation error or blank name',
@@ -97,7 +97,7 @@ export class PlatformsController {
     summary:
       'Confirm an import-created platform (clears the added-by-import flag)',
   })
-  @ApiParam({ name: 'id', type: Number })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
   @ApiOkResponse({ type: PlatformModel })
   @ApiNotFoundResponse({ description: 'Platform not found' })
   confirm(@Param() params: PlatformIdParamDto): Promise<PlatformModel> {
@@ -110,7 +110,7 @@ export class PlatformsController {
     summary:
       'Merge a platform into a target: move its games, keep its name as an alias, delete it',
   })
-  @ApiParam({ name: 'id', type: Number })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
   @ApiOkResponse({ type: PlatformModel })
   @ApiBadRequestResponse({
     description: 'Cannot merge a platform into itself',
@@ -132,7 +132,7 @@ export class PlatformsController {
     summary:
       'Delete a custom platform, or hide a reference platform; refused with 409 while games reference it',
   })
-  @ApiParam({ name: 'id', type: Number })
+  @ApiParam({ name: 'id', type: String, format: 'uuid' })
   @ApiResponse({ status: 204, description: 'Platform deleted or hidden' })
   @ApiConflictResponse({
     description: 'Platform still has games — reassign or delete them first',

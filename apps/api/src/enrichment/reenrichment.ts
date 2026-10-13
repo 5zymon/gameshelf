@@ -82,7 +82,7 @@ export function mergeEditedFields(
 
 /** The existing `Game` row fields the merge policy reads. */
 export interface ReenrichmentExisting {
-  id: number;
+  id: string;
   releaseYear: number | null;
   publisher: string | null;
   genre: string | null;
