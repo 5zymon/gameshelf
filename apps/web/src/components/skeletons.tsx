@@ -52,7 +52,7 @@ export async function CatalogSkeleton(): Promise<React.ReactElement> {
         <div className="space-y-3">
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
             <SkeletonBlock className="h-10 w-full rounded-control border border-edge lg:w-72 lg:shrink-0" />
-            <div className="flex min-w-0 flex-1 flex-wrap gap-2">
+            <div className="flex min-w-0 flex-1 gap-2 overflow-hidden">
               {Array.from({ length: 4 }, (_, i) => (
                 <SkeletonBlock
                   key={i}

@@ -2,7 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import type { GamePlatform } from '@/lib/api';
 import {
   catalogHref,
@@ -13,6 +13,7 @@ import {
   type CatalogFilterValues,
   type CatalogSortOption,
 } from '@/lib/catalog-filters';
+import { scrollEdges, type ScrollEdges } from '@/lib/scroll-edges';
 
 const DEBOUNCE_MS = 300;
 const FIELD =
@@ -39,6 +40,10 @@ const PLATFORM_CHIP =
 const PLATFORM_CHIP_ON = 'border-accent bg-accent text-accent-ink';
 const PLATFORM_CHIP_OFF =
   'border-edge bg-surface text-ink hover:border-edge-strong';
+const NO_SCROLL_EDGES: ScrollEdges = { start: false, end: false };
+/** Decorative edge fade over the chip strip; fades to the page canvas (the bar sits on bg-canvas, no card). */
+const CHIP_FADE =
+  'pointer-events-none absolute inset-y-0 w-10 from-canvas to-transparent transition-opacity duration-[140ms] ease-[ease] motion-reduce:transition-none';
 
 type TextKey = 'q' | 'year' | 'publisher' | 'genre' | 'playerCount';
 type Draft = Record<TextKey, string>;
@@ -143,6 +148,20 @@ export function CatalogFilterBar({
   const [advancedOpen, setAdvancedOpen] = useState(() => advancedCount > 0);
   const prevAdvancedCountRef = useRef(advancedCount);
 
+  const chipScrollerRef = useRef<HTMLDivElement>(null);
+  const chipTrackRef = useRef<HTMLDivElement>(null);
+  const [chipEdges, setChipEdges] = useState<ScrollEdges>(NO_SCROLL_EDGES);
+
+  const updateChipEdges = useCallback(() => {
+    const scroller = chipScrollerRef.current;
+    if (scroller === null) return;
+    const next = scrollEdges(scroller);
+    // Bail out of the re-render when nothing flipped (scroll fires every frame).
+    setChipEdges((prev) =>
+      prev.start === next.start && prev.end === next.end ? prev : next,
+    );
+  }, []);
+
   // Keep the ref authoritative for handlers that fire before the next effect flush.
   useEffect(() => {
     draftRef.current = draft;
@@ -181,6 +200,23 @@ export function CatalogFilterBar({
     }
     prevAdvancedCountRef.current = advancedCount;
   }, [advancedCount]);
+
+  // Fade state follows the strip: user/keyboard-focus scroll, strip resize (window
+  // resize, lg breakpoint) and track resize (platform list change, web-font swap).
+  useEffect(() => {
+    const scroller = chipScrollerRef.current;
+    const track = chipTrackRef.current;
+    if (scroller === null || track === null) return;
+    updateChipEdges();
+    scroller.addEventListener('scroll', updateChipEdges, { passive: true });
+    const observer = new ResizeObserver(updateChipEdges);
+    observer.observe(scroller);
+    observer.observe(track);
+    return () => {
+      scroller.removeEventListener('scroll', updateChipEdges);
+      observer.disconnect();
+    };
+  }, [updateChipEdges]);
 
   function navigate(overrides: Partial<CatalogFilterValues> = {}): void {
     const next: CatalogFilterValues = {
@@ -229,6 +265,19 @@ export function CatalogFilterBar({
   function selectPlatform(id: number | undefined): void {
     if (id === values.platformId) return; // no redundant push
     commit({ platformId: id });
+  }
+
+  /**
+   * Reveals a chip on keyboard focus only. Chrome auto-scrolls a focused element
+   * just when its centre leaves the scrollport, so a chip whose right edge is
+   * clipped can keep its label and focus outline cut off; the `:focus-visible`
+   * gate keeps a pointer click on a partly visible chip from yanking the strip.
+   * `scrollIntoView` honours the scroller's `scroll-px-10`, so the chip lands
+   * clear of the fade with its outline unclipped.
+   */
+  function revealFocusedChip(event: React.FocusEvent<HTMLButtonElement>): void {
+    if (!event.currentTarget.matches(':focus-visible')) return;
+    event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 
   /**
@@ -301,42 +350,58 @@ export function CatalogFilterBar({
             />
           </div>
 
-          <div
-            role="group"
-            aria-label={t('platformGroup')}
-            className="flex min-w-0 flex-1 flex-wrap gap-2"
-          >
-            <button
-              type="button"
-              aria-pressed={values.platformId === undefined}
-              onClick={() => {
-                selectPlatform(undefined);
-              }}
-              className={`${PLATFORM_CHIP} ${
-                values.platformId === undefined
-                  ? PLATFORM_CHIP_ON
-                  : PLATFORM_CHIP_OFF
-              }`}
+          {/* -m-1 cancels the track's p-1, which reserves room for the 2px + 2px-offset focus outline inside the scroll clip. */}
+          <div className="relative -m-1 min-w-0 flex-1">
+            <div
+              ref={chipScrollerRef}
+              role="group"
+              aria-label={t('platformGroup')}
+              className="overflow-x-auto overscroll-x-contain scroll-px-10 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
             >
-              {t('allChip')}
-            </button>
-            {platforms.map((platform) => (
-              <button
-                key={platform.id}
-                type="button"
-                aria-pressed={values.platformId === platform.id}
-                onClick={() => {
-                  selectPlatform(platform.id);
-                }}
-                className={`${PLATFORM_CHIP} ${
-                  values.platformId === platform.id
-                    ? PLATFORM_CHIP_ON
-                    : PLATFORM_CHIP_OFF
-                }`}
-              >
-                {platform.name}
-              </button>
-            ))}
+              <div ref={chipTrackRef} className="flex w-max gap-2 p-1">
+                <button
+                  type="button"
+                  aria-pressed={values.platformId === undefined}
+                  onClick={() => {
+                    selectPlatform(undefined);
+                  }}
+                  onFocus={revealFocusedChip}
+                  className={`${PLATFORM_CHIP} ${
+                    values.platformId === undefined
+                      ? PLATFORM_CHIP_ON
+                      : PLATFORM_CHIP_OFF
+                  }`}
+                >
+                  {t('allChip')}
+                </button>
+                {platforms.map((platform) => (
+                  <button
+                    key={platform.id}
+                    type="button"
+                    aria-pressed={values.platformId === platform.id}
+                    onClick={() => {
+                      selectPlatform(platform.id);
+                    }}
+                    onFocus={revealFocusedChip}
+                    className={`${PLATFORM_CHIP} ${
+                      values.platformId === platform.id
+                        ? PLATFORM_CHIP_ON
+                        : PLATFORM_CHIP_OFF
+                    }`}
+                  >
+                    {platform.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <span
+              aria-hidden="true"
+              className={`${CHIP_FADE} left-0 bg-linear-to-r ${chipEdges.start ? 'opacity-100' : 'opacity-0'}`}
+            />
+            <span
+              aria-hidden="true"
+              className={`${CHIP_FADE} right-0 bg-linear-to-l ${chipEdges.end ? 'opacity-100' : 'opacity-0'}`}
+            />
           </div>
 
           <div className="lg:w-52 lg:shrink-0">
