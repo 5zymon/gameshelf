@@ -13,6 +13,10 @@ import {
 } from '@/lib/api';
 import { api } from '@/lib/api/browser';
 import {
+  FlaggedItemLookup,
+  type CatalogLookup,
+} from '@/components/flagged-item-lookup';
+import {
   buildCreateRequest,
   emptyManualAddDraft,
   MANUAL_ADD_FIELDS,
@@ -63,6 +67,18 @@ export interface ManualAddFormProps {
   submitLabel?: string;
   /** Called with the created game after a successful save. */
   onSaved?: (game: GameDetail) => void;
+  /** Flagged-item catalog re-search; omitted on /games/new. */
+  catalogLookup?: CatalogLookup;
+  /**
+   * External busy state (e.g. another review action on the same flagged
+   * item). Blocks submit and the catalog lookup. Default false.
+   */
+  disabled?: boolean;
+  /**
+   * Called when the catalog lookup's pick starts/finishes, so the parent can
+   * keep its own actions from racing the pick.
+   */
+  onLookupBusyChange?: (busy: boolean) => void;
 }
 
 export function ManualAddForm({
@@ -71,6 +87,9 @@ export function ManualAddForm({
   initialPlatformId = '',
   submitLabel,
   onSaved,
+  catalogLookup,
+  disabled = false,
+  onLookupBusyChange,
 }: ManualAddFormProps): React.ReactElement {
   const router = useRouter();
   const t = useTranslations('manualAdd');
@@ -95,6 +114,7 @@ export function ManualAddForm({
   const [newPlatformName, setNewPlatformName] = useState('');
   const [platformError, setPlatformError] = useState<string | null>(null);
   const [creatingPlatform, setCreatingPlatform] = useState(false);
+  const [lookupBusy, setLookupBusy] = useState(false);
 
   const formRef = useRef<HTMLFormElement>(null);
   const titleRef = useRef<HTMLInputElement>(null);
@@ -102,7 +122,13 @@ export function ManualAddForm({
   const newPlatformRef = useRef<HTMLInputElement>(null);
   const conflictDismissRef = useRef<HTMLButtonElement>(null);
 
-  const busy = saving || addingCopy;
+  const busy = saving || addingCopy || lookupBusy || disabled;
+
+  /** Forwards the lookup's busy state to the parent review card. */
+  function handleLookupBusy(nextBusy: boolean): void {
+    setLookupBusy(nextBusy);
+    onLookupBusyChange?.(nextBusy);
+  }
 
   // Least-destructive default: focus the dismiss action when the prompt opens.
   useEffect(() => {
@@ -536,6 +562,18 @@ export function ManualAddForm({
             </p>
           )}
         </div>
+
+        {catalogLookup !== undefined && (
+          <div className="sm:col-span-2">
+            <FlaggedItemLookup
+              lookup={catalogLookup}
+              title={draft.title}
+              platformId={draft.platformId}
+              disabled={saving || addingCopy || disabled}
+              onBusyChange={handleLookupBusy}
+            />
+          </div>
+        )}
 
         <div className="space-y-1.5">
           <label htmlFor={`${uid}-edition`} className={LABEL}>

@@ -23,6 +23,7 @@ import type {
   GameEnrichmentService,
 } from '../../src/enrichment/game-enrichment.service';
 import type { CoverMaintenanceService } from '../../src/covers/cover-maintenance.service';
+import type { CoverPreviewService } from '../../src/covers/cover-preview.service';
 import { testId } from '../helpers/ids';
 
 /** A catalog candidate as returned by a fresh search. */
@@ -112,11 +113,24 @@ const ITEM = {
 
 const REF = { source: 'IGDB' as const, externalId: 18797 };
 
+/** A local platform row as loaded by `loadPlatform`. */
+const PLATFORM_ROW = {
+  id: testId(10),
+  name: 'PC (Microsoft Windows)',
+  abbreviation: 'PC',
+  alternativeName: null,
+  igdbId: 6,
+  aliases: [],
+};
+
 function createService() {
   const mock = {
     unrecognizedItem: {
       findUnique: jest.fn(),
       updateMany: jest.fn(),
+    },
+    platform: {
+      findUnique: jest.fn(),
     },
     game: {
       findUnique: jest.fn(),
@@ -139,6 +153,11 @@ function createService() {
   const maintenance = {
     removeIfUnreferenced: jest.fn(() => Promise.resolve()),
   };
+  const preview = {
+    previewUrl: jest.fn((url: string | null) =>
+      url === null ? null : '/api/covers/preview?x',
+    ),
+  };
   const service = new UnrecognizedItemPickService(
     mock as unknown as PrismaService,
     catalogSearch as unknown as CatalogSearchService,
@@ -146,6 +165,7 @@ function createService() {
     identity as unknown as GameIdentityService,
     enrichment as unknown as GameEnrichmentService,
     maintenance as unknown as CoverMaintenanceService,
+    preview as unknown as CoverPreviewService,
   );
   return {
     service,
@@ -155,6 +175,7 @@ function createService() {
     identity,
     enrichment,
     maintenance,
+    preview,
   };
 }
 
@@ -306,6 +327,25 @@ describe('UnrecognizedItemPickService (unit)', () => {
     );
   });
 
+  it('400s for an unknown platformId before the tied-candidate search', async () => {
+    const { service, mock, catalogSearch, enrichment } = createService();
+    mock.unrecognizedItem.findUnique.mockResolvedValue(ITEM);
+    mock.platform.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.pick(testId(1), testId(5), {
+        ...REF,
+        platformId: testId(11),
+      }),
+    ).rejects.toThrow(
+      new BadRequestException(`Platform with id ${testId(11)} does not exist`),
+    );
+    // The unknown platform is rejected before any upstream catalog call.
+    expect(catalogSearch.search).not.toHaveBeenCalled();
+    expect(mock.game.create).not.toHaveBeenCalled();
+    expect(enrichment.enrichCandidate).not.toHaveBeenCalled();
+  });
+
   it('409s and cleans up assets when the claim races', async () => {
     const {
       service,
@@ -340,5 +380,313 @@ describe('UnrecognizedItemPickService (unit)', () => {
     expect(maintenance.removeIfUnreferenced).toHaveBeenCalledWith(
       '/api/covers/img1.jpg',
     );
+  });
+
+  describe('search', () => {
+    it('404s when the item belongs to another job', async () => {
+      const { service, mock } = createService();
+      mock.unrecognizedItem.findUnique.mockResolvedValue({
+        ...ITEM,
+        importJobId: testId(99),
+      });
+
+      await expect(
+        service.search(testId(1), testId(5), { q: 'pillars' }),
+      ).rejects.toThrow(
+        new NotFoundException(
+          `Unrecognized item with id ${testId(5)} not found in import job ${testId(1)}`,
+        ),
+      );
+    });
+
+    it('409s for an already-reviewed item without searching', async () => {
+      const { service, mock, catalogSearch } = createService();
+      mock.unrecognizedItem.findUnique.mockResolvedValue({
+        ...ITEM,
+        dismissedAt: new Date('2026-01-02T00:00:00.000Z'),
+      });
+
+      await expect(
+        service.search(testId(1), testId(5), { q: 'pillars' }),
+      ).rejects.toThrow(
+        new ConflictException('This flagged item was already reviewed'),
+      );
+      expect(catalogSearch.search).not.toHaveBeenCalled();
+    });
+
+    it('400s for an unknown platformId', async () => {
+      const { service, mock, catalogSearch } = createService();
+      mock.unrecognizedItem.findUnique.mockResolvedValue(ITEM);
+      mock.platform.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.search(testId(1), testId(5), {
+          q: 'pillars',
+          platformId: testId(11),
+        }),
+      ).rejects.toThrow(
+        new BadRequestException(
+          `Platform with id ${testId(11)} does not exist`,
+        ),
+      );
+      expect(catalogSearch.search).not.toHaveBeenCalled();
+    });
+
+    it('503s when the catalog search is transient', async () => {
+      const { service, mock, catalogSearch } = createService();
+      mock.unrecognizedItem.findUnique.mockResolvedValue(ITEM);
+      catalogSearch.search.mockResolvedValue({
+        kind: 'transient',
+        reason: 'IGDB 429',
+      });
+
+      await expect(
+        service.search(testId(1), testId(5), { q: 'pillars' }),
+      ).rejects.toThrow(new ServiceUnavailableException('IGDB 429'));
+    });
+
+    it('lists platform matches first (stable) and signs the covers', async () => {
+      const { service, mock, catalogSearch, preview } = createService();
+      mock.unrecognizedItem.findUnique.mockResolvedValue(ITEM);
+      mock.platform.findUnique.mockResolvedValue(PLATFORM_ROW);
+      const xbox = candidate({
+        externalId: 1,
+        title: 'Xbox only',
+        coverUrl: 'https://x/xbox.jpg',
+        platforms: [{ igdbId: 12, name: 'Xbox', abbreviation: 'XBOX' }],
+      });
+      const pc = candidate({ externalId: 2, title: 'PC game' });
+      catalogSearch.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [xbox, pc],
+      });
+
+      const result = await service.search(testId(1), testId(5), {
+        q: 'pillars',
+        platformId: testId(10),
+      });
+
+      expect(result.candidates.map((c) => c.externalId)).toEqual([2, 1]);
+      expect(result.candidates[0]?.coverUrl).toBe('/api/covers/preview?x');
+      expect(preview.previewUrl).toHaveBeenCalledWith('https://x/cover.jpg');
+    });
+
+    it('keeps the catalog order without a platformId', async () => {
+      const { service, mock, catalogSearch } = createService();
+      mock.unrecognizedItem.findUnique.mockResolvedValue(ITEM);
+      const xbox = candidate({
+        externalId: 1,
+        title: 'Xbox only',
+        platforms: [{ igdbId: 12, name: 'Xbox', abbreviation: 'XBOX' }],
+      });
+      const pc = candidate({ externalId: 2, title: 'PC game' });
+      catalogSearch.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [xbox, pc],
+      });
+
+      const result = await service.search(testId(1), testId(5), {
+        q: 'pillars',
+      });
+
+      expect(result.candidates.map((c) => c.externalId)).toEqual([1, 2]);
+    });
+
+    it('searches with the corrected title', async () => {
+      const { service, mock, catalogSearch } = createService();
+      mock.unrecognizedItem.findUnique.mockResolvedValue(ITEM);
+      catalogSearch.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [],
+      });
+
+      await service.search(testId(1), testId(5), {
+        q: 'The Pillars of the Earth',
+      });
+
+      expect(catalogSearch.search).toHaveBeenCalledWith(
+        'The Pillars of the Earth',
+      );
+    });
+  });
+
+  describe('pick with a re-search query', () => {
+    const QUERY_REF = {
+      source: 'IGDB' as const,
+      externalId: 18797,
+      query: 'The Pillars of the Earth',
+    };
+
+    it('accepts a candidate absent from the stored ties and re-confirms with the query', async () => {
+      const { service, mock, catalogSearch, importJobs, identity, enrichment } =
+        createService();
+      mock.unrecognizedItem.findUnique.mockResolvedValue({
+        ...ITEM,
+        candidates: null,
+      });
+      catalogSearch.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [candidate()],
+      });
+      importJobs.resolvePlatformId.mockResolvedValue({
+        platformId: testId(10),
+        provenance: 'photo',
+      });
+      identity.findExisting.mockResolvedValue(null);
+      enrichment.enrichCandidate.mockResolvedValue(enriched());
+      mock.game.create.mockResolvedValue({ id: testId(42) });
+      mock.unrecognizedItem.updateMany.mockResolvedValue({ count: 1 });
+      mock.game.findUnique.mockResolvedValue(gameRow(testId(42)));
+
+      const result = await service.pick(testId(1), testId(5), QUERY_REF);
+
+      expect(catalogSearch.search).toHaveBeenCalledTimes(1);
+      expect(catalogSearch.search).toHaveBeenCalledWith(
+        'The Pillars of the Earth',
+      );
+      expect(result).toEqual(toGameDetail(gameRow(testId(42))));
+    });
+
+    it('re-confirms with the re-search query, not the stored title', async () => {
+      const { service, mock, catalogSearch } = createService();
+      mock.unrecognizedItem.findUnique.mockResolvedValue(ITEM);
+      catalogSearch.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [],
+      });
+
+      await expect(
+        service.pick(testId(1), testId(5), QUERY_REF),
+      ).rejects.toThrow(
+        new ConflictException('The selected candidate is no longer available'),
+      );
+
+      expect(catalogSearch.search).toHaveBeenCalledWith(
+        'The Pillars of the Earth',
+      );
+      expect(catalogSearch.search).not.toHaveBeenCalledWith(
+        'Rise of Nations: Rise of Legends',
+      );
+    });
+
+    it('honours a user-confirmed platformId without resolving from the candidate', async () => {
+      const { service, mock, catalogSearch, importJobs, identity, enrichment } =
+        createService();
+      mock.unrecognizedItem.findUnique.mockResolvedValue({
+        ...ITEM,
+        candidates: null,
+      });
+      mock.platform.findUnique.mockResolvedValue({
+        ...PLATFORM_ROW,
+        id: testId(11),
+      });
+      catalogSearch.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [candidate()],
+      });
+      identity.findExisting.mockResolvedValue(null);
+      enrichment.enrichCandidate.mockResolvedValue(
+        enriched({ platformId: testId(11) }),
+      );
+      mock.game.create.mockResolvedValue({ id: testId(42) });
+      mock.unrecognizedItem.updateMany.mockResolvedValue({ count: 1 });
+      mock.game.findUnique.mockResolvedValue(gameRow(testId(42)));
+
+      await service.pick(testId(1), testId(5), {
+        ...QUERY_REF,
+        platformId: testId(11),
+      });
+
+      expect(importJobs.resolvePlatformId).not.toHaveBeenCalled();
+      expect(enrichment.enrichCandidate).toHaveBeenCalledWith(
+        expect.objectContaining({ externalId: 18797 }),
+        testId(11),
+        'Gold',
+      );
+      expect(mock.game.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          platformId: testId(11),
+          platformUnverified: false,
+        }) as unknown,
+      });
+    });
+
+    it('409s when the candidate is not in the fresh results', async () => {
+      const { service, mock, catalogSearch } = createService();
+      mock.unrecognizedItem.findUnique.mockResolvedValue({
+        ...ITEM,
+        candidates: null,
+      });
+      catalogSearch.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [],
+      });
+
+      await expect(
+        service.pick(testId(1), testId(5), {
+          ...QUERY_REF,
+          externalId: 999,
+        }),
+      ).rejects.toThrow(
+        new ConflictException('The selected candidate is no longer available'),
+      );
+    });
+
+    it('400s for an unknown platformId without writing or searching', async () => {
+      const { service, mock, catalogSearch, enrichment } = createService();
+      mock.unrecognizedItem.findUnique.mockResolvedValue({
+        ...ITEM,
+        candidates: null,
+      });
+      catalogSearch.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [candidate()],
+      });
+      mock.platform.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.pick(testId(1), testId(5), {
+          ...QUERY_REF,
+          platformId: testId(11),
+        }),
+      ).rejects.toThrow(
+        new BadRequestException(
+          `Platform with id ${testId(11)} does not exist`,
+        ),
+      );
+      expect(catalogSearch.search).not.toHaveBeenCalled();
+      expect(mock.game.create).not.toHaveBeenCalled();
+      expect(enrichment.enrichCandidate).not.toHaveBeenCalled();
+    });
+
+    it('links an existing identity (no create) and claims the item', async () => {
+      const { service, mock, catalogSearch, importJobs, identity, enrichment } =
+        createService();
+      mock.unrecognizedItem.findUnique.mockResolvedValue({
+        ...ITEM,
+        candidates: null,
+      });
+      catalogSearch.search.mockResolvedValue({
+        kind: 'matches',
+        candidates: [candidate()],
+      });
+      importJobs.resolvePlatformId.mockResolvedValue({
+        platformId: testId(10),
+        provenance: 'photo',
+      });
+      identity.findExisting.mockResolvedValue({ id: testId(7), copyCount: 1 });
+      mock.game.findUnique.mockResolvedValue(gameRow(testId(7)));
+      mock.unrecognizedItem.updateMany.mockResolvedValue({ count: 1 });
+
+      const result = await service.pick(testId(1), testId(5), QUERY_REF);
+
+      expect(mock.game.create).not.toHaveBeenCalled();
+      expect(enrichment.enrichCandidate).not.toHaveBeenCalled();
+      expect(mock.unrecognizedItem.updateMany).toHaveBeenCalledWith({
+        where: { id: testId(5), dismissedAt: null },
+        data: { dismissedAt: expect.any(Date) as Date },
+      });
+      expect(result).toEqual(toGameDetail(gameRow(testId(7))));
+    });
   });
 });

@@ -482,6 +482,18 @@
     "pick": "Wybierz",
     "picking": "Wybieranie…",
     "coverAlt": "Okładka: {title}",
+    "lookup": {
+      "heading": "Szukaj w bazie gier",
+      "hint": "Popraw tytuł powyżej i wyszukaj ponownie. Dopasowania na wybraną platformę są pokazywane jako pierwsze.",
+      "search": "Szukaj ponownie",
+      "searching": "Wyszukiwanie…",
+      "titleTooShort": "Wpisz co najmniej 2 znaki, aby wyszukać.",
+      "results": "{count, plural, one {# dopasowanie} few {# dopasowania} many {# dopasowań} other {# dopasowania}} dla „{title}”. Wybierz jedno, aby dodać grę z jej danymi.",
+      "noMatches": "Nic nie znaleziono dla „{title}”. Popraw tytuł i wyszukaj ponownie albo uzupełnij dane poniżej i dodaj grę ręcznie.",
+      "error": {
+        "search": "Nie udało się połączyć z bazą gier. Spróbuj ponownie albo dodaj grę ręcznie."
+      }
+    },
     "error": {
       "retry": "Nie udało się ponowić tego zdjęcia. Sprawdź połączenie i spróbuj ponownie.",
       "dismissPhoto": "Nie udało się odrzucić tego zdjęcia. Sprawdź połączenie i spróbuj ponownie.",

@@ -482,6 +482,18 @@
     "pick": "Pick",
     "picking": "Picking…",
     "coverAlt": "Cover for {title}",
+    "lookup": {
+      "heading": "Search the game database",
+      "hint": "Correct the title above, then search again. Matches on the selected platform are listed first.",
+      "search": "Search again",
+      "searching": "Searching…",
+      "titleTooShort": "Enter at least 2 characters to search.",
+      "results": "{count, plural, one {# match} other {# matches}} for “{title}”. Pick one to add it with its details.",
+      "noMatches": "Nothing found for “{title}”. Fix the title and search again, or fill in the details below and add it manually.",
+      "error": {
+        "search": "We couldn’t reach the game database. Try again, or add the game manually."
+      }
+    },
     "error": {
       "retry": "We couldn’t retry this photo. Check your connection and try again.",
       "dismissPhoto": "We couldn’t dismiss this photo. Check your connection and try again.",

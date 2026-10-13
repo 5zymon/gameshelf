@@ -150,6 +150,19 @@ Each card shows:
   `POST /import-jobs/:id/unrecognized/:itemId/pick` with the candidate's
   `{ source, externalId }`. On success the item is removed from the list and
   the created game is reported (same "Added …" status as manual add);
+- **Search again** (inside the **Add manually** form): a `type="button"`
+  **Search again** button searches with the form's current title via
+  `GET /import-jobs/:id/unrecognized/:itemId/search?q=&platformId=` (the
+  form's selected platform is sent; matches on it are listed first). Results
+  are a candidate list (cover, title, year, platforms, **Pick**); **Pick**
+  calls `POST …/pick` with `{ source, externalId, query, platformId }` — the
+  query and platform the list was searched with, not the live form values, so
+  editing the form after a search cannot pick against a ranking the user never
+  saw. A sent `platformId` becomes the game's platform (`platformUnverified`
+  false); without one the photo/catalog resolution applies. With no match, the
+  inline status reads "Nothing found for …" and the manual fields plus **Add
+  to catalog** keep working (the manual path remains the fallback). A query
+  below 2 characters disables the button and shows the minimum-length hint;
 - **Add manually**: a disclosure that mounts the shared `ManualAddForm` inline,
   prefilled with the item's `rawTitle` and the platform resolved by
   `matchPlatformId` (case-insensitive match on platform name or slug; unknown →
@@ -216,10 +229,17 @@ aria-live="polite"` for the post-save and loading messages.
 'dismissed' }`), `PATCH /import-jobs/:id/unrecognized/:itemId` (`{ dismissed:
 true }`), and `POST /import-jobs/:id/retry` — see [Import Jobs
   API](/import-jobs-api.md).
+- Flagged-item re-search and pick are the two newer endpoints:
+  `GET /import-jobs/:id/unrecognized/:itemId/search?q=&platformId=` returns the
+  ranked candidates (platform first), and
+  `POST /import-jobs/:id/unrecognized/:itemId/pick` accepts the optional
+  re-search `query` and user-confirmed `platformId` — see
+  [Import Jobs API](/import-jobs-api.md).
 - `paused` / `pauseReason` / `pauseSource` and `POST /import-jobs/resume`:
   [Queue Pause on Configuration Error](/queue-pause-on-config-error.md).
 
-No API or contract change was required for this ticket.
+No API or contract change was required for the progress view itself; the
+flagged-item re-search endpoints above are a later addition.
 
 # Manual acceptance script
 
@@ -258,6 +278,18 @@ npm run dev               # API :3001, web :3000
 10. **Paused focus refetch.** While paused, focus another window and return;
     expect one refetch (not a 2 s storm).
 11. **No CSP violations.** The console shows no CSP errors from the view.
+12. **Re-search and pick.** With real IGDB credentials, trigger a no-match
+    flagged item (or seed `raw_title='Filary Ziemi'`, `raw_platform='PC'` as
+    below). Open **Add manually**, change the title to "The Pillars of the
+    Earth", press **Search again**, then **Pick** on a result. Expect the item
+    to disappear, the status `Added “…”`, and the created game (`/games/<id>`)
+    to have a cover and IGDB metadata. Matches on the selected platform are
+    listed first.
+13. **Nothing found.** Search `zzzz qqqq`: the inline text reads "Nothing found
+    for …" and **Add to catalog** still saves a MANUAL game with the form's
+    fields.
+14. **Only the app is called.** In DevTools Network, the browser calls only
+    `/api/import-jobs/...` (`…/search`, `…/pick`); it never calls IGDB directly.
 
 ## Deterministic seed (no LLM/IGDB needed)
 
@@ -312,8 +344,6 @@ Open `http://localhost:3000/import/progress/qa-attention` and verify:
 
 - Blocking uploads while the queue is paused.
 - A frontend unit/integration test runner (the pure helpers are ready for one).
-- External database search inside the review form (the inline `ManualAddForm` is
-  typed-only, like `/games/new`).
 - Un-dismissing a photo or item — dismissal is one-way in the backend.
 - A compact variant of the inline manual-add widget (the full form is mounted
   inline, one item at a time).
