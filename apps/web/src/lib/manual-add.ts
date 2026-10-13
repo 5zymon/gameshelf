@@ -1,5 +1,6 @@
 import type { TranslatorFor } from '@/i18n/translate';
 import type { CreateGameRequest } from '@/lib/api';
+import { isUuidV7 } from '@/lib/uuid';
 
 export interface ManualAddDraft {
   title: string;
@@ -68,12 +69,8 @@ export function buildCreateRequest(
   if (title === '') errors.title = t('error.titleRequired');
   else if (title.length > MAX_TEXT) errors.title = t('error.titleMax');
 
-  const platformId = Number(draft.platformId);
-  if (
-    draft.platformId.trim() === '' ||
-    !Number.isInteger(platformId) ||
-    platformId < 1
-  ) {
+  const platformId = draft.platformId.trim();
+  if (!isUuidV7(platformId)) {
     errors.platformId = t('error.choosePlatform');
   }
 

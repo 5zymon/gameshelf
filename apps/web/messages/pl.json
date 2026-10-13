@@ -179,7 +179,7 @@
     "genre": "Gatunek",
     "clearAll": "Wyczyść wszystko",
     "removeFilter": "Usuń filtr {label}",
-    "platformFallback": "Platforma #{id}",
+    "platformFallback": "Nieznana platforma",
     "chip": {
       "search": "Szukaj: „{q}”",
       "platform": "Platforma: {name}",

@@ -17,7 +17,7 @@ export function GameCard({
   return (
     <li className="group min-w-0">
       <Link
-        href={`/games/${String(game.id)}`}
+        href={`/games/${game.id}`}
         aria-label={`${game.title} — ${game.platform.name}${rating === null ? '' : ` — ${rating}`}`}
         className="block overflow-hidden rounded-card border border-edge bg-surface shadow-[var(--shadow-card)] transition-[transform,box-shadow,border-color] duration-[160ms] ease-[ease] motion-reduce:transition-none motion-safe:hover:-translate-y-1 hover:border-accent-soft hover:shadow-[var(--shadow-card-hover)]"
       >

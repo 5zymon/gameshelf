@@ -179,7 +179,7 @@
     "genre": "Genre",
     "clearAll": "Clear all",
     "removeFilter": "Remove {label} filter",
-    "platformFallback": "Platform #{id}",
+    "platformFallback": "Unknown platform",
     "chip": {
       "search": "Search: “{q}”",
       "platform": "Platform: {name}",

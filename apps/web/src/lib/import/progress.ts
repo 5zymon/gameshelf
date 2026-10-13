@@ -94,12 +94,12 @@ export function batchCounts(
 }
 
 /**
- * Photos ordered by ascending id. The API stores no original filename and
- * `photoRef` is opaque, so the stable id order is what "Photo 1, Photo 2 …"
- * means.
+ * Photos ordered by ascending id (UUIDv7 = upload order). The API stores no
+ * original filename and `photoRef` is opaque, so the stable id order is what
+ * "Photo 1, Photo 2 …" means.
  */
 export function sortPhotos(items: readonly ImportJob[]): ImportJob[] {
-  return [...items].sort((a, b) => a.id - b.id);
+  return [...items].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
 }
 
 export interface PauseCopy {
@@ -195,5 +195,5 @@ export function matchPlatformId(
     (p) =>
       p.name.trim().toLowerCase() === target || p.slug.toLowerCase() === target,
   );
-  return match === undefined ? '' : String(match.id);
+  return match === undefined ? '' : match.id;
 }

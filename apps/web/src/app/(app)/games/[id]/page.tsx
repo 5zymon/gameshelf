@@ -3,18 +3,10 @@ import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { requireUser } from '@/lib/auth';
 import { getGame, getPlatforms } from '@/lib/api/server';
+import { isUuidV7 } from '@/lib/uuid';
 import { GameDetailView } from '@/components/game-detail-view';
 
 export const dynamic = 'force-dynamic';
-
-/** Postgres `Int` upper bound; larger ids cannot exist and must 404, not 500. */
-const MAX_GAME_ID = 2147483647;
-
-function parseId(raw: string): number | null {
-  if (!/^\d+$/.test(raw)) return null;
-  const value = Number(raw);
-  return Number.isSafeInteger(value) && value <= MAX_GAME_ID ? value : null;
-}
 
 export default async function GameDetailPage({
   params,
@@ -23,12 +15,9 @@ export default async function GameDetailPage({
 }): Promise<React.ReactElement> {
   await requireUser();
   const { id } = await params;
-  const gameId = parseId(id);
-  if (gameId === null || gameId < 1) notFound();
-  const [game, platforms] = await Promise.all([
-    getGame(gameId),
-    getPlatforms(),
-  ]);
+  // A malformed id cannot exist, so it is a 404 page (the API would 400 it).
+  if (!isUuidV7(id)) notFound();
+  const [game, platforms] = await Promise.all([getGame(id), getPlatforms()]);
   if (game === null) notFound();
   const t = await getTranslations('common');
   return (

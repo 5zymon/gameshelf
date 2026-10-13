@@ -50,7 +50,7 @@ export function ImportAttentionReview({
 }: {
   photos: readonly ImportJob[];
   platforms: GamePlatform[];
-  photoIndex: ReadonlyMap<number, number>;
+  photoIndex: ReadonlyMap<string, number>;
   onChanged: () => Promise<void>;
 }): React.ReactElement | null {
   const t = useTranslations('importAttention');
@@ -104,9 +104,9 @@ function AttentionCard({
   const [items, setItems] = useState<UnrecognizedItem[] | null>(null);
   const [itemsError, setItemsError] = useState<string | null>(null);
   const [itemsReloadKey, setItemsReloadKey] = useState(0);
-  const [itemBusyId, setItemBusyId] = useState<number | null>(null);
-  const [addItemId, setAddItemId] = useState<number | null>(null);
-  const [candidateItemId, setCandidateItemId] = useState<number | null>(null);
+  const [itemBusyId, setItemBusyId] = useState<string | null>(null);
+  const [addItemId, setAddItemId] = useState<string | null>(null);
+  const [candidateItemId, setCandidateItemId] = useState<string | null>(null);
   const [pickingCandidateKey, setPickingCandidateKey] = useState<string | null>(
     null,
   );
@@ -117,7 +117,7 @@ function AttentionCard({
   const [status, setStatus] = useState<string | null>(null);
   const failed = photo.status === 'failed';
 
-  const idBase = `attention-${String(photo.id)}`;
+  const idBase = `attention-${photo.id}`;
   const cancelRef = useRef<HTMLButtonElement>(null);
   const dismissTriggerRef = useRef<HTMLButtonElement>(null);
   const restoreFocusRef = useRef(false);

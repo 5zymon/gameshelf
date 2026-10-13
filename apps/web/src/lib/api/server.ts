@@ -58,7 +58,7 @@ export async function getGames(
 }
 
 /** 404 → null (route calls `notFound()`); other errors propagate. */
-export async function getGame(id: number): Promise<GameDetail | null> {
+export async function getGame(id: string): Promise<GameDetail | null> {
   try {
     return await api.games.get(id);
   } catch (error) {

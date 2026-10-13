@@ -11,6 +11,7 @@ import {
   type UpdateGameRequest,
 } from '@/lib/api';
 import { api } from '@/lib/api/browser';
+import { isUuidV7 } from '@/lib/uuid';
 
 const FIELD =
   'w-full h-10 rounded-control border border-edge bg-field px-3 text-sm text-ink placeholder:text-muted outline-none focus:border-accent/55 focus:ring-[3px] focus:ring-accent/15 disabled:opacity-60';
@@ -38,7 +39,7 @@ type FieldErrors = Partial<
 function toDraft(game: GameDetail): Draft {
   return {
     title: game.title,
-    platformId: String(game.platformId),
+    platformId: game.platformId,
     edition: game.edition ?? '',
     releaseYear: game.releaseYear === null ? '' : String(game.releaseYear),
     publisher: game.publisher ?? '',
@@ -129,14 +130,12 @@ function buildDelta(
     delta.title = title;
   }
 
-  const platformId = Number(draft.platformId);
   if (
     draft.platformId !== '' &&
-    Number.isInteger(platformId) &&
-    platformId >= 1 &&
-    platformId !== game.platformId
+    isUuidV7(draft.platformId) &&
+    draft.platformId !== game.platformId
   ) {
-    delta.platformId = platformId;
+    delta.platformId = draft.platformId;
   }
 
   const edition = textDelta(draft.edition, game.edition);

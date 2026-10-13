@@ -44,7 +44,7 @@ export function PlatformMergeDialog({
   // the games where the list does not show them.
   const targets = platforms.filter((p) => p.id !== source.id && !p.hidden);
   const [targetId, setTargetId] = useState(() =>
-    targets[0] === undefined ? '' : String(targets[0].id),
+    targets[0] === undefined ? '' : targets[0].id,
   );
   const [preview, setPreview] = useState<Preview | null>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
@@ -52,7 +52,7 @@ export function PlatformMergeDialog({
   const [error, setError] = useState<string | null>(null);
   const [unavailable, setUnavailable] = useState(false);
 
-  const target = targets.find((p) => String(p.id) === targetId);
+  const target = targets.find((p) => p.id === targetId);
   const total = preview?.total ?? source.gameCount;
   const shownTitles =
     preview === null ? [] : preview.titles.slice(0, PREVIEW_TITLES);
