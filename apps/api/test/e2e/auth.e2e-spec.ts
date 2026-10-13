@@ -24,7 +24,7 @@ async function findSession(
   token: string,
 ): Promise<{
   expiresAt: Date;
-  userId: number;
+  userId: string;
   userAgent: string | null;
 } | null> {
   return prisma.session.findUnique({

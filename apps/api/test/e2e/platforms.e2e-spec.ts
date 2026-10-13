@@ -1,9 +1,10 @@
+import { MISSING_ID, UUID_V7_PATTERN } from '../helpers/ids';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 import { resetDatabase } from '../helpers/reset';
 import { seedGame, seedPlatform } from '../helpers/seed';
 
 interface PlatformBody {
-  id: number;
+  id: string;
   name: string;
   abbreviation: string | null;
   alternativeName: string | null;
@@ -86,7 +87,7 @@ describe('Platforms API (e2e)', () => {
       });
       await seedGame(test.prisma, { title: 'A', platformId: p.id });
 
-      const res = await test.request.get(`/platforms/${String(p.id)}`);
+      const res = await test.request.get(`/platforms/${p.id}`);
 
       expect(res.status).toBe(200);
       expect(res.body as PlatformBody).toEqual({
@@ -104,7 +105,7 @@ describe('Platforms API (e2e)', () => {
     });
 
     it('returns 404 for an unknown id', async () => {
-      const res = await test.request.get('/platforms/999999');
+      const res = await test.request.get(`/platforms/${MISSING_ID}`);
 
       expect(res.status).toBe(404);
     });
@@ -124,7 +125,7 @@ describe('Platforms API (e2e)', () => {
 
       expect(res.status).toBe(201);
       const body = res.body as PlatformBody;
-      expect(body.id).toBeGreaterThan(0);
+      expect(body.id).toMatch(UUID_V7_PATTERN);
       expect(body.name).toBe('PlayStation 5');
       expect(body.abbreviation).toBeNull();
       expect(body.alternativeName).toBeNull();
@@ -207,7 +208,7 @@ describe('Platforms API (e2e)', () => {
       });
 
       const res = await test.request
-        .patch(`/platforms/${String(p.id)}`)
+        .patch(`/platforms/${p.id}`)
         .send({ name: 'PlayStation 5 Pro' });
 
       expect(res.status).toBe(200);
@@ -221,7 +222,7 @@ describe('Platforms API (e2e)', () => {
       await seedPlatform(test.prisma, { name: 'PlayStation 5', slug: 'ps5' });
 
       const res = await test.request
-        .patch(`/platforms/${String(a.id)}`)
+        .patch(`/platforms/${a.id}`)
         .send({ name: 'PlayStation 5' });
 
       expect(res.status).toBe(409);
@@ -238,7 +239,7 @@ describe('Platforms API (e2e)', () => {
         slug: 'ps5',
       });
 
-      const set = await test.request.patch(`/platforms/${String(p.id)}`).send({
+      const set = await test.request.patch(`/platforms/${p.id}`).send({
         name: 'PlayStation 5',
         abbreviation: 'PS5',
         alternativeName: 'PS5',
@@ -250,14 +251,12 @@ describe('Platforms API (e2e)', () => {
       expect(body.alternativeName).toBe('PS5');
       expect(body.igdbId).toBe(130);
 
-      const clear = await test.request
-        .patch(`/platforms/${String(p.id)}`)
-        .send({
-          name: 'PlayStation 5',
-          abbreviation: null,
-          alternativeName: null,
-          igdbId: null,
-        });
+      const clear = await test.request.patch(`/platforms/${p.id}`).send({
+        name: 'PlayStation 5',
+        abbreviation: null,
+        alternativeName: null,
+        igdbId: null,
+      });
       expect(clear.status).toBe(200);
       body = clear.body as PlatformBody;
       expect(body.abbreviation).toBeNull();
@@ -273,13 +272,13 @@ describe('Platforms API (e2e)', () => {
       });
 
       const hide = await test.request
-        .patch(`/platforms/${String(p.id)}`)
+        .patch(`/platforms/${p.id}`)
         .send({ name: 'PC', hidden: true });
       expect(hide.status).toBe(200);
       expect((hide.body as PlatformBody).hidden).toBe(true);
 
       const show = await test.request
-        .patch(`/platforms/${String(p.id)}`)
+        .patch(`/platforms/${p.id}`)
         .send({ name: 'PC', hidden: false });
       expect(show.status).toBe(200);
       expect((show.body as PlatformBody).hidden).toBe(false);
@@ -287,7 +286,7 @@ describe('Platforms API (e2e)', () => {
 
     it('returns 404 for an unknown platform', async () => {
       const res = await test.request
-        .patch('/platforms/999999')
+        .patch(`/platforms/${MISSING_ID}`)
         .send({ name: 'New' });
 
       expect(res.status).toBe(404);
@@ -309,7 +308,9 @@ describe('Platforms API (e2e)', () => {
       ['non-whitelisted field', { name: 'x', bogus: 1 }],
     ])('rejects %s with 400', async (_name, body) => {
       // The blank-name check runs before the 404 lookup, so no platform is needed.
-      const res = await test.request.patch('/platforms/999999').send(body);
+      const res = await test.request
+        .patch(`/platforms/${MISSING_ID}`)
+        .send(body);
 
       expect(res.status).toBe(400);
     });
@@ -323,7 +324,7 @@ describe('Platforms API (e2e)', () => {
         addedByImport: true,
       });
 
-      const res = await test.request.post(`/platforms/${String(p.id)}/confirm`);
+      const res = await test.request.post(`/platforms/${p.id}/confirm`);
 
       expect(res.status).toBe(200);
       const body = res.body as PlatformBody;
@@ -332,7 +333,7 @@ describe('Platforms API (e2e)', () => {
     });
 
     it('returns 404 for an unknown platform', async () => {
-      const res = await test.request.post('/platforms/999999/confirm');
+      const res = await test.request.post(`/platforms/${MISSING_ID}/confirm`);
       expect(res.status).toBe(404);
     });
   });
@@ -352,7 +353,7 @@ describe('Platforms API (e2e)', () => {
       await seedGame(test.prisma, { title: 'B', platformId: source.id });
 
       const res = await test.request
-        .post(`/platforms/${String(source.id)}/merge`)
+        .post(`/platforms/${source.id}/merge`)
         .send({ targetId: target.id });
 
       expect(res.status).toBe(200);
@@ -360,7 +361,7 @@ describe('Platforms API (e2e)', () => {
       expect(body.id).toBe(target.id);
       expect(body.gameCount).toBe(2);
 
-      const gone = await test.request.get(`/platforms/${String(source.id)}`);
+      const gone = await test.request.get(`/platforms/${source.id}`);
       expect(gone.status).toBe(404);
 
       const aliases = await test.prisma.platformAlias.findMany({
@@ -373,7 +374,7 @@ describe('Platforms API (e2e)', () => {
       const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
 
       const res = await test.request
-        .post(`/platforms/${String(p.id)}/merge`)
+        .post(`/platforms/${p.id}/merge`)
         .send({ targetId: p.id });
 
       expect(res.status).toBe(400);
@@ -384,13 +385,13 @@ describe('Platforms API (e2e)', () => {
       await seedPlatform(test.prisma, { name: 'PS5', slug: 'ps5' });
 
       const noSource = await test.request
-        .post('/platforms/999999/merge')
+        .post(`/platforms/${MISSING_ID}/merge`)
         .send({ targetId: p.id });
       expect(noSource.status).toBe(404);
 
       const noTarget = await test.request
-        .post(`/platforms/${String(p.id)}/merge`)
-        .send({ targetId: 999999 });
+        .post(`/platforms/${p.id}/merge`)
+        .send({ targetId: MISSING_ID });
       expect(noTarget.status).toBe(404);
     });
 
@@ -398,12 +399,12 @@ describe('Platforms API (e2e)', () => {
       const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
 
       const missing = await test.request
-        .post(`/platforms/${String(p.id)}/merge`)
+        .post(`/platforms/${p.id}/merge`)
         .send({});
       expect(missing.status).toBe(400);
 
       const invalid = await test.request
-        .post(`/platforms/${String(p.id)}/merge`)
+        .post(`/platforms/${p.id}/merge`)
         .send({ targetId: 0 });
       expect(invalid.status).toBe(400);
     });
@@ -413,10 +414,10 @@ describe('Platforms API (e2e)', () => {
     it('deletes a custom platform without games (204) and it is gone afterwards', async () => {
       const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
 
-      const del = await test.request.delete(`/platforms/${String(p.id)}`);
+      const del = await test.request.delete(`/platforms/${p.id}`);
       expect(del.status).toBe(204);
 
-      const get = await test.request.get(`/platforms/${String(p.id)}`);
+      const get = await test.request.get(`/platforms/${p.id}`);
       expect(get.status).toBe(404);
     });
 
@@ -427,10 +428,10 @@ describe('Platforms API (e2e)', () => {
         igdbId: 6,
       });
 
-      const del = await test.request.delete(`/platforms/${String(p.id)}`);
+      const del = await test.request.delete(`/platforms/${p.id}`);
       expect(del.status).toBe(204);
 
-      const get = await test.request.get(`/platforms/${String(p.id)}`);
+      const get = await test.request.get(`/platforms/${p.id}`);
       expect(get.status).toBe(200);
       const body = get.body as PlatformBody;
       expect(body.hidden).toBe(true);
@@ -442,26 +443,44 @@ describe('Platforms API (e2e)', () => {
       await seedGame(test.prisma, { title: 'A', platformId: p.id });
       await seedGame(test.prisma, { title: 'B', platformId: p.id });
 
-      const res = await test.request.delete(`/platforms/${String(p.id)}`);
+      const res = await test.request.delete(`/platforms/${p.id}`);
 
       expect(res.status).toBe(409);
       expect(res.body).toEqual({
         statusCode: 409,
         message:
-          `Platform with id ${String(p.id)} has 2 game(s); ` +
+          `Platform with id ${p.id} has 2 game(s); ` +
           'reassign or delete them before deleting the platform',
         error: 'Conflict',
       });
     });
 
     it('returns 404 for an unknown platform', async () => {
-      const res = await test.request.delete('/platforms/999999');
+      const res = await test.request.delete(`/platforms/${MISSING_ID}`);
 
       expect(res.status).toBe(404);
     });
 
     it.each(['abc', '0'])('returns 400 for id "%s"', async (id) => {
       const res = await test.request.delete(`/platforms/${id}`);
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('id validation', () => {
+    it('rejects a non-UUID platform id with 400', async () => {
+      const res = await test.request.get('/platforms/not-a-uuid');
+
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects a numeric merge targetId with 400', async () => {
+      const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+
+      const res = await test.request
+        .post(`/platforms/${p.id}/merge`)
+        .send({ targetId: 5 });
 
       expect(res.status).toBe(400);
     });

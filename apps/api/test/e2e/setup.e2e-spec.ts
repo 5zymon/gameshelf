@@ -1,6 +1,7 @@
 import type { Server } from 'node:http';
 import request from 'supertest';
 import { SETUP_COMPLETED_MESSAGE } from '../../src/auth/users.service';
+import { UUID_V7_PATTERN } from '../helpers/ids';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 import { resetDatabase } from '../helpers/reset';
 
@@ -11,7 +12,7 @@ interface ErrorBody {
 }
 
 interface SetupBody {
-  user: { id: number; email: string; createdAt: string };
+  user: { id: string; email: string; createdAt: string };
 }
 
 describe('First-run setup API (e2e)', () => {
@@ -50,7 +51,7 @@ describe('First-run setup API (e2e)', () => {
     const body = res.body as SetupBody;
     expect(body.user.email).toBe('player@example.com');
     expect(body.user).not.toHaveProperty('passwordHash');
-    expect(body.user.id).toBeGreaterThan(0);
+    expect(body.user.id).toMatch(UUID_V7_PATTERN);
     await expect(test.prisma.user.count()).resolves.toBe(1);
 
     const status = await request(server()).get('/setup/status');

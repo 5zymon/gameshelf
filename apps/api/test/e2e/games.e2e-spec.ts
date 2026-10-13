@@ -3,6 +3,7 @@ import {
   CoverHttpClient,
   type CoverHttpResponse,
 } from '../../src/covers/cover-http.client';
+import { MISSING_ID, UUID_V7_PATTERN, testId } from '../helpers/ids';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 import { resetDatabase } from '../helpers/reset';
 import { seedGame, seedPlatform } from '../helpers/seed';
@@ -17,13 +18,13 @@ const EXTERNAL_COVER =
   'https://images.igdb.com/igdb/image/upload/t_thumb/hk.jpg';
 
 interface PlatformRef {
-  id: number;
+  id: string;
   name: string;
   slug: string;
 }
 
 interface GameListItem {
-  id: number;
+  id: string;
   title: string;
   edition: string | null;
   coverUrl: string | null;
@@ -33,7 +34,7 @@ interface GameListItem {
 }
 
 interface GameDetail extends GameListItem {
-  platformId: number;
+  platformId: string;
   releaseYear: number | null;
   publisher: string | null;
   genre: string | null;
@@ -203,7 +204,7 @@ describe('Games API (e2e)', () => {
 
       // Literal query string — do not rely on superagent's array serialisation.
       const union = await test.request.get(
-        `/games?platformId=${String(pc.id)}&platformId=${String(ps5.id)}&sort=title`,
+        `/games?platformId=${pc.id}&platformId=${ps5.id}&sort=title`,
       );
       expect(union.status).toBe(200);
       const unionBody = union.body as GamesListBody;
@@ -211,7 +212,7 @@ describe('Games API (e2e)', () => {
       expect(unionBody.meta.total).toBe(2);
 
       const repeated = await test.request.get(
-        `/games?platformId=${String(pc.id)}&platformId=${String(pc.id)}`,
+        `/games?platformId=${pc.id}&platformId=${pc.id}`,
       );
       expect(repeated.status).toBe(200);
       const repeatedBody = repeated.body as GamesListBody;
@@ -229,7 +230,7 @@ describe('Games API (e2e)', () => {
       await seedGame(test.prisma, { title: 'On PS5', platformId: ps5.id });
 
       const res = await test.request.get(
-        `/games?platformId=${String(pc.id)}&platformId=999999`,
+        `/games?platformId=${pc.id}&platformId=${MISSING_ID}`,
       );
       expect(res.status).toBe(200);
       const body = res.body as GamesListBody;
@@ -397,12 +398,10 @@ describe('Games API (e2e)', () => {
       'limit=0',
       'limit=101',
       'limit=abc',
-      'platformId=0',
-      'platformId=1&platformId=0',
-      'platformId=1&platformId=abc',
-      'platformId=2147483648',
+      'platformId=abc',
+      'platformId=6f1c2e44-3b0a-4c2e-9d1f-0a1b2c3d4e5f',
       'platformId[]=1',
-      Array.from({ length: 101 }, (_, i) => `platformId=${String(i + 1)}`).join(
+      Array.from({ length: 101 }, (_, i) => `platformId=${testId(i + 1)}`).join(
         '&',
       ),
       'year=999',
@@ -441,7 +440,7 @@ describe('Games API (e2e)', () => {
         coverUrl: servedCover(EXTERNAL_COVER),
       });
 
-      const res = await test.request.get(`/games/${String(game.id)}`);
+      const res = await test.request.get(`/games/${game.id}`);
 
       expect(res.status).toBe(200);
       const body = res.body as GameDetail;
@@ -471,7 +470,7 @@ describe('Games API (e2e)', () => {
     });
 
     it('returns 404 for an unknown id', async () => {
-      const res = await test.request.get('/games/999999');
+      const res = await test.request.get(`/games/${MISSING_ID}`);
 
       expect(res.status).toBe(404);
     });
@@ -493,7 +492,7 @@ describe('Games API (e2e)', () => {
 
       expect(res.status).toBe(201);
       const body = res.body as GameDetail;
-      expect(body.id).toBeGreaterThan(0);
+      expect(body.id).toMatch(UUID_V7_PATTERN);
       expect(body.title).toBe('Hollow Knight');
       expect(body.platformId).toBe(p.id);
       expect(body.edition).toBeNull();
@@ -592,12 +591,12 @@ describe('Games API (e2e)', () => {
     it('rejects an unknown platformId with 400', async () => {
       const res = await test.request
         .post('/games')
-        .send({ title: 'Hollow Knight', platformId: 999999 });
+        .send({ title: 'Hollow Knight', platformId: MISSING_ID });
 
       expect(res.status).toBe(400);
       expect(res.body).toEqual({
         statusCode: 400,
-        message: 'Platform with id 999999 does not exist',
+        message: `Platform with id ${MISSING_ID} does not exist`,
         error: 'Bad Request',
       });
     });
@@ -660,7 +659,7 @@ describe('Games API (e2e)', () => {
       });
 
       const res = await test.request
-        .patch(`/games/${String(game.id)}`)
+        .patch(`/games/${game.id}`)
         .send({ title: 'New Title' });
 
       expect(res.status).toBe(200);
@@ -679,7 +678,7 @@ describe('Games API (e2e)', () => {
       });
 
       const res = await test.request
-        .patch(`/games/${String(game.id)}`)
+        .patch(`/games/${game.id}`)
         .send({ edition: null, releaseYear: null });
 
       expect(res.status).toBe(200);
@@ -700,7 +699,7 @@ describe('Games API (e2e)', () => {
       });
 
       const res = await test.request
-        .patch(`/games/${String(game.id)}`)
+        .patch(`/games/${game.id}`)
         .send({ platformId: ps5.id });
 
       expect(res.status).toBe(200);
@@ -713,9 +712,9 @@ describe('Games API (e2e)', () => {
       });
 
       // The per-platform counts follow the reassignment (req 3, §5 Platforms).
-      const from = await test.request.get(`/platforms/${String(pc.id)}`);
+      const from = await test.request.get(`/platforms/${pc.id}`);
       expect((from.body as { gameCount: number }).gameCount).toBe(0);
-      const to = await test.request.get(`/platforms/${String(ps5.id)}`);
+      const to = await test.request.get(`/platforms/${ps5.id}`);
       expect((to.body as { gameCount: number }).gameCount).toBe(1);
     });
 
@@ -737,7 +736,7 @@ describe('Games API (e2e)', () => {
       });
 
       const res = await test.request
-        .patch(`/games/${String(game.id)}`)
+        .patch(`/games/${game.id}`)
         .send({ coverUrl: updatedCover });
 
       expect(res.status).toBe(200);
@@ -764,7 +763,7 @@ describe('Games API (e2e)', () => {
       coverHttp.get.mockRejectedValue(new Error('network down'));
 
       const res = await test.request
-        .patch(`/games/${String(game.id)}`)
+        .patch(`/games/${game.id}`)
         .send({ coverUrl: failingCover });
 
       expect(res.status).toBe(200);
@@ -792,7 +791,7 @@ describe('Games API (e2e)', () => {
       });
 
       const res = await test.request
-        .patch(`/games/${String(game.id)}`)
+        .patch(`/games/${game.id}`)
         .send({ coverUrl: 'https://evil.example/cover.jpg' });
 
       expect(res.status).toBe(200);
@@ -816,7 +815,7 @@ describe('Games API (e2e)', () => {
       });
 
       const res = await test.request
-        .patch(`/games/${String(game.id)}`)
+        .patch(`/games/${game.id}`)
         .send({ coverUrl: local });
 
       expect(res.status).toBe(200);
@@ -836,9 +835,7 @@ describe('Games API (e2e)', () => {
         edition: 'GOTY',
       });
 
-      const res = await test.request
-        .patch(`/games/${String(game.id)}`)
-        .send({});
+      const res = await test.request.patch(`/games/${game.id}`).send({});
 
       expect(res.status).toBe(200);
       const body = res.body as GameDetail;
@@ -855,8 +852,8 @@ describe('Games API (e2e)', () => {
       });
 
       const res = await test.request
-        .patch(`/games/${String(game.id)}`)
-        .send({ platformId: 999999 });
+        .patch(`/games/${game.id}`)
+        .send({ platformId: MISSING_ID });
 
       expect(res.status).toBe(400);
     });
@@ -870,14 +867,14 @@ describe('Games API (e2e)', () => {
       ['non-whitelisted field', { bogus: 1 }],
     ])('rejects %s with 400', async (_name, body) => {
       // The null/blank checks run before the 404 lookup, so no game is needed.
-      const res = await test.request.patch('/games/999999').send(body);
+      const res = await test.request.patch(`/games/${MISSING_ID}`).send(body);
 
       expect(res.status).toBe(400);
     });
 
     it('returns 404 for an unknown game', async () => {
       const res = await test.request
-        .patch('/games/999999')
+        .patch(`/games/${MISSING_ID}`)
         .send({ title: 'New' });
 
       expect(res.status).toBe(404);
@@ -892,15 +889,15 @@ describe('Games API (e2e)', () => {
         platformId: p.id,
       });
 
-      const del = await test.request.delete(`/games/${String(game.id)}`);
+      const del = await test.request.delete(`/games/${game.id}`);
       expect(del.status).toBe(204);
 
-      const get = await test.request.get(`/games/${String(game.id)}`);
+      const get = await test.request.get(`/games/${game.id}`);
       expect(get.status).toBe(404);
     });
 
     it('returns 404 for an unknown game', async () => {
-      const res = await test.request.delete('/games/999999');
+      const res = await test.request.delete(`/games/${MISSING_ID}`);
 
       expect(res.status).toBe(404);
     });
@@ -909,6 +906,41 @@ describe('Games API (e2e)', () => {
       const res = await test.request.delete(`/games/${id}`);
 
       expect(res.status).toBe(400);
+    });
+  });
+
+  describe('id validation', () => {
+    it('rejects a non-UUID game id with 400', async () => {
+      const res = await test.request.get('/games/not-a-uuid');
+
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects a UUIDv4 game id with 400', async () => {
+      const res = await test.request.get(
+        '/games/6f1c2e44-3b0a-4c2e-9d1f-0a1b2c3d4e5f',
+      );
+
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 404 for an unknown UUIDv7 game id', async () => {
+      const res = await test.request.get(`/games/${MISSING_ID}`);
+
+      expect(res.status).toBe(404);
+    });
+
+    it('returns UUIDv7 ids for a created game and its platform', async () => {
+      const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+
+      const res = await test.request
+        .post('/games')
+        .send({ title: 'Hollow Knight', platformId: p.id });
+
+      expect(res.status).toBe(201);
+      const body = res.body as GameDetail;
+      expect(body.id).toMatch(UUID_V7_PATTERN);
+      expect(body.platform.id).toMatch(UUID_V7_PATTERN);
     });
   });
 });

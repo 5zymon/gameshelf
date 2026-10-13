@@ -374,7 +374,7 @@ describe('Photo import worker (e2e)', () => {
       const originalRelease = queueA.release.bind(queueA);
       jest
         .spyOn(queueA, 'release')
-        .mockImplementation(async (id: number): Promise<void> => {
+        .mockImplementation(async (id: string): Promise<void> => {
           await originalRelease(id);
           releaseDone();
         });

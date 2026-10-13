@@ -205,7 +205,7 @@ describe('Platforms sync (e2e)', () => {
 
     const resolved = await importJobs.resolvePlatformId([], 'PS5');
     expect(resolved).not.toBeNull();
-    expect(resolved?.platformId).toEqual(expect.any(Number));
+    expect(resolved?.platformId).toEqual(expect.any(String));
     expect(fetchPlatforms).not.toHaveBeenCalled();
   });
 

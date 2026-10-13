@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
 import { PHOTO_SWEEP_ABANDONED_REASON } from '../../src/import-jobs/photo-sweep.options';
 import { PhotoSweepService } from '../../src/import-jobs/photo-sweep.service';
+import { UUID_V7_PATTERN } from '../helpers/ids';
 import { NO_WORKER } from '../helpers/photo-import-queue';
 import { resetDatabase } from '../helpers/reset';
 import { createTestApp, type TestApp } from '../helpers/test-app';
@@ -61,7 +62,7 @@ describe('Photo sweep (e2e)', () => {
     photoRef: string | null;
     createdAt?: Date;
     completedAt?: Date | null;
-  }): Promise<number> {
+  }): Promise<string> {
     const row = await test.prisma.importJob.create({
       data: {
         status: data.status,
@@ -147,7 +148,7 @@ describe('Photo sweep (e2e)', () => {
     expect(row.status).toBe('failed');
     expect(row.photoRef).toBeNull();
 
-    const retry = await test.request.post(`/import-jobs/${String(id)}/retry`);
+    const retry = await test.request.post(`/import-jobs/${id}/retry`);
     expect(retry.status).toBe(409);
   });
 
@@ -181,7 +182,7 @@ describe('Photo sweep (e2e)', () => {
     });
 
     // The worker is off in this spec, so the re-enqueued row stays `queued`.
-    const retry = await test.request.post(`/import-jobs/${String(id)}/retry`);
+    const retry = await test.request.post(`/import-jobs/${id}/retry`);
     expect(retry.status).toBe(202);
 
     const queued = await test.prisma.importJob.findUniqueOrThrow({
@@ -244,6 +245,6 @@ describe('Photo sweep (e2e)', () => {
       const res = await test.request.get(path);
       expect(res.status).toBe(404);
     }
-    expect(id).toBeGreaterThan(0);
+    expect(id).toMatch(UUID_V7_PATTERN);
   });
 });

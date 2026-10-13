@@ -9,6 +9,7 @@ import { ImportJobsService } from '../../src/import-jobs/import-jobs.service';
 import { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
 import type { RecognizedItem } from '../../src/settings/vision/vision-provider';
 import { VisionService } from '../../src/settings/vision/vision.service';
+import { MISSING_ID } from '../helpers/ids';
 import { resetDatabase } from '../helpers/reset';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 
@@ -16,7 +17,7 @@ const E2E_PHOTO_DIR_SUFFIX = 'gameshelf-import-photos-e2e';
 const PLATFORM_IGDB_ID = 167;
 
 interface ImportJobDetailBody {
-  id: number;
+  id: string;
   status: string;
   recognizedCount: number;
   importedCount: number;
@@ -107,7 +108,7 @@ describe('Import retry (e2e)', () => {
   });
 
   /** Seeds a platform + photo and a partially-processed failed job. */
-  async function seedPartiallyProcessed(): Promise<number> {
+  async function seedPartiallyProcessed(): Promise<string> {
     const platform = await test.prisma.platform.create({
       data: {
         name: 'PlayStation 5',
@@ -176,9 +177,9 @@ describe('Import retry (e2e)', () => {
     return job.id;
   }
 
-  async function waitForTerminal(id: number): Promise<ImportJobDetailBody> {
+  async function waitForTerminal(id: string): Promise<ImportJobDetailBody> {
     for (let attempt = 0; attempt < 150; attempt += 1) {
-      const res = await test.request.get(`/import-jobs/${String(id)}`);
+      const res = await test.request.get(`/import-jobs/${id}`);
       const body = res.body as ImportJobDetailBody;
       if (
         ['done', 'needs_attention', 'failed', 'dismissed'].includes(body.status)
@@ -197,7 +198,7 @@ describe('Import retry (e2e)', () => {
       Promise.resolve({ kind: 'matched', candidate: candidate(item.title) }),
     );
 
-    const retry = await test.request.post(`/import-jobs/${String(id)}/retry`);
+    const retry = await test.request.post(`/import-jobs/${id}/retry`);
     expect(retry.status).toBe(202);
     expect(retry.body as ImportJobDetailBody).toMatchObject({ id });
 
@@ -227,7 +228,7 @@ describe('Import retry (e2e)', () => {
   it('refuses to retry a job that is not failed, without enqueueing', async () => {
     const job = await importJobs.createJob({ photoRef: 'p.png' });
 
-    const res = await test.request.post(`/import-jobs/${String(job.id)}/retry`);
+    const res = await test.request.post(`/import-jobs/${job.id}/retry`);
 
     expect(res.status).toBe(409);
     const row = await test.prisma.importJob.findUniqueOrThrow({
@@ -239,7 +240,7 @@ describe('Import retry (e2e)', () => {
   });
 
   it('returns 404 for an unknown job', async () => {
-    const res = await test.request.post('/import-jobs/999999/retry');
+    const res = await test.request.post(`/import-jobs/${MISSING_ID}/retry`);
 
     expect(res.status).toBe(404);
   });
@@ -248,7 +249,7 @@ describe('Import retry (e2e)', () => {
 describe('Import job durability across an application restart (e2e)', () => {
   it('a failed job, its reason and counts survive a restart', async () => {
     const first = await createTestApp();
-    let jobId: number;
+    let jobId: string;
     try {
       await resetDatabase(first.prisma);
       const job = await first.prisma.importJob.create({
@@ -270,7 +271,7 @@ describe('Import job durability across an application restart (e2e)', () => {
     const second = await createTestApp();
     try {
       await second.login();
-      const res = await second.request.get(`/import-jobs/${String(jobId)}`);
+      const res = await second.request.get(`/import-jobs/${jobId}`);
 
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({

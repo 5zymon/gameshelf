@@ -138,7 +138,7 @@ describe('Photo import pipeline (e2e)', () => {
 
   /** Seeds a Platform, writes a photo, and creates a queued import job. */
   async function seedJob(declaredCount: number | null = null): Promise<{
-    id: number;
+    id: string;
     photoRef: string;
   }> {
     await test.prisma.platform.create({
@@ -627,7 +627,7 @@ describe('Photo import pipeline (e2e)', () => {
       expect(job.recognizedCount).toBe(12);
 
       await test.login();
-      const res = await test.request.get(`/import-jobs/${String(id)}`);
+      const res = await test.request.get(`/import-jobs/${id}`);
       expect(res.status).toBe(200);
       const body = res.body as {
         declaredCountMismatch: boolean;
@@ -705,7 +705,7 @@ describe('Photo import pipeline (e2e)', () => {
       expect(job.declaredCount).toBeNull();
 
       await test.login();
-      const res = await test.request.get(`/import-jobs/${String(id)}`);
+      const res = await test.request.get(`/import-jobs/${id}`);
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({
         status: 'done',
@@ -744,7 +744,7 @@ describe('Photo import pipeline (e2e)', () => {
       expect(job.recognizedCount).toBe(2);
 
       await test.login();
-      const res = await test.request.get(`/import-jobs/${String(id)}`);
+      const res = await test.request.get(`/import-jobs/${id}`);
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({
         status: 'done',

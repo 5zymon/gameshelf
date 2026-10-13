@@ -40,7 +40,7 @@ describe('Cover recovery (e2e)', () => {
   let app: INestApplication;
   let coversDir: string;
   let coverHttp: { get: jest.Mock<Promise<CoverHttpResponse>, [string]> };
-  let platformId: number;
+  let platformId: string;
 
   beforeAll(async () => {
     COVER_BYTES = await sharp({

@@ -132,7 +132,7 @@ describe('Cover cache (e2e)', () => {
     clearCoversDir(coversDir);
   });
 
-  async function seedJob(): Promise<{ id: number; photoRef: string }> {
+  async function seedJob(): Promise<{ id: string; photoRef: string }> {
     await test.prisma.platform.create({
       data: {
         name: 'PlayStation 5',
@@ -260,7 +260,7 @@ describe('Cover cache (e2e)', () => {
     await expect(cache.readThumbnail(file)).resolves.not.toBeNull();
 
     await test.login();
-    const del = await test.request.delete(`/games/${String(game.id)}`);
+    const del = await test.request.delete(`/games/${game.id}`);
     expect(del.status).toBe(204);
 
     await expect(cache.has(file)).resolves.toBe(false);

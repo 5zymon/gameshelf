@@ -9,7 +9,7 @@ import { resetDatabase } from '../helpers/reset';
 import { seedPlatform } from '../helpers/seed';
 
 /** Narrows a resolved platform id for the test's DB assertions. */
-function mustId(resolved: ResolvedPlatform | null): number {
+function mustId(resolved: ResolvedPlatform | null): string {
   if (resolved === null) {
     throw new Error('expected a resolved platform');
   }
@@ -127,7 +127,7 @@ describe('Platform import creation (e2e)', () => {
       igdbId: 6,
       abbreviation: 'PC',
     });
-    expect(switchRow.id).toBeLessThan(pc.id);
+    expect(switchRow.id < pc.id).toBe(true);
 
     await expect(
       importJobs.resolvePlatformId(
