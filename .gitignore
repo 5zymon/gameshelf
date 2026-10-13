@@ -24,6 +24,8 @@ data/
 # Backups (logical MySQL dumps)
 backups/
 
+/plans/
+
 # Logs
 *.log
 npm-debug.log*
