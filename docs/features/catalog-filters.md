@@ -1,7 +1,7 @@
 ---
 type: Feature
 title: Catalog Filters & Search
-description: The URL-synced filter bar on `/` — platform, edition, year, publisher, genre, player count, and a debounced title search — with API-sourced options, active-filter chips, clear-all, and a no-results state.
+description: The URL-synced filter bar on `/` — debounced title search, single-select platform chips, a title/year sort select, and a collapsible advanced panel (edition, year, publisher, genre, player count) — with API-sourced options, active-filter chips, clear-all, and a no-results state.
 tags: [web, ui, catalog]
 status: draft
 generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T21:54:58Z }
@@ -17,46 +17,52 @@ The URL is the single source of truth: the server component awaits `searchParams
 
 Every filter is AND-combined server-side. Both the server parser and the client builder only ever emit the keys below, so an unknown or invalid param is dropped (`''`, non-numeric, out-of-range, or >255 characters) rather than sent — this is what keeps the endpoint from answering `400`.
 
-| Param         | Control                                 | Bounds / semantics                                 |
-| ------------- | --------------------------------------- | -------------------------------------------------- |
-| `q`           | Search titles (debounced, leading icon) | Case-insensitive partial title match, ≤255 ch      |
-| `platformId`  | Platform select (options from the API)  | Integer ≥1; unknown id → empty result, never `400` |
-| `edition`     | Edition select (options from the API)   | Exact match, ≤255 ch                               |
-| `year`        | Year text field                         | Integer 1000–2100                                  |
-| `publisher`   | Publisher text field                    | Exact match, ≤255 ch                               |
-| `genre`       | Genre text field                        | Exact match, ≤255 ch                               |
-| `playerCount` | Players text field                      | Integer 1–100                                      |
+| Param         | Control                                                        | Bounds / semantics                                                      |
+| ------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `q`           | Search titles (debounced, leading icon, `searchPlaceholder`)   | Case-insensitive partial title match, ≤255 ch                           |
+| `platformId`  | Platform chips (single-select, from `games.filters.platforms`) | Integer ≥1; unknown id → empty result, never `400`                      |
+| `edition`     | Edition select (options from the API)                          | Exact match, ≤255 ch                                                    |
+| `year`        | Year text field                                                | Integer 1000–2100                                                       |
+| `publisher`   | Publisher text field                                           | Exact match, ≤255 ch                                                    |
+| `genre`       | Genre text field                                               | Exact match, ≤255 ch                                                    |
+| `playerCount` | Players text field                                             | Integer 1–100                                                           |
+| `sort`        | Sort select (`sort.titleAsc`/…)                                | `title` \| `year`, default `title`; omitted from the URL at the default |
+| `order`       | Sort select (`sort.titleAsc`/…)                                | `asc` \| `desc`, default `asc`; omitted from the URL at the default     |
 
-`platformId`, `edition`, `year`, `publisher`, `genre`, `playerCount` and `q` are exactly the query layer's filter keys; `sort`/`order` exist in the client/contract but are not surfaced by this ticket.
+`platformId`, `edition`, `year`, `publisher`, `genre`, `playerCount` and `q` are exactly the query layer's filter keys. `sort`/`order` are surfaced by the sort select and validated against a `title`/`year` + `asc`/`desc` whitelist: any other value — including the API-supported `platform`/`createdAt` fields — is dropped on parse, along with a lone `order`. The default pair (`title` + `asc`) is never written to the URL, so the default-bar href stays `/`.
 
-The **Search titles** field renders a decorative leading magnifier icon (`aria-hidden`, `pointer-events-none`, `text-faint`) and pads the input so text never overlaps it.
+The **Search titles** field renders a decorative leading magnifier icon (`aria-hidden`, `pointer-events-none`, `text-faint`) and pads the input so text never overlaps it. Its accessible name comes from a visually hidden `<label>` (`searchTitles`); the visible placeholder is `searchPlaceholder`.
 
 # Behaviour
 
-| Concern           | Behaviour                                                                                                                                                                                                                                     |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| URL is state      | Committed values come from `searchParams`; the bar pushes a new `/?…` URL. Reload, share, and browser back all reproduce the same filtered grid.                                                                                              |
-| Debounce          | All five text fields (`q`, `year`, `publisher`, `genre`, `playerCount`) share one 300 ms debounce, so a query is sent at most once per typing pause (not per keystroke). Enter flushes immediately.                                           |
-| Selects           | Platform and edition are native `<select>`s; options come from `games.filters.platforms` / `games.filters.editions` (global facets), so they stay populated even when the current result set is empty. Options are never hardcoded.           |
-| Active filters    | A chip row derived from the committed values shows every active filter; each chip's `×` removes that one filter and has a 24 px hit area with a visible focus outline (see [Catalog Loading, Error & Responsive States](/catalog-states.md)). |
-| Clear all         | A **Clear all** button resets to `/` (all filters removed, `page` dropped).                                                                                                                                                                   |
-| Page reset        | Every filter/search change drops `page`, so a filter starts a fresh result set; pagination then restores `page` while preserving the filters.                                                                                                 |
-| Filtered count    | The range line reads `Showing X–Y of N matching games` when any filter is active (N is `meta.total` of the filtered set).                                                                                                                     |
-| No results        | `meta.total === 0` with an active filter renders the `NoResults` state (message plus a **Clear all filters** link) **with the bar still visible**.                                                                                            |
-| Empty library     | `meta.total === 0` with no active filter keeps the existing `EmptyCatalog` entry state (add a game / import photos) and renders no bar.                                                                                                       |
-| Out-of-range page | A non-empty filtered set whose requested `page` has no items keeps the existing "That page has no games" message.                                                                                                                             |
-| Pending           | `useTransition` dims the bar (`aria-busy`, `opacity-60`) while the RSC payload is in flight; text inputs are not disabled.                                                                                                                    |
-| Back/forward      | Incoming URL values are reconciled per field so a back/forward navigation updates only the changed fields and never clobbers in-flight typing.                                                                                                |
+| Concern           | Behaviour                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| URL is state      | Committed values come from `searchParams`; the bar pushes a new `/?…` URL. Reload, share, and browser back all reproduce the same filtered grid.                                                                                                                                                                                                                                                                                      |
+| Debounce          | All five text fields (`q`, `year`, `publisher`, `genre`, `playerCount`) share one 300 ms debounce, so a query is sent at most once per typing pause (not per keystroke). Enter flushes immediately.                                                                                                                                                                                                                                   |
+| Chips             | The platform row shows **All** plus one chip per `games.filters.platforms` entry, in API order (name asc, platforms that have at least one game). Single-select: `aria-pressed` marks the active chip, clicking one writes `platformId` and drops `page`, **All** removes `platformId`, and clicking the active chip is a no-op. Chips `flex-wrap`, so every platform stays visible (no horizontal scroller).                         |
+| Sort              | Default Title A–Z. Release-year sorts put unknown years last (the API's `nulls: 'last'`). Sorting is **not** a filter: `hasActiveFilters` ignores `sort`/`order`, so sorting alone never shows the "matching games" line, never swaps `EmptyCatalog` for `NoResults`, and never shows the active-chip row. The chosen sort is kept across filter changes, **Clear all**, the no-results link and pagination.                          |
+| Advanced panel    | An **Advanced filters** disclosure (`aria-expanded` + `aria-controls="catalog-advanced"`, an inline panel — not a modal or drawer) holds edition, year, players, publisher and genre. It starts open when any advanced filter is active in the URL and the toggle shows a count badge of active advanced filters. Focus stays on the toggle when it opens (WAI-ARIA disclosure); the panel is the next DOM sibling, so Tab enters it. |
+| Selects           | The edition control is a native `<select>`; its options come from `games.filters.editions` (global facets), so it stays populated even when the current result set is empty. Options are never hardcoded. The platform control is the chip row (see **Chips**), with options from `games.filters.platforms`.                                                                                                                          |
+| Active filters    | A chip row derived from the committed values shows every active filter; each chip's `×` removes that one filter and has a 24 px hit area with a visible focus outline (see [Catalog Loading, Error & Responsive States](/catalog-states.md)). **Clear all** keeps the sort and clears every filter.                                                                                                                                   |
+| Page reset        | Every filter/search/sort change drops `page`, so a change starts a fresh result set; pagination then restores `page` while preserving the filters and the sort.                                                                                                                                                                                                                                                                       |
+| Filtered count    | The range line reads `Showing X–Y of N matching games` when any filter is active (N is `meta.total` of the filtered set).                                                                                                                                                                                                                                                                                                             |
+| No results        | `meta.total === 0` with an active filter renders the `NoResults` state (message plus a **Clear all filters** link that keeps the chosen sort) **with the bar still visible**.                                                                                                                                                                                                                                                         |
+| Empty library     | `meta.total === 0` with no active filter keeps the existing `EmptyCatalog` entry state (add a game / import photos) and renders no bar.                                                                                                                                                                                                                                                                                               |
+| Out-of-range page | A non-empty filtered set whose requested `page` has no items keeps the existing "That page has no games" message.                                                                                                                                                                                                                                                                                                                     |
+| Pending           | `useTransition` dims the bar (`aria-busy`, `opacity-60`) while the RSC payload is in flight; text inputs are not disabled.                                                                                                                                                                                                                                                                                                            |
+| Back/forward      | Incoming URL values are reconciled per field so a back/forward navigation updates only the changed fields and never clobbers in-flight typing.                                                                                                                                                                                                                                                                                        |
 
 # Components
 
-- `apps/web/src/lib/catalog-filters.ts` — server/client-shared pure helpers: `CatalogFilterValues`, `CatalogSearchParams`, `FILTER_KEYS`, `parseCatalogFilters` (whitelist + bounds), `hasActiveFilters`, `catalogHref` (builds `/?…` from valid values, always dropping `page`).
-- `apps/web/src/components/catalog-filter-bar.tsx` — the `'use client'` `CatalogFilterBar`: controls, 300 ms debounce, active-filter chips, and clear-all. Receives committed values and API options as props.
-- `apps/web/src/app/(app)/(catalog)/page.tsx` — parses filters, sends them to `getGames`, renders the bar between the header and the grid, chooses `EmptyCatalog` vs `NoResults`, and renders the filtered range line.
+- `apps/web/src/lib/catalog-filters.ts` — server/client-shared pure helpers: `CatalogFilterValues`, `CatalogSearchParams`, `FILTER_KEYS`, `parseCatalogFilters` (whitelist + bounds, including the `sort`/`order` pair), `hasActiveFilters` (ignores sort), `SORT_OPTIONS`, `DEFAULT_SORT`, `sortOptionOf`, `sortOverrides`, and `catalogHref` (builds `/?…` from valid values, always dropping `page`).
+- `apps/web/src/components/catalog-filter-bar.tsx` — the `'use client'` `CatalogFilterBar`: search field, single-select platform chips, sort select, the collapsible advanced panel, 300 ms debounce, active-filter chips, and clear-all. Receives committed values and API options as props.
+- `apps/web/src/app/(app)/(catalog)/page.tsx` — parses filters, sends them to `getGames` with a `title`/`asc` default sort, renders the bar between the header and the grid, chooses `EmptyCatalog` vs `NoResults`, and renders the filtered range line.
 
 # Out of scope
 
-- Sort UI (`sort`/`order` exist in the query layer but are not requested by this ticket).
+- Multi-select platforms — the chips stay single-select, matching the singular `platformId`.
+- Persisting the advanced panel's open/closed state in the URL (it opens automatically when an advanced filter is active).
+- `platform` and `createdAt` sort options — API-supported but not surfaced in UI; hand-edited URLs fall back to the default.
 - Facet lists for the extended fields (year/publisher/genre/playerCount) — the contract exposes `platforms`/`editions` only, so those fields are free-text exact-match inputs.
 - Backend or contract changes (none needed) and any new facet endpoint.
 - Game detail links (ticket 5.4) and i18n (7.2).
@@ -65,11 +71,13 @@ The **Search titles** field renders a decorative leading magnifier icon (`aria-h
 
 1. Open `/?q=hollow`: the grid narrows to titles containing "hollow"; the header reads "Showing 1–N of M matching games"; the URL is shareable and a reload reproduces the result.
 2. Type in **Search titles** and pause: exactly one navigation happens per pause (≤1 push per 300 ms quiet period), and no request is fired per keystroke.
-3. Select a **Platform**: the grid narrows; the URL gains `platformId=<id>`; the platform options come from the API (spot-check against `GET /games` `filters.platforms`).
+3. **Platform chips**: the row shows **All** plus one chip per API platform in name order; clicking one narrows the grid and adds `platformId=<id>`; the active chip is `aria-pressed` and accent-filled; **All** removes `platformId`; spot-check the chips against `GET /games` `filters.platforms`.
 4. Combine a search with a platform, year, publisher, genre, and player count: the result is the AND of all of them.
-5. Chip row: every active filter has a chip; clicking a chip's `×` removes just that filter; **Clear all** returns to `/` with an empty bar.
+5. Chip row: every active filter has a chip; clicking a chip's `×` removes just that filter; **Clear all** clears every filter but keeps the sort.
 6. Browser **Back** after a filter change restores the previous filtered grid; **Forward** re-applies it.
-7. Filter to a term with no matches: **No games match these filters** appears with the bar still visible; **Clear all filters** resets the grid.
-8. With >24 matching games, **Next** preserves the filters and adds `page=2`; changing a filter resets to page 1.
+7. Filter to a term with no matches: **No games match these filters** appears with the bar still visible; **Clear all filters** resets the grid while keeping the sort.
+8. With >24 matching games, **Next** preserves the filters and the sort and adds `page=2`; changing a filter or the sort resets to page 1.
 9. With an empty library (no filters), the existing "Nothing on the shelf yet" entry state shows and no filter bar is rendered.
 10. The URL never contains an invalid/out-of-range value after using the controls (e.g. year `99999` or a blank text field), and the API never returns `400` from the bar.
+11. **Sort**: with no `sort` param the grid is Title A–Z; choosing **Title (Z-A)** writes `sort=title&order=desc`; **Release year (newest)** / **Release year (oldest)** order by year with unknown years last; the sort survives **Next**/**Prev**, a filter change, **Clear all** and the no-results **Clear all filters**.
+12. **Advanced panel**: the **Advanced filters** toggle opens/closes the inline panel (`aria-expanded`/`aria-controls="catalog-advanced"`); opening `/?genre=RPG` starts it open with a count badge; pressing Tab from the toggle enters the panel fields.

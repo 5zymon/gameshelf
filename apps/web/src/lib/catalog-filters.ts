@@ -1,6 +1,9 @@
-import type { ListGamesQuery } from '@/lib/api';
+import type { ListGamesQuery, SortDirection } from '@/lib/api';
 
-/** The 5.3 filter params, all supported by GET /games (ticket 1.3). */
+/** Sort fields the catalog UI exposes (the API also accepts platform/createdAt). */
+export type CatalogSortField = 'title' | 'year';
+
+/** The 5.3 filter params plus the catalog sort; all supported by GET /games. */
 export type CatalogFilterValues = Pick<
   ListGamesQuery,
   | 'platformId'
@@ -10,7 +13,20 @@ export type CatalogFilterValues = Pick<
   | 'genre'
   | 'playerCount'
   | 'q'
->;
+> & {
+  /** Both-or-neither; absent means DEFAULT_SORT. Never set to the default pair. */
+  sort?: CatalogSortField;
+  order?: SortDirection;
+};
+
+export const SORT_OPTIONS = [
+  'title-asc',
+  'title-desc',
+  'year-desc',
+  'year-asc',
+] as const;
+export type CatalogSortOption = (typeof SORT_OPTIONS)[number];
+export const DEFAULT_SORT = { sort: 'title', order: 'asc' } as const;
 
 export type CatalogSearchParams = Record<string, string | string[] | undefined>;
 
@@ -71,11 +87,39 @@ export function parseCatalogFilters(
   if (genre !== undefined) values.genre = genre;
   const q = text(firstValue(params.q));
   if (q !== undefined) values.q = q;
+  const sort = firstValue(params.sort);
+  if (sort === 'title' || sort === 'year') {
+    const order: SortDirection =
+      firstValue(params.order) === 'desc' ? 'desc' : 'asc';
+    if (!(sort === DEFAULT_SORT.sort && order === DEFAULT_SORT.order)) {
+      values.sort = sort;
+      values.order = order;
+    }
+  }
   return values;
 }
 
 export function hasActiveFilters(values: CatalogFilterValues): boolean {
   return FILTER_KEYS.some((key) => values[key] !== undefined);
+}
+
+/** Committed values → the select's option value. */
+export function sortOptionOf(
+  values: Pick<CatalogFilterValues, 'sort' | 'order'>,
+): CatalogSortOption {
+  const candidate = `${values.sort ?? 'title'}-${values.order ?? 'asc'}`;
+  return (SORT_OPTIONS as readonly string[]).includes(candidate)
+    ? (candidate as CatalogSortOption)
+    : 'title-asc';
+}
+
+/** Select option → URL overrides; the default clears both keys explicitly (undefined removes). */
+export function sortOverrides(
+  option: CatalogSortOption,
+): Pick<CatalogFilterValues, 'sort' | 'order'> {
+  if (option === 'title-asc') return { sort: undefined, order: undefined };
+  const [sort, order] = option.split('-');
+  return { sort: sort as CatalogSortField, order: order as SortDirection };
 }
 
 /** Builds `/?…` from valid values only; always drops `page` (a filter change starts a new result set). */
@@ -90,6 +134,8 @@ export function catalogHref(values: CatalogFilterValues): string {
   if (values.playerCount !== undefined)
     params.set('playerCount', String(values.playerCount));
   if (values.q !== undefined) params.set('q', values.q);
+  if (values.sort !== undefined) params.set('sort', values.sort);
+  if (values.order !== undefined) params.set('order', values.order);
   const qs = params.toString();
   return qs === '' ? '/' : `/?${qs}`;
 }

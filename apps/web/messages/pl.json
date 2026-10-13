@@ -159,8 +159,18 @@
   },
   "catalogFilters": {
     "searchTitles": "Szukaj tytułów",
-    "platform": "Platforma",
-    "allPlatforms": "Wszystkie platformy",
+    "searchPlaceholder": "Szukaj w swojej bibliotece",
+    "platformGroup": "Filtruj według platformy",
+    "allChip": "Wszystkie",
+    "sortLabel": "Sortuj według",
+    "sort": {
+      "titleAsc": "Tytuł (A-Z)",
+      "titleDesc": "Tytuł (Z-A)",
+      "yearDesc": "Rok wydania (najnowsze)",
+      "yearAsc": "Rok wydania (najstarsze)"
+    },
+    "advanced": "Filtry zaawansowane",
+    "advancedActive": "{count, plural, one {# aktywny} few {# aktywne} many {# aktywnych} other {# aktywnych}}",
     "edition": "Edycja",
     "allEditions": "Wszystkie edycje",
     "year": "Rok (1000–2100)",
