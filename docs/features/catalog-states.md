@@ -120,7 +120,7 @@ once.
 - Filter chips have a 24 px remove hit area with a visible focus outline (the
   shared `:focus-visible` outline).
 - The grid stays `grid-cols-2` at 375 px with no horizontal scroll.
-- The platform chip strip scrolls horizontally inside itself (see [Catalog Filters & Search](/catalog-filters.md)); the page never scrolls horizontally.
+- The platform chip strip scrolls horizontally inside itself (mouse drag anywhere with momentum, vertical wheel, native touch — see [Catalog Filters & Search](/catalog-filters.md)); the page never scrolls horizontally.
 
 # De-templating
 

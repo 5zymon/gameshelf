@@ -7,12 +7,15 @@ import type { GamePlatform } from '@/lib/api';
 import {
   catalogHref,
   hasActiveFilters,
+  removePlatformId,
   SORT_OPTIONS,
   sortOptionOf,
   sortOverrides,
+  togglePlatformId,
   type CatalogFilterValues,
   type CatalogSortOption,
 } from '@/lib/catalog-filters';
+import { useDragScroll } from '@/lib/use-drag-scroll';
 import { scrollEdges, type ScrollEdges } from '@/lib/scroll-edges';
 
 const DEBOUNCE_MS = 300;
@@ -36,7 +39,7 @@ const SORT_LABEL_KEY: Record<
   'year-asc': 'sort.yearAsc',
 };
 const PLATFORM_CHIP =
-  'inline-flex h-9 shrink-0 items-center whitespace-nowrap rounded-full border px-3.5 text-sm font-medium transition-colors duration-[140ms] ease-[ease] motion-reduce:transition-none';
+  'inline-flex h-9 shrink-0 cursor-[inherit] items-center whitespace-nowrap rounded-full border px-3.5 text-sm font-medium transition-colors duration-[140ms] ease-[ease] motion-reduce:transition-none';
 const PLATFORM_CHIP_ON = 'border-accent bg-accent text-accent-ink';
 const PLATFORM_CHIP_OFF =
   'border-edge bg-surface text-ink hover:border-edge-strong';
@@ -151,6 +154,8 @@ export function CatalogFilterBar({
   const chipScrollerRef = useRef<HTMLDivElement>(null);
   const chipTrackRef = useRef<HTMLDivElement>(null);
   const [chipEdges, setChipEdges] = useState<ScrollEdges>(NO_SCROLL_EDGES);
+  const chipDrag = useDragScroll(chipScrollerRef);
+  const chipOverflows = chipEdges.start || chipEdges.end;
 
   const updateChipEdges = useCallback(() => {
     const scroller = chipScrollerRef.current;
@@ -261,10 +266,21 @@ export function CatalogFilterBar({
     setDraft(next);
   }
 
-  /** Single-select platform chips: clicking the selected chip is a no-op. */
-  function selectPlatform(id: number | undefined): void {
-    if (id === values.platformId) return; // no redundant push
-    commit({ platformId: id });
+  /** Multi-select: a chip toggles its id. Reads the in-flight selection so quick successive toggles compose. */
+  function togglePlatform(id: number): void {
+    commit({
+      platformId: togglePlatformId(
+        (pendingRef.current ?? valuesRef.current).platformId,
+        id,
+      ),
+    });
+  }
+
+  /** "All" clears the selection; a no-op when nothing is selected. */
+  function clearPlatforms(): void {
+    if ((pendingRef.current ?? valuesRef.current).platformId === undefined)
+      return;
+    commit({ platformId: undefined });
   }
 
   /**
@@ -277,6 +293,8 @@ export function CatalogFilterBar({
    */
   function revealFocusedChip(event: React.FocusEvent<HTMLButtonElement>): void {
     if (!event.currentTarget.matches(':focus-visible')) return;
+    // A running glide must not override the keyboard reveal.
+    chipDrag.stopMomentum();
     event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 
@@ -299,11 +317,19 @@ export function CatalogFilterBar({
     });
   }
 
-  const platformLabel =
-    values.platformId === undefined
-      ? ''
-      : (platforms.find((p) => p.id === values.platformId)?.name ??
-        t('platformFallback', { id: values.platformId }));
+  const selectedPlatformIds = values.platformId ?? [];
+  const selectedPlatforms = new Set(selectedPlatformIds);
+  const knownPlatformIds = new Set(platforms.map((p) => p.id));
+  /** Active-row order: strip order (API name order), then unknown ids ascending. */
+  const activePlatformIds = [
+    ...platforms.filter((p) => selectedPlatforms.has(p.id)).map((p) => p.id),
+    ...selectedPlatformIds.filter((id) => !knownPlatformIds.has(id)),
+  ];
+  function platformLabelOf(id: number): string {
+    return (
+      platforms.find((p) => p.id === id)?.name ?? t('platformFallback', { id })
+    );
+  }
 
   return (
     <div
@@ -356,15 +382,20 @@ export function CatalogFilterBar({
               ref={chipScrollerRef}
               role="group"
               aria-label={t('platformGroup')}
-              className="overflow-x-auto overscroll-x-contain scroll-px-10 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              {...chipDrag.handlers}
+              className={`overflow-x-auto overscroll-x-contain scroll-px-10 select-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
+                chipOverflows
+                  ? chipDrag.dragging
+                    ? 'cursor-grabbing'
+                    : 'cursor-grab'
+                  : ''
+              }`}
             >
               <div ref={chipTrackRef} className="flex w-max gap-2 p-1">
                 <button
                   type="button"
                   aria-pressed={values.platformId === undefined}
-                  onClick={() => {
-                    selectPlatform(undefined);
-                  }}
+                  onClick={clearPlatforms}
                   onFocus={revealFocusedChip}
                   className={`${PLATFORM_CHIP} ${
                     values.platformId === undefined
@@ -378,13 +409,13 @@ export function CatalogFilterBar({
                   <button
                     key={platform.id}
                     type="button"
-                    aria-pressed={values.platformId === platform.id}
+                    aria-pressed={selectedPlatforms.has(platform.id)}
                     onClick={() => {
-                      selectPlatform(platform.id);
+                      togglePlatform(platform.id);
                     }}
                     onFocus={revealFocusedChip}
                     className={`${PLATFORM_CHIP} ${
-                      values.platformId === platform.id
+                      selectedPlatforms.has(platform.id)
                         ? PLATFORM_CHIP_ON
                         : PLATFORM_CHIP_OFF
                     }`}
@@ -567,14 +598,20 @@ export function CatalogFilterBar({
               }}
             />
           )}
-          {values.platformId !== undefined && (
+          {activePlatformIds.map((id) => (
             <Chip
-              label={t('chip.platform', { name: platformLabel })}
+              key={`platform-${String(id)}`}
+              label={t('chip.platform', { name: platformLabelOf(id) })}
               onRemove={() => {
-                commit({ platformId: undefined });
+                commit({
+                  platformId: removePlatformId(
+                    (pendingRef.current ?? valuesRef.current).platformId,
+                    id,
+                  ),
+                });
               }}
             />
-          )}
+          ))}
           {values.edition !== undefined && (
             <Chip
               label={t('chip.edition', { edition: values.edition })}

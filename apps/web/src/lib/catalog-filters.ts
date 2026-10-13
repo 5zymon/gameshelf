@@ -3,7 +3,7 @@ import type { ListGamesQuery, SortDirection } from '@/lib/api';
 /** Sort fields the catalog UI exposes (the API also accepts platform/createdAt). */
 export type CatalogSortField = 'title' | 'year';
 
-/** The 5.3 filter params plus the catalog sort; all supported by GET /games. */
+/** The 5.3 filter params plus the catalog sort; all supported by GET /games. `platformId` is multi-select: the selected platforms are OR-combined (a game on any of them matches). */
 export type CatalogFilterValues = Pick<
   ListGamesQuery,
   | 'platformId'
@@ -42,8 +42,47 @@ export const FILTER_KEYS = [
 
 const MAX_TEXT = 255;
 
+/** Mirrors the API's `MAX_PLATFORM_IDS` (`@ArrayMaxSize` on `ListGamesQueryDto.platformId`). */
+export const MAX_PLATFORM_IDS = 100;
+
+/** Mirrors the API's `MAX_PLATFORM_ID` (`@Max` on `ListGamesQueryDto.platformId`). */
+const MAX_PLATFORM_ID = 2147483647;
+
 function firstValue(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
+}
+
+function allValues(v: string | string[] | undefined): string[] {
+  return v === undefined ? [] : Array.isArray(v) ? v : [v];
+}
+
+/** De-duplicated, ascending, capped at MAX_PLATFORM_IDS; an empty selection is `undefined`, never `[]`. */
+export function canonicalPlatformIds(
+  ids: readonly number[] | undefined,
+): number[] | undefined {
+  if (ids === undefined) return undefined;
+  const out = [...new Set(ids)]
+    .sort((a, b) => a - b)
+    .slice(0, MAX_PLATFORM_IDS);
+  return out.length === 0 ? undefined : out;
+}
+
+/** Adds `id` when absent, removes it when present; the last removal yields `undefined`. */
+export function togglePlatformId(
+  selected: readonly number[] | undefined,
+  id: number,
+): number[] | undefined {
+  return selected?.includes(id)
+    ? canonicalPlatformIds(selected.filter((x) => x !== id))
+    : canonicalPlatformIds([...(selected ?? []), id]);
+}
+
+/** Removes `id` (idempotent); the last removal yields `undefined`. */
+export function removePlatformId(
+  selected: readonly number[] | undefined,
+  id: number,
+): number[] | undefined {
+  return canonicalPlatformIds((selected ?? []).filter((x) => x !== id));
 }
 
 /** '' / non-numeric / out-of-range → undefined (dropped, never sent → no 400). */
@@ -69,10 +108,11 @@ export function parseCatalogFilters(
   params: CatalogSearchParams,
 ): CatalogFilterValues {
   const values: CatalogFilterValues = {};
-  const platformId = boundedInt(
-    firstValue(params.platformId),
-    1,
-    Number.MAX_SAFE_INTEGER,
+  const platformId = canonicalPlatformIds(
+    allValues(params.platformId).flatMap((raw) => {
+      const id = boundedInt(raw, 1, MAX_PLATFORM_ID);
+      return id === undefined ? [] : [id];
+    }),
   );
   if (platformId !== undefined) values.platformId = platformId;
   const year = boundedInt(firstValue(params.year), 1000, 2100);
@@ -100,7 +140,10 @@ export function parseCatalogFilters(
 }
 
 export function hasActiveFilters(values: CatalogFilterValues): boolean {
-  return FILTER_KEYS.some((key) => values[key] !== undefined);
+  return FILTER_KEYS.some((key) => {
+    const value = values[key];
+    return Array.isArray(value) ? value.length > 0 : value !== undefined;
+  });
 }
 
 /** Committed values → the select's option value. */
@@ -125,8 +168,8 @@ export function sortOverrides(
 /** Builds `/?…` from valid values only; always drops `page` (a filter change starts a new result set). */
 export function catalogHref(values: CatalogFilterValues): string {
   const params = new URLSearchParams();
-  if (values.platformId !== undefined)
-    params.set('platformId', String(values.platformId));
+  for (const id of canonicalPlatformIds(values.platformId) ?? [])
+    params.append('platformId', String(id));
   if (values.edition !== undefined) params.set('edition', values.edition);
   if (values.year !== undefined) params.set('year', String(values.year));
   if (values.publisher !== undefined) params.set('publisher', values.publisher);

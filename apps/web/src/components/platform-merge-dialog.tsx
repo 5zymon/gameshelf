@@ -87,7 +87,7 @@ export function PlatformMergeDialog({
     void (async () => {
       try {
         const response = await api.games.list(
-          { platformId: source.id, limit: 100 },
+          { platformId: [source.id], limit: 100 },
           { signal: controller.signal },
         );
         if (controller.signal.aborted) return;

@@ -1,6 +1,8 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsIn,
   IsInt,
   IsOptional,
@@ -9,6 +11,12 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
+
+/** Upper bound on repeated `platformId` values (a bounded SQL IN list). */
+export const MAX_PLATFORM_IDS = 100;
+
+/** Mirrors the signed 32-bit range of the `platform_id` column (Prisma `Int`). */
+export const MAX_PLATFORM_ID = 2147483647;
 
 export type GameSortField = 'title' | 'year' | 'platform' | 'createdAt';
 export type SortDirection = 'asc' | 'desc';
@@ -48,15 +56,24 @@ export class ListGamesQueryDto {
 
   @ApiPropertyOptional({
     description:
-      'Filter by platform id (FK platforms.id). Unknown id returns an empty result.',
-    example: 1,
-    minimum: 1,
+      'Filter by platform id (FK platforms.id, each ≥ 1). Repeat the parameter to match any of several platforms (`?platformId=1&platformId=2`, OR-combined, up to 100). Unknown ids match nothing; they are not a 400.',
+    type: Number,
+    isArray: true,
+    maxItems: MAX_PLATFORM_IDS,
+    example: [1, 2],
   })
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  platformId?: number;
+  @Transform(({ value }: { value: unknown }) =>
+    value === undefined || value === null
+      ? undefined
+      : (Array.isArray(value) ? value : [value]).map(Number),
+  )
+  @IsArray()
+  @ArrayMaxSize(MAX_PLATFORM_IDS)
+  @IsInt({ each: true })
+  @Min(1, { each: true })
+  @Max(MAX_PLATFORM_ID, { each: true })
+  platformId?: number[];
 
   @ApiPropertyOptional({
     description: 'Exact edition match (whitespace-trimmed)',

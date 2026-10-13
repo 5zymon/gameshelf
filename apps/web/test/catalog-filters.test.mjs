@@ -50,11 +50,15 @@ registerHooks({
 
 const {
   SORT_OPTIONS,
+  MAX_PLATFORM_IDS,
+  canonicalPlatformIds,
   catalogHref,
   hasActiveFilters,
   parseCatalogFilters,
+  removePlatformId,
   sortOptionOf,
   sortOverrides,
+  togglePlatformId,
 } = await import('../src/lib/catalog-filters.ts');
 
 test('parseCatalogFilters: empty params parse to no values', () => {
@@ -107,7 +111,8 @@ test('parseCatalogFilters: array params take the first value', () => {
 
 test('hasActiveFilters: sort alone is not a filter', () => {
   assert.equal(hasActiveFilters({ sort: 'year', order: 'desc' }), false);
-  assert.equal(hasActiveFilters({ platformId: 2 }), true);
+  assert.equal(hasActiveFilters({ platformId: [2] }), true);
+  assert.equal(hasActiveFilters({ platformId: [] }), false);
 });
 
 test('catalogHref: sort/order are written and page is always dropped', () => {
@@ -121,13 +126,77 @@ test('catalogHref: sort/order are written and page is always dropped', () => {
 
 test('catalogHref: several params serialise together and page is dropped', () => {
   const href = catalogHref({
-    platformId: 232,
+    platformId: [232],
     year: 2024,
     sort: 'year',
     order: 'desc',
   });
   assert.equal(href, '/?platformId=232&year=2024&sort=year&order=desc');
   assert.equal(href.includes('page'), false);
+});
+
+test('parseCatalogFilters: a single platformId parses to a one-element array', () => {
+  assert.deepEqual(parseCatalogFilters({ platformId: '232' }), {
+    platformId: [232],
+  });
+});
+
+test('parseCatalogFilters: repeated platformIds are de-duplicated and ascending', () => {
+  assert.deepEqual(parseCatalogFilters({ platformId: ['5', '2', '5'] }), {
+    platformId: [2, 5],
+  });
+});
+
+test('parseCatalogFilters: invalid platformId entries are dropped one at a time', () => {
+  assert.deepEqual(
+    parseCatalogFilters({ platformId: ['0', 'abc', '3', '-1', '', ' 4 '] }),
+    { platformId: [3, 4] },
+  );
+  assert.deepEqual(parseCatalogFilters({ platformId: ['0', 'x'] }), {});
+  assert.deepEqual(parseCatalogFilters({ platformId: ['2147483648', '3'] }), {
+    platformId: [3],
+  });
+  assert.deepEqual(parseCatalogFilters({ platformId: ['2147483648'] }), {});
+});
+
+test('parseCatalogFilters: more than 100 platformIds keep the 100 smallest', () => {
+  assert.equal(MAX_PLATFORM_IDS, 100);
+  const ids = Array.from({ length: 101 }, (_, i) => String(i + 1));
+  const parsed = parseCatalogFilters({ platformId: ids });
+  assert.equal(parsed.platformId.length, 100);
+  assert.equal(parsed.platformId[99], 100);
+});
+
+test('catalogHref: repeated platformIds are canonical (ascending, de-duplicated)', () => {
+  assert.equal(
+    catalogHref({ platformId: [5, 2, 5] }),
+    '/?platformId=2&platformId=5',
+  );
+  assert.equal(catalogHref({ platformId: [] }), '/');
+});
+
+test('catalogHref: a multi-platform selection survives a getAll → parse round trip', () => {
+  const href = catalogHref({ platformId: [3, 1], q: 'x' });
+  const search = new URLSearchParams(href.slice(2));
+  const parsed = parseCatalogFilters({
+    platformId: search.getAll('platformId'),
+    q: search.get('q'),
+  });
+  assert.deepEqual(parsed, { platformId: [1, 3], q: 'x' });
+});
+
+test('togglePlatformId: adds when absent, removes when present', () => {
+  assert.deepEqual(togglePlatformId(undefined, 4), [4]);
+  assert.deepEqual(togglePlatformId([4], 2), [2, 4]);
+  assert.deepEqual(togglePlatformId([2, 4], 2), [4]);
+  assert.equal(togglePlatformId([4], 4), undefined);
+});
+
+test('removePlatformId: removes (idempotent), the last removal yields undefined', () => {
+  assert.deepEqual(removePlatformId([1, 2], 2), [1]);
+  assert.deepEqual(removePlatformId([1], 9), [1]);
+  assert.equal(removePlatformId([1], 1), undefined);
+  assert.equal(removePlatformId(undefined, 1), undefined);
 });
 
 test('sortOverrides: the default clears both keys, others split', () => {

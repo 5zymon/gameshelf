@@ -192,7 +192,7 @@ describe('GamesService (unit)', () => {
       mock.platform.findMany.mockResolvedValue([]);
 
       await service.list({
-        platformId: 2,
+        platformId: [2],
         edition: '  GOTY  ',
         year: 2017,
         publisher: '  Team Cherry  ',
@@ -205,7 +205,7 @@ describe('GamesService (unit)', () => {
         1,
         expect.objectContaining({
           where: {
-            platformId: 2,
+            platformId: { in: [2] },
             edition: 'GOTY',
             releaseYear: 2017,
             publisher: 'Team Cherry',
@@ -217,7 +217,7 @@ describe('GamesService (unit)', () => {
       );
       expect(mock.game.count).toHaveBeenCalledWith({
         where: {
-          platformId: 2,
+          platformId: { in: [2] },
           edition: 'GOTY',
           releaseYear: 2017,
           publisher: 'Team Cherry',
@@ -244,6 +244,36 @@ describe('GamesService (unit)', () => {
         1,
         expect.objectContaining({ where: {} }),
       );
+    });
+
+    it('filters by several platform ids with a de-duplicated IN', async () => {
+      mock.game.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+      mock.game.count.mockResolvedValue(0);
+      mock.platform.findMany.mockResolvedValue([]);
+
+      await service.list({ platformId: [3, 1, 3] });
+
+      expect(mock.game.findMany).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ where: { platformId: { in: [1, 3] } } }),
+      );
+      expect(mock.game.count).toHaveBeenCalledWith({
+        where: { platformId: { in: [1, 3] } },
+      });
+    });
+
+    it('an empty platform id list applies no platform filter', async () => {
+      mock.game.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+      mock.game.count.mockResolvedValue(0);
+      mock.platform.findMany.mockResolvedValue([]);
+
+      await service.list({ platformId: [] });
+
+      expect(mock.game.findMany).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ where: {} }),
+      );
+      expect(mock.game.count).toHaveBeenCalledWith({ where: {} });
     });
 
     it('escapes LIKE wildcards in q (%, _, \\)', async () => {

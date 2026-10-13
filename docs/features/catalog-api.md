@@ -17,19 +17,19 @@ block of available filter values for the filter bar.
 
 `GET /games` — query parameters:
 
-| Name          | Type   | Bounds                                   | Semantics                                                            |
-| ------------- | ------ | ---------------------------------------- | -------------------------------------------------------------------- |
-| `page`        | int    | ≥ 1                                      | 1-based page number (default 1)                                      |
-| `limit`       | int    | 1–100                                    | Page size (default 20)                                               |
-| `platformId`  | int    | ≥ 1                                      | Exact platform FK match; unknown id returns an empty result, not 400 |
-| `edition`     | string | ≤ 255 ch                                 | Exact match, whitespace-trimmed (empty/blank → ignored)              |
-| `year`        | int    | 1000–2100                                | Exact `releaseYear` match                                            |
-| `publisher`   | string | ≤ 255 ch                                 | Exact match, whitespace-trimmed (empty/blank → ignored)              |
-| `genre`       | string | ≤ 255 ch                                 | Exact match, whitespace-trimmed (empty/blank → ignored)              |
-| `playerCount` | int    | 1–100                                    | Exact match                                                          |
-| `q`           | string | ≤ 255 ch                                 | Case-insensitive partial title search (see below)                    |
-| `sort`        | enum   | `title`, `year`, `platform`, `createdAt` | Sort field; omitted → `id` ascending                                 |
-| `order`       | enum   | `asc`, `desc`                            | Sort direction; only applies when `sort` is set (default `asc`)      |
+| Name          | Type             | Bounds                                   | Semantics                                                                                                         |
+| ------------- | ---------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `page`        | int              | ≥ 1                                      | 1-based page number (default 1)                                                                                   |
+| `limit`       | int              | 1–100                                    | Page size (default 20)                                                                                            |
+| `platformId`  | int (repeatable) | each ≥ 1, ≤ 100 values                   | Platform FK match; repeated values OR-combined (`?platformId=1&platformId=2`); unknown ids match nothing, not 400 |
+| `edition`     | string           | ≤ 255 ch                                 | Exact match, whitespace-trimmed (empty/blank → ignored)                                                           |
+| `year`        | int              | 1000–2100                                | Exact `releaseYear` match                                                                                         |
+| `publisher`   | string           | ≤ 255 ch                                 | Exact match, whitespace-trimmed (empty/blank → ignored)                                                           |
+| `genre`       | string           | ≤ 255 ch                                 | Exact match, whitespace-trimmed (empty/blank → ignored)                                                           |
+| `playerCount` | int              | 1–100                                    | Exact match                                                                                                       |
+| `q`           | string           | ≤ 255 ch                                 | Case-insensitive partial title search (see below)                                                                 |
+| `sort`        | enum             | `title`, `year`, `platform`, `createdAt` | Sort field; omitted → `id` ascending                                                                              |
+| `order`       | enum             | `asc`, `desc`                            | Sort direction; only applies when `sort` is set (default `asc`)                                                   |
 
 Response shape (additive — `items`/`meta` unchanged from the base listing):
 
@@ -63,9 +63,11 @@ the internal external-cover link is never serialized. See
 
 Every provided filter is combined with AND in a single Prisma `where` clause;
 the same clause drives both the page query and the `meta.total` count, so the
-two can never disagree. String filters (`edition`, `publisher`, `genre`, `q`)
-are trimmed first; a value that is empty after trimming is ignored, so
-`?genre=` behaves the same as omitting the parameter.
+two can never disagree. The one exception is `platformId`: repeated values
+are OR-combined (`platform_id IN (…)`, de-duplicated) before the AND. String
+filters (`edition`, `publisher`, `genre`, `q`) are trimmed first; a value that
+is empty after trimming is ignored, so `?genre=` behaves the same as omitting
+the parameter.
 
 # Search (`q`)
 
@@ -141,6 +143,8 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
   `sort=bogus`, `order=up`) → 400.
 - Unknown `platformId` is **not** a 400 — it is an FK reference, and an
   unknown id simply yields an empty result.
+- Any `platformId` value that is non-integer or < 1, more than 100 values,
+  or the bracketed `platformId[]` key → 400.
 
 # Game re-enrichment
 
