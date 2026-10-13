@@ -1,5 +1,9 @@
 # Directory Update Log
 
+## 2026-10-13
+
+- **Added**: [Database Connection & Boot Readiness](/database-connection.md) and updated the index — fix for `npm run dev` failing after a MySQL restart (`api` starts and logs "listening", but every DB request returns `500` after a 10 s `pool timeout`). Two causes in `apps/api/src/prisma/prisma.service.ts`: (1) `DATABASE_URL` was passed to `@prisma/adapter-mariadb` unchanged, and the mariadb driver refuses the first `caching_sha2_password` authentication over plaintext without `allowPublicKeyRetrieval` (`ER_CANNOT_RETRIEVE_RSA_KEY`, only on a cold server-side auth cache — i.e. the first connection after every MySQL restart; warm-cache connections hide it); (2) the mariadb pool never recovers from a failed first connection, so the failed connect left the API permanently broken. `withMariadbOptions` now appends `allowPublicKeyRetrieval=true` to the adapter URL, and `onModuleInit` probes with a short-lived client (2 s pool timeouts, 2 s retry, 120 s cap) and only calls `$connect()` once a real `SELECT 1` succeeds. Applies to the API and the `AppModule`-booting CLIs. (generated: { by: opencode/home-model, at: 2026-10-13T00:45:00Z })
+
 ## 2026-10-12
 
 - **Updated**: [Photo Lifecycle & Retention](/photo-lifecycle.md) — the ordering rule now cites ADR-005 (superseding ADR-002) instead of the superseded ADR-002; the stale ADR-002 references in the root `README.md` (cover-retry sweep) and the `ImportJob` comment in `apps/api/prisma/schema.prisma` were aligned to ADR-005 too. Docs/comments only, no behaviour change — a follow-up to card 10.1. (generated: { by: opencode/home-model, at: 2026-10-12T14:00:00Z })
