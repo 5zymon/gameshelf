@@ -39,7 +39,7 @@ column):
 | `DELETE` | `/platforms/:id`         | Delete a custom platform, or hide a reference platform; refused while games reference it | `204` (no body)            | `400`, `404`, `409` |
 | `POST`   | `/platforms/refresh`     | Refresh the reference platform list from IGDB; restores hidden reference platforms       | `200` `PlatformSyncResult` | `503`               |
 
-`POST /platforms/:id/merge` takes `{ "targetId": <number> }` in the body.
+`POST /platforms/:id/merge` takes `{ "targetId": "01926f3b-1c2d-7e3f-8a4b-5c6d7e8f9a0b" }` in the body.
 `GET /platforms` orders `addedByImport: true` rows first, then by name, so the
 platforms view can lead with rows awaiting review.
 
@@ -47,7 +47,7 @@ platforms view can lead with rows awaiting review.
 
 ```json
 {
-  "id": 1,
+  "id": "01926f3b-1c2d-7e3f-8a4b-5c6d7e8f9a0b",
   "name": "PlayStation 5",
   "abbreviation": "PS5",
   "alternativeName": "PS5",
@@ -139,8 +139,9 @@ endpoint.)
 # Merge & aliases
 
 `POST /platforms/:id/merge` merges a **source** platform into a **target**
-(`{ "targetId": <number> }`), implementing spec §4.6.4 ("the merged name is
-kept as an alias so future imports match it"). In one transaction it:
+(`{ "targetId": "01926f3b-1c2d-7e3f-8a4b-5c6d7e8f9a0b" }`), implementing
+spec §4.6.4 ("the merged name is kept as an alias so future imports match it").
+In one transaction it:
 
 1. Reassigns every game on the source to the target
    (`game.updateMany`).
@@ -324,8 +325,8 @@ re-runs this same reconcile flow; the operator command remains for scripted use.
 The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
 `transform`:
 
-- `:id` is transformed with `class-transformer` and must be an integer ≥ 1
-  (`PlatformIdParamDto`); `abc`, `0`, or `1.5` → `400`.
+- `:id` must be a UUIDv7 (`@IsUUID('7')` in `PlatformIdParamDto`); `abc`,
+  `0`, `1.5`, or a v4 UUID → `400`, and a well-formed unknown id → `404`.
 - `POST` / `PATCH` bodies must match `CreatePlatformDto` /
   `UpdatePlatformDto`; unknown properties → `400`.
 - A `name` that is blank after trimming passes the validator (`@IsNotEmpty`

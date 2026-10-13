@@ -44,8 +44,8 @@ ALTER TABLE `games` ADD COLUMN `summary` TEXT NULL,
     ADD COLUMN `rating_count` INTEGER NULL;
 
 CREATE TABLE `game_videos` (
-    `id` INTEGER NOT NULL AUTO_INCREMENT,
-    `game_id` INTEGER NOT NULL,
+    `id` CHAR(36) NOT NULL,
+    `game_id` CHAR(36) NOT NULL,
     `position` INTEGER NOT NULL,
     `video_id` VARCHAR(32) NOT NULL,
     `name` VARCHAR(255) NULL,
@@ -60,6 +60,11 @@ ALTER TABLE `game_videos` ADD CONSTRAINT `game_videos_game_id_fkey`
     FOREIGN KEY (`game_id`) REFERENCES `games`(`id`)
     ON DELETE CASCADE ON UPDATE CASCADE;
 ```
+
+`id` and `game_id` are UUIDv7 `CHAR(36)` today: [ADR-006](/adr-006-uuidv7-primary-keys.md)
+later replaced every non-singleton auto-increment key (and its foreign keys)
+with an app-generated UUIDv7, so the excerpt above shows the current shape, not
+the migration's original `INTEGER` DDL.
 
 `GameVideo` mirrors [GameImage](/game-image-gallery.md): one row per video, FK
 cascade, `position` = display order (IGDB order), `@@unique([gameId, position])`,

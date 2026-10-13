@@ -54,14 +54,24 @@ cookie is required; an unauthenticated request is `401`).
 {
   "batchId": "c1f0a4e2-...-9b3d",
   "jobs": [
-    { "id": 42, "jobId": "1", "status": "queued", "declaredCount": 12 },
-    { "id": 43, "jobId": "2", "status": "queued", "declaredCount": null }
+    {
+      "id": "01926f3a-8c4e-7b21-9d3f-2a6b8e4c1f70",
+      "jobId": "01926f3a-8c4e-7b21-9d3f-2a6b8e4c1f70",
+      "status": "queued",
+      "declaredCount": 12
+    },
+    {
+      "id": "01926f3b-1c2d-7e3f-8a4b-5c6d7e8f9a0b",
+      "jobId": "01926f3b-1c2d-7e3f-8a4b-5c6d7e8f9a0b",
+      "status": "queued",
+      "declaredCount": null
+    }
   ]
 }
 ```
 
-`id` is the persisted `import_jobs` row (poll it via
-`GET /import-jobs/:id`); `jobId` is `String(id)` — the row itself is the queue
+`id` is the persisted `import_jobs` row (a UUIDv7; poll it via
+`GET /import-jobs/:id`); `jobId` equals `id` — the row itself is the queue
 entry (ADR-005); `status` is always
 `queued` on this path. `batchId` groups every photo from this request: poll
 `GET /import-jobs/batches/:batchId` for aggregate progress (X of Y) or filter

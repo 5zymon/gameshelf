@@ -48,8 +48,9 @@ BullMQ, no Redis, no ioredis.
 - **In-process worker.** `PhotoImportWorker` runs inside the API process and
   polls `import_jobs` every **1 s** with concurrency **1**. A single transaction
   claims the oldest due row with
-  `SELECT id … WHERE status = 'queued' AND next_run_at <= now ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED`,
-  marking it `processing`, incrementing `attempts` and setting `lease_until`.
+  `SELECT id … WHERE status = 'queued' AND next_run_at <= now ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED`
+  (`id` is UUIDv7, time-ordered — ADR-006), marking it `processing`,
+  incrementing `attempts` and setting `lease_until`.
 - **Wake on enqueue/resume.** `PhotoImportQueue.wake()` signals the in-process
   worker directly after an upload (`createJob({ enqueue: true })`), a user retry
   and a queue resume, so a new job starts without waiting for the next poll.
@@ -101,8 +102,8 @@ BullMQ, no Redis, no ioredis.
   `processing` while the merged API status showed `queued`; the API-visible
   status is unchanged.
 - **The read API no longer reports queue internals.** `GET /import-jobs*` drops
-  `queueState` and `bullJobId`; the upload response's `jobId` is now
-  `String(id)`. See [Import Jobs API](/import-jobs-api.md) and
+  `queueState` and `bullJobId`; the upload response's `jobId` is now `id` (a
+  UUIDv7 — ADR-006). See [Import Jobs API](/import-jobs-api.md) and
   [Import Photo Upload API](/import-upload-api.md).
 
 # Alternatives

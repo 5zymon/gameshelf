@@ -82,10 +82,10 @@ section).
 | `failed`          | Failed                   | danger  | no   |
 | `dismissed`       | Dismissed                | muted   | no   |
 
-Rows are ordered by ascending job `id` and labelled **Photo 1, Photo 2 …**. The
-API stores no original filename and `photoRef` is opaque internal data, so the
-stable id order is the only identity shown — the browsed filename is deliberately
-never surfaced.
+Rows are ordered by ascending job `id` (a UUIDv7, so ascending id is upload
+order — ADR-006) and labelled **Photo 1, Photo 2 …**. The API stores no original
+filename and `photoRef` is opaque internal data, so the stable id order is the
+only identity shown — the browsed filename is deliberately never surfaced.
 
 Counts come from `jobCounts(job)` / `batchCounts(items, progress)`:
 
