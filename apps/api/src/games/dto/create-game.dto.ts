@@ -1,15 +1,19 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
   ValidateNested,
 } from 'class-validator';
+
+import { lowercaseId } from '../../common/lowercase-id';
+import { UUID_V7_EXAMPLE } from '../../common/uuid-v7';
 import { EnrichCandidateDto } from './enrich-game.dto';
 
 export class CreateGameDto {
@@ -24,12 +28,13 @@ export class CreateGameDto {
   title!: string;
 
   @ApiProperty({
-    description: 'Existing platform id (FK platforms.id)',
-    example: 1,
+    description: 'Existing platform id (UUIDv7)',
+    format: 'uuid',
+    example: UUID_V7_EXAMPLE,
   })
-  @IsInt()
-  @Min(1)
-  platformId!: number;
+  @Transform(lowercaseId)
+  @IsUUID('7')
+  platformId!: string;
 
   @ApiPropertyOptional({
     description: 'Edition (free-form, D8)',

@@ -9,6 +9,7 @@ import {
 } from '../../src/import-jobs/import-upload.service';
 import { PhotoStorageService } from '../../src/import-jobs/photo-storage.service';
 import { LlmSettingsService } from '../../src/settings/llm-settings.service';
+import { testId } from '../helpers/ids';
 
 function uploadedFile(name: string): Express.Multer.File {
   return {
@@ -51,7 +52,7 @@ function stubHappyPath(mocks: Mocks): void {
   mocks.jobs.createJob.mockImplementation(() => {
     rowId += 1;
     return Promise.resolve({
-      id: rowId,
+      id: testId(rowId),
       status: 'queued',
       declaredCount: null,
       photoRef: null,
@@ -85,9 +86,9 @@ describe('ImportUploadService (unit)', () => {
     });
     expect(result.jobs).toHaveLength(5);
     expect(result.jobs.every((job) => job.status === 'queued')).toBe(true);
-    // The row is the queue entry: jobId is String(id) (ADR-005).
+    // The row is the queue entry: jobId equals id (ADR-005, ADR-006).
     expect(result.jobs.map((job) => job.jobId)).toEqual(
-      result.jobs.map((job) => String(job.id)),
+      result.jobs.map((job) => job.id),
     );
     expect(result.batchId).toEqual(expect.any(String));
     expect(result.batchId).not.toBe('');

@@ -18,7 +18,7 @@ import { PreferencesModel } from './dto/preferences.model';
 export class PreferencesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async get(userId: number): Promise<PreferencesModel> {
+  async get(userId: string): Promise<PreferencesModel> {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: { language: true, theme: true },
@@ -30,7 +30,7 @@ export class PreferencesService {
   }
 
   async update(
-    userId: number,
+    userId: string,
     language: Language,
     theme: Theme,
   ): Promise<PreferencesModel> {

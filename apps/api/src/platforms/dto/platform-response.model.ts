@@ -1,9 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+import { UUID_V7_EXAMPLE } from '../../common/uuid-v7';
+
 /** Full platform record with the number of games on it. */
 export class PlatformModel {
-  @ApiProperty({ example: 1 })
-  id!: number;
+  @ApiProperty({ format: 'uuid', example: UUID_V7_EXAMPLE })
+  id!: string;
 
   @ApiProperty({ example: 'PlayStation 5' })
   name!: string;

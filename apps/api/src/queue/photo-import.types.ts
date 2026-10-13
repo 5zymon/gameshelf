@@ -1,6 +1,6 @@
 /** One claimed attempt of an `import_jobs` row (ADR-005): the worker → handler → pipeline unit of work. */
 export interface PhotoImportRun {
-  importJobId: number;
+  importJobId: string;
   photoRef: string | null;
   /** 1-based attempt number (`import_jobs.attempts` after the claim). */
   attempt: number;

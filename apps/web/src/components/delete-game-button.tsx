@@ -10,7 +10,7 @@ export function DeleteGameButton({
   gameId,
   title,
 }: {
-  gameId: number;
+  gameId: string;
   title: string;
 }): React.ReactElement {
   const router = useRouter();

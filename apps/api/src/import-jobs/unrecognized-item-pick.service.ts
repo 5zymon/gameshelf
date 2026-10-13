@@ -43,8 +43,8 @@ export class UnrecognizedItemPickService {
   ) {}
 
   async pick(
-    jobId: number,
-    itemId: number,
+    jobId: string,
+    itemId: string,
     ref: PickUnrecognizedCandidateDto,
   ): Promise<GameDetailModel> {
     // 1. Load the item; 404 when missing or from another job, 409 when reviewed.
@@ -62,7 +62,7 @@ export class UnrecognizedItemPickService {
     });
     if (item?.importJobId !== jobId) {
       throw new NotFoundException(
-        `Unrecognized item with id ${String(itemId)} not found in import job ${String(jobId)}`,
+        `Unrecognized item with id ${itemId} not found in import job ${jobId}`,
       );
     }
     if (item.dismissedAt !== null) {
@@ -146,14 +146,14 @@ export class UnrecognizedItemPickService {
       enriched.coverUrl,
       ...enriched.images.map((image) => image.url),
     ];
-    let gameId: number;
+    let gameId: string;
     let adopted = false;
     try {
       const result = await this.prisma.$transaction(async (tx) => {
         // Re-check inside the transaction: a game created by a racing pick is
         // reused instead of duplicated.
         const recheck = await this.identity.findExisting(identity, tx);
-        let id: number;
+        let id: string;
         if (recheck !== null) {
           id = recheck.id;
           adopted = false; // the downloaded assets are not adopted
@@ -197,7 +197,7 @@ export class UnrecognizedItemPickService {
       include: GAME_DETAIL_INCLUDE,
     });
     if (game === null) {
-      throw new NotFoundException(`Game with id ${String(gameId)} not found`);
+      throw new NotFoundException(`Game with id ${gameId} not found`);
     }
     return toGameDetail(game);
   }

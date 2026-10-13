@@ -319,6 +319,9 @@ LIMIT 1
 FOR UPDATE SKIP LOCKED
 ```
 
+`id` is a UUIDv7 (ADR-006), so `ORDER BY id` is creation order and the claim
+stays oldest-first.
+
 The claim marks the row `processing`, increments `attempts` and sets
 `lease_until = now + 480 s`. The **lease outlives the whole permitted job**
 (`IMPORT_JOB_LEASE_MS > IMPORT_JOB_TIMEOUT_MS`), so a live attempt never looks
@@ -390,7 +393,7 @@ for `failed` / `retry_scheduled`), produced by the pure
 ```json
 {
   "event": "photo_import_job",
-  "importJobId": 7,
+  "importJobId": "01926f3a-8c4e-7b21-9d3f-2a6b8e4c1f70",
   "photoRef": "….png",
   "outcome": "done",
   "recognizedCount": 12,

@@ -18,7 +18,7 @@ export const INVALID_CREDENTIALS_MESSAGE = 'Invalid email or password';
 
 export interface LoginResult {
   user: {
-    id: number;
+    id: string;
     email: string;
     language: Language;
     theme: Theme;
@@ -66,7 +66,7 @@ export class AuthService {
     };
   }
 
-  async me(userId: number): Promise<CreatedUser> {
+  async me(userId: string): Promise<CreatedUser> {
     const user = await this.users.findById(userId);
     if (user === null) {
       throw new UnauthorizedException('Authentication required');

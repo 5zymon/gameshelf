@@ -132,7 +132,7 @@ describe('GameShelf full product chain (e2e acceptance)', () => {
   let test: TestApp;
   let server: Server;
   let photoDir: string;
-  let ps5PlatformId: number;
+  let ps5PlatformId: string;
   let hadesFails = true;
 
   // Stub handles, shared by app #1 and the restarted app in step 12.
@@ -142,8 +142,8 @@ describe('GameShelf full product chain (e2e acceptance)', () => {
 
   // State accumulated across the ordered steps.
   let batchId: string;
-  let photo1JobId: number;
-  let photo2JobId: number;
+  let photo1JobId: string;
+  let photo2JobId: string;
 
   let fetchSpy: jest.SpyInstance;
 
@@ -225,7 +225,7 @@ describe('GameShelf full product chain (e2e acceptance)', () => {
   }
 
   async function waitForJobStatus(
-    id: number,
+    id: string,
     statuses: string[],
     timeoutMs = 30_000,
   ): Promise<void> {
@@ -316,7 +316,7 @@ describe('GameShelf full product chain (e2e acceptance)', () => {
     expect(res.status).toBe(202);
     const body = res.body as {
       batchId: string;
-      jobs: { id: number; jobId: string; status: string }[];
+      jobs: { id: string; jobId: string; status: string }[];
     };
     expect(typeof body.batchId).toBe('string');
     expect(body.jobs).toHaveLength(2);
@@ -337,9 +337,7 @@ describe('GameShelf full product chain (e2e acceptance)', () => {
   it('6. watch the batch progress to completion', async () => {
     await waitForBatchComplete(batchId);
 
-    const job1Res = await test.request.get(
-      `/import-jobs/${String(photo1JobId)}`,
-    );
+    const job1Res = await test.request.get(`/import-jobs/${photo1JobId}`);
     expect(job1Res.status).toBe(200);
     const job1 = job1Res.body as ImportJobBody;
     expect(job1.status).toBe('done');
@@ -347,9 +345,7 @@ describe('GameShelf full product chain (e2e acceptance)', () => {
     expect(job1.importedCount).toBe(2);
     expect(job1.unrecognizedCount).toBe(0);
 
-    const job2Res = await test.request.get(
-      `/import-jobs/${String(photo2JobId)}`,
-    );
+    const job2Res = await test.request.get(`/import-jobs/${photo2JobId}`);
     expect(job2Res.status).toBe(200);
     const job2 = job2Res.body as ImportJobBody;
     expect(job2.status).toBe('needs_attention');
@@ -360,10 +356,10 @@ describe('GameShelf full product chain (e2e acceptance)', () => {
 
   it('7. review the flagged items and dismiss one', async () => {
     const review = await test.request.get(
-      `/import-jobs/${String(photo2JobId)}/unrecognized`,
+      `/import-jobs/${photo2JobId}/unrecognized`,
     );
     expect(review.status).toBe(200);
-    const items = review.body as { id: number; rawTitle: string }[];
+    const items = review.body as { id: string; rawTitle: string }[];
     expect(items).toHaveLength(1);
     const flagged = items[0];
     if (!flagged) throw new Error('expected one flagged item');
@@ -371,9 +367,7 @@ describe('GameShelf full product chain (e2e acceptance)', () => {
 
     const itemId = flagged.id;
     const dismiss = await test.request
-      .patch(
-        `/import-jobs/${String(photo2JobId)}/unrecognized/${String(itemId)}`,
-      )
+      .patch(`/import-jobs/${photo2JobId}/unrecognized/${itemId}`)
       .send({ dismissed: true });
     expect(dismiss.status).toBe(200);
     expect(
@@ -381,7 +375,7 @@ describe('GameShelf full product chain (e2e acceptance)', () => {
     ).not.toBeNull();
 
     const reReview = await test.request.get(
-      `/import-jobs/${String(photo2JobId)}/unrecognized`,
+      `/import-jobs/${photo2JobId}/unrecognized`,
     );
     expect(reReview.status).toBe(200);
     expect(reReview.body).toEqual([]);
@@ -437,7 +431,7 @@ describe('GameShelf full product chain (e2e acceptance)', () => {
   it('9. a failed photo is retried in place and completes', async () => {
     const up = await uploadFiles(['photo:3']);
     expect(up.status).toBe(202);
-    const uploadedJob = (up.body as { jobs: { id: number }[] }).jobs[0];
+    const uploadedJob = (up.body as { jobs: { id: string }[] }).jobs[0];
     if (!uploadedJob)
       throw new Error('expected one queued job from the upload');
     const hadesJobId = uploadedJob.id;
@@ -452,9 +446,7 @@ describe('GameShelf full product chain (e2e acceptance)', () => {
     expect(existsSync(join(photoDir, failed.photoRef ?? ''))).toBe(true);
 
     hadesFails = false;
-    const retry = await test.request.post(
-      `/import-jobs/${String(hadesJobId)}/retry`,
-    );
+    const retry = await test.request.post(`/import-jobs/${hadesJobId}/retry`);
     expect(retry.status).toBe(202);
 
     await waitForJobStatus(hadesJobId, ['done']);
@@ -519,7 +511,7 @@ describe('GameShelf full product chain (e2e acceptance)', () => {
       expect(up.status).toBe(202);
       const { batchId: restartBatchId, jobs } = up.body as {
         batchId: string;
-        jobs: { id: number }[];
+        jobs: { id: string }[];
       };
       expect(jobs).toHaveLength(2);
 

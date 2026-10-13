@@ -6,17 +6,19 @@
  * `T | null`. The backend DTOs remain the source of truth; this package is the
  * single definition the frontend imports. Drift is guarded by the live-API
  * OpenAPI comparison, not at compile time (the backend DTOs are untouched).
+ *
+ * Entity ids are UUIDv7 strings (ADR-006); `externalId`/`igdbId` stay numeric.
  */
 
 // ── Games ────────────────────────────────────────────────────────────────
 export interface GamePlatform {
-  id: number;
+  id: string;
   name: string;
   slug: string;
 }
 
 export interface GameListItem {
-  id: number;
+  id: string;
   title: string;
   edition: string | null;
   coverUrl: string | null;
@@ -36,15 +38,15 @@ export interface GameImage {
 }
 
 export interface GameVideo {
-  id: number;
+  id: string;
   name: string | null;
   videoId: string;
 }
 
 export interface GameDetail {
-  id: number;
+  id: string;
   title: string;
-  platformId: number;
+  platformId: string;
   edition: string | null;
   releaseYear: number | null;
   publisher: string | null;
@@ -94,8 +96,8 @@ export type SortDirection = 'asc' | 'desc';
 export interface ListGamesQuery {
   page?: number;
   limit?: number;
-  /** Repeated on the wire (`?platformId=1&platformId=2`); a game on any of them matches. */
-  platformId?: number[];
+  /** Repeated on the wire (`?platformId=<uuid>&platformId=<uuid>`); a game on any of them matches. */
+  platformId?: string[];
   edition?: string;
   year?: number;
   publisher?: string;
@@ -154,7 +156,7 @@ export type PickUnrecognizedCandidateRequest = EnrichCandidateRef;
 
 export interface CreateGameRequest {
   title: string;
-  platformId: number;
+  platformId: string;
   edition?: string;
   releaseYear?: number;
   publisher?: string;
@@ -179,7 +181,7 @@ export interface EnrichGameRequest {
 
 // ── Platforms ────────────────────────────────────────────────────────────
 export interface Platform {
-  id: number;
+  id: string;
   name: string;
   abbreviation: string | null;
   alternativeName: string | null;
@@ -204,7 +206,7 @@ export interface UpdatePlatformRequest {
 }
 
 export interface MergePlatformRequest {
-  targetId: number;
+  targetId: string;
 }
 
 /** Mirrors `PlatformsSyncService.PlatformSyncResult`. */
@@ -229,7 +231,7 @@ export type ImportJobStatus = (typeof IMPORT_JOB_STATUSES)[number];
 export type ImportPauseSource = 'llm' | 'igdb';
 
 export interface ImportJob {
-  id: number;
+  id: string;
   status: ImportJobStatus;
   declaredCount: number | null;
   photoRef: string | null;
@@ -257,8 +259,8 @@ export interface UnrecognizedItemCandidate {
 }
 
 export interface UnrecognizedItem {
-  id: number;
-  importJobId: number;
+  id: string;
+  importJobId: string;
   rawTitle: string;
   rawPlatform: string | null;
   reason: string | null;
@@ -316,8 +318,8 @@ export interface ImportQueueState {
 }
 
 export interface ImportUploadJob {
-  id: number;
-  /** Equals String(id): the import_jobs row is the queue entry (ADR-005). */
+  id: string;
+  /** Equals `id`: the import_jobs row is the queue entry (ADR-005). */
   jobId: string;
   status: string;
   declaredCount: number | null;
@@ -416,7 +418,7 @@ export type AppLanguage = 'pl' | 'en';
 export type AppTheme = 'light' | 'dark' | 'system';
 
 export interface AuthUser {
-  id: number;
+  id: string;
   email: string;
   language: AppLanguage;
   theme: AppTheme;

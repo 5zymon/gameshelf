@@ -4,20 +4,21 @@ import type {
 } from '../../src/game-catalog/game-catalog.resolver';
 import { CatalogSearchService } from '../../src/game-catalog/catalog-search.service';
 import { ImportJobsService } from '../../src/import-jobs/import-jobs.service';
+import { MISSING_ID } from '../helpers/ids';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 import { resetDatabase } from '../helpers/reset';
 
 interface GameDetailBody {
-  id: number;
+  id: string;
   title: string;
   edition: string | null;
   coverUrl: string | null;
   images: { url: string; thumbUrl: string | null }[];
-  platform: { id: number; name: string; slug: string | null };
+  platform: { id: string; name: string; slug: string | null };
 }
 
 interface UnrecognizedItemBody {
-  id: number;
+  id: string;
   dismissedAt: string | null;
 }
 
@@ -70,8 +71,8 @@ describe('Unrecognized item pick (e2e)', () => {
 
   /** Seeds a PC platform, a job, and a flagged item with tied candidates. */
   async function seedItem(): Promise<{
-    jobId: number;
-    itemId: number;
+    jobId: string;
+    itemId: string;
   }> {
     await test.prisma.platform.create({
       data: { name: 'PC', slug: 'pc', igdbId: 6 },
@@ -99,7 +100,7 @@ describe('Unrecognized item pick (e2e)', () => {
     const { jobId, itemId } = await seedItem();
 
     const res = await test.request
-      .post(`/import-jobs/${String(jobId)}/unrecognized/${String(itemId)}/pick`)
+      .post(`/import-jobs/${jobId}/unrecognized/${itemId}/pick`)
       .send({ source: 'IGDB', externalId: 18797 });
 
     expect(res.status).toBe(200);
@@ -116,9 +117,7 @@ describe('Unrecognized item pick (e2e)', () => {
     });
     expect(stored.dismissedAt).not.toBeNull();
 
-    const queue = await test.request.get(
-      `/import-jobs/${String(jobId)}/unrecognized`,
-    );
+    const queue = await test.request.get(`/import-jobs/${jobId}/unrecognized`);
     expect(queue.status).toBe(200);
     expect(queue.body).toEqual([]);
   });
@@ -127,7 +126,7 @@ describe('Unrecognized item pick (e2e)', () => {
     const { jobId, itemId } = await seedItem();
 
     const res = await test.request
-      .post(`/import-jobs/${String(jobId)}/unrecognized/${String(itemId)}/pick`)
+      .post(`/import-jobs/${jobId}/unrecognized/${itemId}/pick`)
       .send({ source: 'IGDB', externalId: 999 });
 
     expect(res.status).toBe(400);
@@ -142,7 +141,7 @@ describe('Unrecognized item pick (e2e)', () => {
     });
 
     const res = await test.request
-      .post(`/import-jobs/${String(jobId)}/unrecognized/${String(itemId)}/pick`)
+      .post(`/import-jobs/${jobId}/unrecognized/${itemId}/pick`)
       .send({ source: 'IGDB', externalId: 18797 });
 
     expect(res.status).toBe(409);
@@ -152,7 +151,7 @@ describe('Unrecognized item pick (e2e)', () => {
     const { itemId } = await seedItem();
 
     const res = await test.request
-      .post(`/import-jobs/999999/unrecognized/${String(itemId)}/pick`)
+      .post(`/import-jobs/${MISSING_ID}/unrecognized/${itemId}/pick`)
       .send({ source: 'IGDB', externalId: 18797 });
 
     expect(res.status).toBe(404);
@@ -162,7 +161,7 @@ describe('Unrecognized item pick (e2e)', () => {
     const { jobId, itemId } = await seedItem();
 
     const res = await test.request
-      .patch(`/import-jobs/${String(jobId)}/unrecognized/${String(itemId)}`)
+      .patch(`/import-jobs/${jobId}/unrecognized/${itemId}`)
       .send({ dismissed: true });
 
     expect(res.status).toBe(200);

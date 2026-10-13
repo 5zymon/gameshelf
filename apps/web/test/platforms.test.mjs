@@ -54,7 +54,7 @@ const { inDefaultView, filterPlatforms } =
 /** A full platform row; tests override only the fields under test. */
 function platform(overrides = {}) {
   return {
-    id: 1,
+    id: '01900000-0000-7000-8000-000000000001',
     name: 'Test Platform',
     igdbId: null,
     addedByImport: false,

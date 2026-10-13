@@ -138,7 +138,7 @@ describe('Catalog validation sequence (e2e)', () => {
   });
 
   /** Writes a photo and creates a queued import job (no platform seeded). */
-  async function seedJob(): Promise<{ id: number; photoRef: string }> {
+  async function seedJob(): Promise<{ id: string; photoRef: string }> {
     const photoRef = await app.get(PhotoStorageService).store({
       originalname: 'shelf.png',
       mimetype: 'image/png',

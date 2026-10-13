@@ -45,7 +45,7 @@ the multi-photo upload that calls `createJob` — is documented separately in th
 
 ```json
 {
-  "id": 1,
+  "id": "01926f3a-8c4e-7b21-9d3f-2a6b8e4c1f70",
   "status": "needs_attention",
   "declaredCount": 12,
   "photoRef": "3f2a1c9e-....jpg",
@@ -330,8 +330,8 @@ configuration is not re-failed. Full behaviour in
 The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
 `transform`:
 
-- `:id` / `:itemId` are transformed with `class-transformer` and must be
-  integers ≥ 1; `abc`, `0`, or `1.5` → `400`.
+- `:id` / `:itemId` must be UUIDv7 strings (`@IsUUID('7')`); `abc`, `0`,
+  `1.5`, or a v4 UUID → `400`, and a well-formed unknown id → `404`.
 - `GET /import-jobs` query params: `page`/`limit` integers ≥ 1 (`limit` ≤
   100); `status` must be one of the six lifecycle values; `batchId` a string
   of at most 64 chars; any unknown query param → `400`.

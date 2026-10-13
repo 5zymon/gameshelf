@@ -81,7 +81,11 @@ describe('db:clear-dev CLI (e2e, subprocess)', () => {
       data: { importJobId: job.id, rawTitle: 'Mystery' },
     });
     await test.prisma.llmSetting.create({
-      data: { provider: 'custom', baseUrl: 'http://localhost:11434/v1' },
+      data: {
+        id: 1,
+        provider: 'custom',
+        baseUrl: 'http://localhost:11434/v1',
+      },
     });
   }
 

@@ -2,10 +2,11 @@ import { createHmac } from 'node:crypto';
 import { AUTH_CONFIG, type AuthConfig } from '../../src/auth/auth.config';
 import { SessionsService } from '../../src/auth/sessions.service';
 import type { PrismaService } from '../../src/prisma/prisma.service';
+import { testId } from '../helpers/ids';
 
 interface SessionRow {
   id: string;
-  userId: number;
+  userId: string;
   expiresAt: Date;
   createdAt: Date;
   userAgent: string | null;
@@ -63,14 +64,17 @@ describe('SessionsService (unit)', () => {
       const now = new Date('2026-10-05T12:00:00.000Z');
       mock.session.create.mockResolvedValue({});
 
-      const result = await service.create(7, { userAgent: 'jest', now });
+      const result = await service.create(testId(7), {
+        userAgent: 'jest',
+        now,
+      });
 
       expect(result.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
       expect(result.expiresAt.getTime()).toBe(now.getTime() + TTL_MS);
       expect(mock.session.create).toHaveBeenCalledWith({
         data: {
           id: digest(result.token),
-          userId: 7,
+          userId: testId(7),
           expiresAt: result.expiresAt,
           userAgent: 'jest',
         },
@@ -81,12 +85,12 @@ describe('SessionsService (unit)', () => {
       const now = new Date('2026-10-05T12:00:00.000Z');
       mock.session.create.mockResolvedValue({});
 
-      await service.create(7, { now });
+      await service.create(testId(7), { now });
 
       expect(mock.session.create).toHaveBeenCalledWith({
         data: {
           id: expect.any(String) as string,
-          userId: 7,
+          userId: testId(7),
           expiresAt: expect.any(Date) as Date,
           userAgent: null,
         },
@@ -110,7 +114,7 @@ describe('SessionsService (unit)', () => {
       const token = 'token';
       const row: SessionRow = {
         id: digest(token),
-        userId: 7,
+        userId: testId(7),
         expiresAt: new Date(now.getTime() - 1),
         createdAt: now,
         userAgent: null,
@@ -132,7 +136,7 @@ describe('SessionsService (unit)', () => {
       const token = 'token';
       const row: SessionRow = {
         id: digest(token),
-        userId: 7,
+        userId: testId(7),
         expiresAt: new Date(created.getTime() + TTL_MS),
         createdAt: created,
         userAgent: null,
@@ -143,7 +147,7 @@ describe('SessionsService (unit)', () => {
       const result = await service.validate(token, now);
 
       const slid = new Date(now.getTime() + TTL_MS);
-      expect(result).toEqual({ userId: 7, expiresAt: slid });
+      expect(result).toEqual({ userId: testId(7), expiresAt: slid });
       expect(mock.session.update).toHaveBeenCalledWith({
         where: { id: digest(token) },
         data: { expiresAt: slid },

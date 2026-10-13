@@ -9,6 +9,7 @@ import {
   MAX_UPLOAD_FILES,
 } from '../../src/import-jobs/upload.options';
 import { PhotoImportHandler } from '../../src/queue/photo-import.handler';
+import { UUID_V7_PATTERN } from '../helpers/ids';
 import { NO_WORKER } from '../helpers/photo-import-queue';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 import { resetDatabase } from '../helpers/reset';
@@ -33,7 +34,7 @@ function clearPhotoDir(dir: string): void {
 }
 
 interface UploadJobBody {
-  id: number;
+  id: string;
   jobId: string;
   status: string;
   declaredCount: number | null;
@@ -142,13 +143,16 @@ describe('Import photo upload API (e2e)', () => {
       expect(row.attempts).toBe(0);
       expect(row.leaseUntil).toBeNull();
     }
-    expect(body.jobs.map((job) => job.id).sort((a, b) => a - b)).toEqual(
-      rows.map((row) => row.id),
-    );
+    expect(
+      body.jobs
+        .map((job) => job.id)
+        .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+    ).toEqual(rows.map((row) => row.id));
 
     // The wire `jobId` is the import_jobs row id, not a Redis job id.
     for (const job of body.jobs) {
-      expect(job.jobId).toBe(String(job.id));
+      expect(job.jobId).toBe(job.id);
+      expect(job.id).toMatch(UUID_V7_PATTERN);
     }
   });
 

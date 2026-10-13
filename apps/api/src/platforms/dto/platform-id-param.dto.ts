@@ -1,11 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsInt, Min } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { IsUUID } from 'class-validator';
+
+import { lowercaseId } from '../../common/lowercase-id';
+import { UUID_V7_EXAMPLE } from '../../common/uuid-v7';
 
 export class PlatformIdParamDto {
-  @ApiProperty({ example: 1 })
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  id!: number;
+  @ApiProperty({ format: 'uuid', example: UUID_V7_EXAMPLE })
+  @Transform(lowercaseId)
+  @IsUUID('7')
+  id!: string;
 }

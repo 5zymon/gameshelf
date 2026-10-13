@@ -14,7 +14,7 @@ import { createTestApp, type TestApp } from '../helpers/test-app';
 const E2E_PHOTO_DIR_SUFFIX = 'gameshelf-import-photos-e2e';
 
 interface ImportJobBody {
-  id: number;
+  id: string;
   status: string;
   batchId: string | null;
 }
@@ -86,7 +86,7 @@ describe('Import durable processing state (e2e)', () => {
     expect(upload.status).toBe(202);
     const uploadBody = upload.body as {
       batchId: string;
-      jobs: { id: number; jobId: string; status: string }[];
+      jobs: { id: string; jobId: string; status: string }[];
     };
     const uploadedJob = uploadBody.jobs[0];
     if (uploadedJob === undefined) {
@@ -99,9 +99,7 @@ describe('Import durable processing state (e2e)', () => {
     expect(run.importJobId).toBe(uploadedJob.id);
     expect(run.attempt).toBe(1);
 
-    const detail = await test.request.get(
-      `/import-jobs/${String(uploadedJob.id)}`,
-    );
+    const detail = await test.request.get(`/import-jobs/${uploadedJob.id}`);
     expect(detail.status).toBe(200);
     expect(detail.body).toMatchObject({ status: 'processing' });
     expect(detail.body).not.toHaveProperty('queueState');

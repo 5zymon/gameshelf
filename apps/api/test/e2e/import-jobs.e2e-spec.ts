@@ -1,14 +1,15 @@
 import type { Server } from 'node:http';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import request from 'supertest';
+import { MISSING_ID, testId } from '../helpers/ids';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 import { resetDatabase } from '../helpers/reset';
 import { ImportJobsService } from '../../src/import-jobs/import-jobs.service';
 import { QueueControlService } from '../../src/queue/queue-control.service';
 
 interface UnrecognizedItemBody {
-  id: number;
-  importJobId: number;
+  id: string;
+  importJobId: string;
   rawTitle: string;
   rawPlatform: string | null;
   reason: string | null;
@@ -17,7 +18,7 @@ interface UnrecognizedItemBody {
 }
 
 interface ImportJobBody {
-  id: number;
+  id: string;
   status: string;
   declaredCount: number | null;
   photoRef: string | null;
@@ -165,8 +166,8 @@ describe('ImportJobs API (e2e)', () => {
     });
 
     it('paginates', async () => {
-      // Sequential creation: parallel inserts would make the auto-increment
-      // ids land out of array order.
+      // Sequential creation: parallel inserts would make the UUIDv7 ids land
+      // out of array order.
       const jobs = [];
       for (let i = 0; i < 5; i += 1) {
         jobs.push(await importJobs.createJob({}));
@@ -219,13 +220,11 @@ describe('ImportJobs API (e2e)', () => {
       });
       // Dismiss one item — the trace must still include it.
       const dismiss = await test.request
-        .patch(
-          `/import-jobs/${String(job.id)}/unrecognized/${String(item1.id)}`,
-        )
+        .patch(`/import-jobs/${job.id}/unrecognized/${item1.id}`)
         .send({ dismissed: true });
       expect(dismiss.status).toBe(200);
 
-      const res = await test.request.get(`/import-jobs/${String(job.id)}`);
+      const res = await test.request.get(`/import-jobs/${job.id}`);
 
       expect(res.status).toBe(200);
       const body = res.body as ImportJobDetailBody;
@@ -251,13 +250,19 @@ describe('ImportJobs API (e2e)', () => {
     });
 
     it('returns 404 for an unknown job', async () => {
-      const res = await test.request.get('/import-jobs/999999');
+      const res = await test.request.get(`/import-jobs/${MISSING_ID}`);
 
       expect(res.status).toBe(404);
     });
 
     it.each(['abc', '0'])('returns 400 for id "%s"', async (id) => {
       const res = await test.request.get(`/import-jobs/${id}`);
+
+      expect(res.status).toBe(400);
+    });
+
+    it('rejects a non-UUID id with 400', async () => {
+      const res = await test.request.get('/import-jobs/not-a-uuid');
 
       expect(res.status).toBe(400);
     });
@@ -278,15 +283,11 @@ describe('ImportJobs API (e2e)', () => {
         unrecognizedCount: 2,
       });
       const dismiss = await test.request
-        .patch(
-          `/import-jobs/${String(job.id)}/unrecognized/${String(dismissed.id)}`,
-        )
+        .patch(`/import-jobs/${job.id}/unrecognized/${dismissed.id}`)
         .send({ dismissed: true });
       expect(dismiss.status).toBe(200);
 
-      const res = await test.request.get(
-        `/import-jobs/${String(job.id)}/unrecognized`,
-      );
+      const res = await test.request.get(`/import-jobs/${job.id}/unrecognized`);
 
       expect(res.status).toBe(200);
       const body = res.body as UnrecognizedItemBody[];
@@ -294,7 +295,9 @@ describe('ImportJobs API (e2e)', () => {
     });
 
     it('returns 404 for an unknown job', async () => {
-      const res = await test.request.get('/import-jobs/999999/unrecognized');
+      const res = await test.request.get(
+        `/import-jobs/${MISSING_ID}/unrecognized`,
+      );
 
       expect(res.status).toBe(404);
     });
@@ -316,7 +319,7 @@ describe('ImportJobs API (e2e)', () => {
       });
 
       const res = await test.request
-        .patch(`/import-jobs/${String(job.id)}`)
+        .patch(`/import-jobs/${job.id}`)
         .send({ status: 'dismissed' });
 
       expect(res.status).toBe(200);
@@ -333,11 +336,11 @@ describe('ImportJobs API (e2e)', () => {
         unrecognizedCount: 0,
       });
       await test.request
-        .patch(`/import-jobs/${String(job.id)}`)
+        .patch(`/import-jobs/${job.id}`)
         .send({ status: 'dismissed' });
 
       const res = await test.request
-        .patch(`/import-jobs/${String(job.id)}`)
+        .patch(`/import-jobs/${job.id}`)
         .send({ status: 'dismissed' });
 
       expect(res.status).toBe(200);
@@ -359,7 +362,7 @@ describe('ImportJobs API (e2e)', () => {
         }
 
         const res = await test.request
-          .patch(`/import-jobs/${String(job.id)}`)
+          .patch(`/import-jobs/${job.id}`)
           .send({ status: 'dismissed' });
 
         expect(res.status).toBe(409);
@@ -368,7 +371,7 @@ describe('ImportJobs API (e2e)', () => {
 
     it('returns 404 for an unknown job', async () => {
       const res = await test.request
-        .patch('/import-jobs/999999')
+        .patch(`/import-jobs/${MISSING_ID}`)
         .send({ status: 'dismissed' });
 
       expect(res.status).toBe(404);
@@ -381,9 +384,7 @@ describe('ImportJobs API (e2e)', () => {
     ])('rejects %s with 400', async (_name, body) => {
       const job = await importJobs.createJob({});
 
-      const res = await test.request
-        .patch(`/import-jobs/${String(job.id)}`)
-        .send(body);
+      const res = await test.request.patch(`/import-jobs/${job.id}`).send(body);
 
       expect(res.status).toBe(400);
     });
@@ -402,7 +403,7 @@ describe('ImportJobs API (e2e)', () => {
       });
 
       const res = await test.request
-        .patch(`/import-jobs/${String(job.id)}/unrecognized/${String(item.id)}`)
+        .patch(`/import-jobs/${job.id}/unrecognized/${item.id}`)
         .send({ dismissed: true });
 
       expect(res.status).toBe(200);
@@ -413,7 +414,7 @@ describe('ImportJobs API (e2e)', () => {
 
       // The review queue no longer lists it.
       const queue = (
-        await test.request.get(`/import-jobs/${String(job.id)}/unrecognized`)
+        await test.request.get(`/import-jobs/${job.id}/unrecognized`)
       ).body as UnrecognizedItemBody[];
       expect(queue).toEqual([]);
     });
@@ -429,12 +430,12 @@ describe('ImportJobs API (e2e)', () => {
         unrecognizedCount: 1,
       });
       const first = await test.request
-        .patch(`/import-jobs/${String(job.id)}/unrecognized/${String(item.id)}`)
+        .patch(`/import-jobs/${job.id}/unrecognized/${item.id}`)
         .send({ dismissed: true });
       expect(first.status).toBe(200);
 
       const second = await test.request
-        .patch(`/import-jobs/${String(job.id)}/unrecognized/${String(item.id)}`)
+        .patch(`/import-jobs/${job.id}/unrecognized/${item.id}`)
         .send({ dismissed: true });
 
       expect(second.status).toBe(200);
@@ -446,7 +447,7 @@ describe('ImportJobs API (e2e)', () => {
 
     it('returns 404 for an unknown job', async () => {
       const res = await test.request
-        .patch('/import-jobs/999999/unrecognized/1')
+        .patch(`/import-jobs/${MISSING_ID}/unrecognized/${testId(1)}`)
         .send({ dismissed: true });
 
       expect(res.status).toBe(404);
@@ -456,7 +457,7 @@ describe('ImportJobs API (e2e)', () => {
       const job = await importJobs.createJob({});
 
       const res = await test.request
-        .patch(`/import-jobs/${String(job.id)}/unrecognized/999999`)
+        .patch(`/import-jobs/${job.id}/unrecognized/${MISSING_ID}`)
         .send({ dismissed: true });
 
       expect(res.status).toBe(404);
@@ -470,12 +471,20 @@ describe('ImportJobs API (e2e)', () => {
       });
 
       const res = await test.request
-        .patch(
-          `/import-jobs/${String(job1.id)}/unrecognized/${String(item.id)}`,
-        )
+        .patch(`/import-jobs/${job1.id}/unrecognized/${item.id}`)
         .send({ dismissed: true });
 
       expect(res.status).toBe(404);
+    });
+
+    it('rejects a malformed itemId with 400', async () => {
+      const job = await importJobs.createJob({});
+
+      const res = await test.request
+        .patch(`/import-jobs/${job.id}/unrecognized/not-a-uuid`)
+        .send({ dismissed: true });
+
+      expect(res.status).toBe(400);
     });
 
     it.each([
@@ -490,7 +499,7 @@ describe('ImportJobs API (e2e)', () => {
       });
 
       const res = await test.request
-        .patch(`/import-jobs/${String(job.id)}/unrecognized/${String(item.id)}`)
+        .patch(`/import-jobs/${job.id}/unrecognized/${item.id}`)
         .send(body);
 
       expect(res.status).toBe(400);
@@ -506,7 +515,7 @@ describe('ImportJobs API (e2e)', () => {
         unrecognizedCount: 0,
       });
 
-      const res = await test.request.get(`/import-jobs/${String(job.id)}`);
+      const res = await test.request.get(`/import-jobs/${job.id}`);
 
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({
@@ -528,7 +537,7 @@ describe('ImportJobs API (e2e)', () => {
         unrecognizedCount: 0,
       });
 
-      const res = await test.request.get(`/import-jobs/${String(job.id)}`);
+      const res = await test.request.get(`/import-jobs/${job.id}`);
 
       expect(res.body).toMatchObject({
         status: 'done',
@@ -546,7 +555,7 @@ describe('ImportJobs API (e2e)', () => {
         unrecognizedCount: 0,
       });
 
-      const res = await test.request.get(`/import-jobs/${String(job.id)}`);
+      const res = await test.request.get(`/import-jobs/${job.id}`);
 
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({
@@ -570,9 +579,7 @@ describe('ImportJobs API (e2e)', () => {
 
       expect(res.status).toBe(200);
       const body = res.body as ImportJobsListBody;
-      expect(body.items.map((j) => j.id).sort((x, y) => x - y)).toEqual(
-        [a1.id, a2.id].sort((x, y) => x - y),
-      );
+      expect(body.items.map((j) => j.id).sort()).toEqual([a1.id, a2.id].sort());
       expect(body.meta.total).toBe(2);
     });
 
@@ -673,7 +680,7 @@ describe('ImportJobs API (e2e)', () => {
 
   describe('POST /import-jobs/:id/retry (validation only)', () => {
     it('returns 404 for an unknown job', async () => {
-      const res = await test.request.post('/import-jobs/999999/retry');
+      const res = await test.request.post(`/import-jobs/${MISSING_ID}/retry`);
 
       expect(res.status).toBe(404);
     });
@@ -699,9 +706,7 @@ describe('ImportJobs API (e2e)', () => {
           await importJobs.dismissJob(job.id);
         }
 
-        const res = await test.request.post(
-          `/import-jobs/${String(job.id)}/retry`,
-        );
+        const res = await test.request.post(`/import-jobs/${job.id}/retry`);
 
         expect(res.status).toBe(409);
         const row = await test.prisma.importJob.findUniqueOrThrow({
@@ -717,9 +722,7 @@ describe('ImportJobs API (e2e)', () => {
       const job = await importJobs.createJob({});
       await importJobs.markFailed(job.id, 'boom');
 
-      const res = await test.request.post(
-        `/import-jobs/${String(job.id)}/retry`,
-      );
+      const res = await test.request.post(`/import-jobs/${job.id}/retry`);
 
       expect(res.status).toBe(409);
       const row = await test.prisma.importJob.findUniqueOrThrow({
@@ -790,7 +793,7 @@ describe('ImportJobs API (e2e)', () => {
         unrecognizedCount: 0,
       });
       await expect(importJobs.markProcessing(job.id)).rejects.toThrow(
-        `Import job ${String(job.id)} is already done; refusing to overwrite a terminal result`,
+        `Import job ${job.id} is already done; refusing to overwrite a terminal result`,
       );
     });
 
@@ -897,7 +900,7 @@ describe('ImportJobs API (e2e)', () => {
       expect(bare.reason).toBeNull();
 
       await expect(
-        importJobs.addUnrecognizedItem(999999, { rawTitle: 'x' }),
+        importJobs.addUnrecognizedItem(MISSING_ID, { rawTitle: 'x' }),
       ).rejects.toThrow(NotFoundException);
     });
   });

@@ -29,6 +29,7 @@ import type {
 } from '../../src/settings/vision/vision-provider';
 import { VisionProviderError } from '../../src/settings/vision/vision.errors';
 import type { VisionService } from '../../src/settings/vision/vision.service';
+import { testId } from '../helpers/ids';
 
 interface Harness {
   pipeline: PhotoImportPipelineService;
@@ -59,7 +60,7 @@ interface Harness {
 
 function makeRun(attemptsMade = 0, maxAttempts = 3): PhotoImportRun {
   return {
-    importJobId: 1,
+    importJobId: testId(1),
     photoRef: 'photo.png',
     attempt: attemptsMade + 1,
     maxAttempts,
@@ -101,7 +102,7 @@ function parseOutcomeLine(value: unknown): Record<string, unknown> | undefined {
 
 function createHarness(): Harness {
   const state: PipelineJobState = {
-    id: 1,
+    id: testId(1),
     status: 'queued',
     declaredCount: null,
     photoRef: 'photo.png',
@@ -125,14 +126,14 @@ function createHarness(): Harness {
       return Promise.resolve();
     }),
     saveRecognition: jest.fn(
-      (_jobId: number, inputs: RecognitionItemInput[]) => {
+      (_jobId: string, inputs: RecognitionItemInput[]) => {
         if (state.visionCompletedAt !== null) {
           return Promise.resolve(0);
         }
         state.visionCompletedAt = new Date();
         inputs.forEach((input, position) => {
           items.push({
-            id: position + 1,
+            id: testId(position + 1),
             position,
             rawTitle: input.title,
             rawEdition: input.edition,
@@ -162,7 +163,7 @@ function createHarness(): Harness {
       }),
     ),
     commitImportBatch: jest.fn(
-      (_jobId: number, outcome: ImportBatchOutcome) => {
+      (_jobId: string, outcome: ImportBatchOutcome) => {
         for (const resolved of outcome.resolved) {
           games.push({ title: resolved.candidate.title });
           const item = items.find((i) => i.id === resolved.recognizedItemId);
@@ -181,9 +182,9 @@ function createHarness(): Harness {
       },
     ),
     resolvePlatformId: jest.fn(() =>
-      Promise.resolve({ platformId: 10, provenance: 'photo' }),
+      Promise.resolve({ platformId: testId(10), provenance: 'photo' }),
     ),
-    markCompleted: jest.fn((_jobId: number, result: JobCompletionResult) => {
+    markCompleted: jest.fn((_jobId: string, result: JobCompletionResult) => {
       state.recognizedCount = result.recognizedCount;
       state.importedCount = result.importedCount;
       state.unrecognizedCount = result.unrecognizedCount;
@@ -286,7 +287,7 @@ describe('PhotoImportPipelineService (unit)', () => {
 
     expect(
       h.jobs.commitImportBatch.mock.calls.map(
-        (call: [number, ImportBatchOutcome]) => call[1].resolved.length,
+        (call: [string, ImportBatchOutcome]) => call[1].resolved.length,
       ),
     ).toEqual([10, 10, 5]);
     expect(h.games).toHaveLength(25);
@@ -394,7 +395,7 @@ describe('PhotoImportPipelineService (unit)', () => {
     await h.pipeline.run(makeRun());
 
     const outcome = (
-      h.jobs.commitImportBatch.mock.calls[0] as [number, ImportBatchOutcome]
+      h.jobs.commitImportBatch.mock.calls[0] as [string, ImportBatchOutcome]
     )[1];
     expect(outcome.unrecognized[0]).toMatchObject({
       rawTitle: 'Rise of Legends',
@@ -435,7 +436,7 @@ describe('PhotoImportPipelineService (unit)', () => {
     await h.pipeline.run(makeRun());
 
     const outcome = (
-      h.jobs.commitImportBatch.mock.calls[0] as [number, ImportBatchOutcome]
+      h.jobs.commitImportBatch.mock.calls[0] as [string, ImportBatchOutcome]
     )[1];
     expect(outcome.unrecognized[0]).toMatchObject({
       rawTitle: 'Mystery',
@@ -482,17 +483,17 @@ describe('PhotoImportPipelineService (unit)', () => {
       candidate: candidate('A'),
     });
     h.jobs.resolvePlatformId.mockResolvedValue({
-      platformId: 10,
+      platformId: testId(10),
       provenance: 'catalog',
     });
 
     await h.pipeline.run(makeRun());
 
     const outcome = (
-      h.jobs.commitImportBatch.mock.calls[0] as [number, ImportBatchOutcome]
+      h.jobs.commitImportBatch.mock.calls[0] as [string, ImportBatchOutcome]
     )[1];
     expect(outcome.resolved[0]).toMatchObject({
-      platformId: 10,
+      platformId: testId(10),
       platformUnverified: true,
     });
   });
@@ -508,17 +509,17 @@ describe('PhotoImportPipelineService (unit)', () => {
       candidate: candidate('A'),
     });
     h.jobs.resolvePlatformId.mockResolvedValue({
-      platformId: 10,
+      platformId: testId(10),
       provenance: 'photo',
     });
 
     await h.pipeline.run(makeRun());
 
     const outcome = (
-      h.jobs.commitImportBatch.mock.calls[0] as [number, ImportBatchOutcome]
+      h.jobs.commitImportBatch.mock.calls[0] as [string, ImportBatchOutcome]
     )[1];
     expect(outcome.resolved[0]).toMatchObject({
-      platformId: 10,
+      platformId: testId(10),
       platformUnverified: false,
     });
   });
@@ -534,7 +535,7 @@ describe('PhotoImportPipelineService (unit)', () => {
     );
 
     expect(h.jobs.markFailed).toHaveBeenCalledWith(
-      1,
+      testId(1),
       'The provider returned an unexpected response',
       { recognizedCount: 0, importedCount: 0, unrecognizedCount: 0 },
     );
@@ -553,7 +554,7 @@ describe('PhotoImportPipelineService (unit)', () => {
     );
 
     expect(h.jobs.markFailed).toHaveBeenCalledWith(
-      1,
+      testId(1),
       'The provider rejected the API key',
       { recognizedCount: 0, importedCount: 0, unrecognizedCount: 0 },
     );
@@ -585,7 +586,7 @@ describe('PhotoImportPipelineService (unit)', () => {
       'IGDB rejected the credentials',
     );
     expect(h.jobs.markFailed).toHaveBeenCalledWith(
-      1,
+      testId(1),
       'IGDB rejected the credentials',
       { recognizedCount: 1, importedCount: 0, unrecognizedCount: 0 },
     );
@@ -618,7 +619,7 @@ describe('PhotoImportPipelineService (unit)', () => {
       'MobyGames rejected the credentials',
     );
     expect(h.jobs.markFailed).toHaveBeenCalledWith(
-      1,
+      testId(1),
       'MobyGames rejected the credentials',
       { recognizedCount: 1, importedCount: 0, unrecognizedCount: 0 },
     );
@@ -682,7 +683,7 @@ describe('PhotoImportPipelineService (unit)', () => {
 
     expect(h.games).toHaveLength(10);
     expect(h.jobs.markFailed).toHaveBeenCalledWith(
-      1,
+      testId(1),
       'Photo recognition failed unexpectedly',
       { recognizedCount: 12, importedCount: 10, unrecognizedCount: 0 },
     );
@@ -705,7 +706,7 @@ describe('PhotoImportPipelineService (unit)', () => {
       VisionProviderError,
     );
     expect(h.jobs.markFailed).toHaveBeenCalledWith(
-      1,
+      testId(1),
       'The provider rate-limited the request; try again later',
       { recognizedCount: 0, importedCount: 0, unrecognizedCount: 0 },
     );
@@ -768,11 +769,15 @@ describe('PhotoImportPipelineService (unit)', () => {
       RetryableImportError,
     );
 
-    expect(h.jobs.markFailed).toHaveBeenCalledWith(1, expect.any(String), {
-      recognizedCount: 0,
-      importedCount: 0,
-      unrecognizedCount: 0,
-    });
+    expect(h.jobs.markFailed).toHaveBeenCalledWith(
+      testId(1),
+      expect.any(String),
+      {
+        recognizedCount: 0,
+        importedCount: 0,
+        unrecognizedCount: 0,
+      },
+    );
     const structured = warn.mock.calls
       .map((call) => parseOutcomeLine(call[0]))
       .find((entry) => entry !== undefined);
@@ -876,7 +881,7 @@ describe('PhotoImportPipelineService (unit)', () => {
       .find((parsed) => parsed !== undefined);
     expect(entry).toMatchObject({
       event: 'photo_import_job',
-      importJobId: 1,
+      importJobId: testId(1),
       photoRef: 'photo.png',
       outcome: 'done',
       recognizedCount: 2,
@@ -961,7 +966,7 @@ describe('PhotoImportPipelineService (unit)', () => {
 
   it('formatImportJobOutcome serializes one JSON line and omits an undefined error', () => {
     const line = formatImportJobOutcome({
-      importJobId: 7,
+      importJobId: testId(7),
       photoRef: 'p.png',
       outcome: 'done',
       recognizedCount: 3,
@@ -974,7 +979,7 @@ describe('PhotoImportPipelineService (unit)', () => {
 
     expect(JSON.parse(line)).toEqual({
       event: 'photo_import_job',
-      importJobId: 7,
+      importJobId: testId(7),
       photoRef: 'p.png',
       outcome: 'done',
       recognizedCount: 3,

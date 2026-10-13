@@ -10,6 +10,7 @@ import {
   mapCandidateToGameData,
   toGameCreateData,
 } from '../../src/enrichment/game-enrichment.service';
+import { testId } from '../helpers/ids';
 
 const NORMALIZED_COVER =
   'https://images.igdb.com/igdb/image/upload/t_1080p/co61gh.jpg';
@@ -80,11 +81,15 @@ describe('GameEnrichmentService (unit)', () => {
     const hash = coverHash(NORMALIZED_COVER);
     const h = createHarness(`/api/covers/${hash}.jpg`);
 
-    const data = await h.service.enrichCandidate(candidate, 3, 'Standard');
+    const data = await h.service.enrichCandidate(
+      candidate,
+      testId(3),
+      'Standard',
+    );
 
     expect(data).toEqual({
       title: 'Halo: Combat Evolved',
-      platformId: 3,
+      platformId: testId(3),
       edition: 'Standard',
       releaseYear: 2001,
       publisher: 'Bungie',
@@ -119,7 +124,7 @@ describe('GameEnrichmentService (unit)', () => {
     const candidate = await resolveCandidate(fixture, 'Halo: Combat Evolved');
     const enriched = mapCandidateToGameData({
       candidate,
-      platformId: 3,
+      platformId: testId(3),
       edition: null,
       coverUrl: null,
       images: [],
@@ -144,11 +149,11 @@ describe('GameEnrichmentService (unit)', () => {
     );
     const h = createHarness(null);
 
-    const data = await h.service.enrichCandidate(candidate, 9, null);
+    const data = await h.service.enrichCandidate(candidate, testId(9), null);
 
     expect(data).toEqual({
       title: 'Mystery',
-      platformId: 9,
+      platformId: testId(9),
       edition: null,
       releaseYear: null,
       publisher: null,
@@ -174,7 +179,7 @@ describe('GameEnrichmentService (unit)', () => {
     const candidate = await resolveCandidate(fixture, 'Halo: Combat Evolved');
     const h = createHarness(null);
 
-    const data = await h.service.enrichCandidate(candidate, 3, null);
+    const data = await h.service.enrichCandidate(candidate, testId(3), null);
 
     expect(data.coverUrl).toBeNull();
     // A failed cover must not drop the rest of the mapping.
@@ -189,7 +194,7 @@ describe('GameEnrichmentService (unit)', () => {
     const candidate = await resolveCandidate(fixture, 'Halo: Combat Evolved');
     const h = createHarness(null);
 
-    const data = await h.service.enrichCandidate(candidate, 3, null);
+    const data = await h.service.enrichCandidate(candidate, testId(3), null);
 
     expect(data.edition).toBeNull();
   });
@@ -216,7 +221,7 @@ describe('GameEnrichmentService (unit)', () => {
       [shotUrl]: '/api/covers/shot.jpg',
     });
 
-    const data = await h.service.enrichCandidate(candidate, 9, null);
+    const data = await h.service.enrichCandidate(candidate, testId(9), null);
 
     expect(data.images).toEqual([
       { url: '/api/covers/art.jpg', sourceUrl: artUrl },
@@ -245,7 +250,7 @@ describe('GameEnrichmentService (unit)', () => {
       [badUrl]: null,
     });
 
-    const data = await h.service.enrichCandidate(candidate, 9, null);
+    const data = await h.service.enrichCandidate(candidate, testId(9), null);
 
     expect(data.images).toEqual([
       { url: '/api/covers/ok.jpg', sourceUrl: okUrl },

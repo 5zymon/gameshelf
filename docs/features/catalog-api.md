@@ -17,19 +17,19 @@ block of available filter values for the filter bar.
 
 `GET /games` — query parameters:
 
-| Name          | Type             | Bounds                                   | Semantics                                                                                                         |
-| ------------- | ---------------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `page`        | int              | ≥ 1                                      | 1-based page number (default 1)                                                                                   |
-| `limit`       | int              | 1–100                                    | Page size (default 20)                                                                                            |
-| `platformId`  | int (repeatable) | each ≥ 1, ≤ 100 values                   | Platform FK match; repeated values OR-combined (`?platformId=1&platformId=2`); unknown ids match nothing, not 400 |
-| `edition`     | string           | ≤ 255 ch                                 | Exact match, whitespace-trimmed (empty/blank → ignored)                                                           |
-| `year`        | int              | 1000–2100                                | Exact `releaseYear` match                                                                                         |
-| `publisher`   | string           | ≤ 255 ch                                 | Exact match, whitespace-trimmed (empty/blank → ignored)                                                           |
-| `genre`       | string           | ≤ 255 ch                                 | Exact match, whitespace-trimmed (empty/blank → ignored)                                                           |
-| `playerCount` | int              | 1–100                                    | Exact match                                                                                                       |
-| `q`           | string           | ≤ 255 ch                                 | Case-insensitive partial title search (see below)                                                                 |
-| `sort`        | enum             | `title`, `year`, `platform`, `createdAt` | Sort field; omitted → `id` ascending                                                                              |
-| `order`       | enum             | `asc`, `desc`                            | Sort direction; only applies when `sort` is set (default `asc`)                                                   |
+| Name          | Type                | Bounds                                   | Semantics                                                                                                                                                                                                                          |
+| ------------- | ------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `page`        | int                 | ≥ 1                                      | 1-based page number (default 1)                                                                                                                                                                                                    |
+| `limit`       | int                 | 1–100                                    | Page size (default 20)                                                                                                                                                                                                             |
+| `platformId`  | UUIDv7 (repeatable) | each a UUIDv7, ≤ 100 values              | Platform FK match; repeated values OR-combined (`?platformId=01926f3a-8c4e-7b21-9d3f-2a6b8e4c1f70&platformId=01926f3b-1c2d-7e3f-8a4b-5c6d7e8f9a0b`); a well-formed unknown id matches nothing, not 400; a malformed value is a 400 |
+| `edition`     | string              | ≤ 255 ch                                 | Exact match, whitespace-trimmed (empty/blank → ignored)                                                                                                                                                                            |
+| `year`        | int                 | 1000–2100                                | Exact `releaseYear` match                                                                                                                                                                                                          |
+| `publisher`   | string              | ≤ 255 ch                                 | Exact match, whitespace-trimmed (empty/blank → ignored)                                                                                                                                                                            |
+| `genre`       | string              | ≤ 255 ch                                 | Exact match, whitespace-trimmed (empty/blank → ignored)                                                                                                                                                                            |
+| `playerCount` | int                 | 1–100                                    | Exact match                                                                                                                                                                                                                        |
+| `q`           | string              | ≤ 255 ch                                 | Case-insensitive partial title search (see below)                                                                                                                                                                                  |
+| `sort`        | enum                | `title`, `year`, `platform`, `createdAt` | Sort field; omitted → `id` ascending                                                                                                                                                                                               |
+| `order`       | enum                | `asc`, `desc`                            | Sort direction; only applies when `sort` is set (default `asc`)                                                                                                                                                                    |
 
 Response shape (additive — `items`/`meta` unchanged from the base listing):
 
@@ -37,17 +37,27 @@ Response shape (additive — `items`/`meta` unchanged from the base listing):
 {
   "items": [
     {
-      "id": 1,
+      "id": "01926f3a-8c4e-7b21-9d3f-2a6b8e4c1f70",
       "title": "Hollow Knight",
       "edition": null,
       "coverUrl": null,
       "coverThumbUrl": null,
-      "platform": { "id": 1, "name": "PC", "slug": "pc" }
+      "platform": {
+        "id": "01926f3b-1c2d-7e3f-8a4b-5c6d7e8f9a0b",
+        "name": "PC",
+        "slug": "pc"
+      }
     }
   ],
   "meta": { "page": 1, "limit": 20, "total": 42, "totalPages": 3 },
   "filters": {
-    "platforms": [{ "id": 1, "name": "PC", "slug": "pc" }],
+    "platforms": [
+      {
+        "id": "01926f3b-1c2d-7e3f-8a4b-5c6d7e8f9a0b",
+        "name": "PC",
+        "slug": "pc"
+      }
+    ],
     "editions": ["GOTY Edition"]
   }
 }
@@ -141,10 +151,10 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
   `ListGamesQueryDto`).
 - Wrong type or out-of-bounds value (e.g. `limit=0`, `year=999`,
   `sort=bogus`, `order=up`) → 400.
-- Unknown `platformId` is **not** a 400 — it is an FK reference, and an
-  unknown id simply yields an empty result.
-- Any `platformId` value that is non-integer or < 1, more than 100 values,
-  or the bracketed `platformId[]` key → 400.
+- An unknown but well-formed `platformId` is **not** a 400 — it is an FK
+  reference, and an unknown id simply yields an empty result.
+- Any `platformId` value that is not a UUIDv7 (a non-UUID or a v4 UUID),
+  more than 100 values, or the bracketed `platformId[]` key → 400.
 
 # Game re-enrichment
 

@@ -17,7 +17,7 @@ export interface GalleryImageInput {
 /** The exact `Game` columns the candidate mapping writes. */
 export interface EnrichedGameData {
   title: string;
-  platformId: number;
+  platformId: string;
   edition: string | null;
   releaseYear: number | null;
   publisher: string | null;
@@ -47,7 +47,7 @@ export interface EnrichedGameData {
 /** Inputs to the pure candidate→`Game` mapping. */
 export interface GameMappingInput {
   candidate: CatalogCandidate;
-  platformId: number;
+  platformId: string;
   edition: string | null;
   /** Already-local served path (`/api/covers/<file>`), or `null`. */
   coverUrl: string | null;
@@ -131,7 +131,7 @@ export class GameEnrichmentService {
 
   async enrichCandidate(
     candidate: CatalogCandidate,
-    platformId: number,
+    platformId: string,
     edition: string | null,
   ): Promise<EnrichedGameData> {
     const [coverUrl, gallery] = await Promise.all([

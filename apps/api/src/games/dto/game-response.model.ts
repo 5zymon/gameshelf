@@ -1,9 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
+import { UUID_V7_EXAMPLE } from '../../common/uuid-v7';
+
 /** Platform projection used in every game response (D4). */
 export class GamePlatformModel {
-  @ApiProperty({ example: 1 })
-  id!: number;
+  @ApiProperty({ format: 'uuid', example: UUID_V7_EXAMPLE })
+  id!: string;
 
   @ApiProperty({ example: 'PlayStation 5' })
   name!: string;
@@ -14,8 +16,8 @@ export class GamePlatformModel {
 
 /** Lighter list projection (D4). */
 export class GameListItemModel {
-  @ApiProperty({ example: 1 })
-  id!: number;
+  @ApiProperty({ format: 'uuid', example: UUID_V7_EXAMPLE })
+  id!: string;
 
   @ApiProperty({ example: 'Hollow Knight' })
   title!: string;
@@ -51,8 +53,8 @@ export class GameListItemModel {
 
 /** One embedded YouTube video (card 9.1). */
 export class GameVideoModel {
-  @ApiProperty({ example: 7 })
-  id!: number;
+  @ApiProperty({ format: 'uuid', example: UUID_V7_EXAMPLE })
+  id!: string;
 
   @ApiPropertyOptional({ nullable: true, example: 'Trailer' })
   name!: string | null;
@@ -80,14 +82,14 @@ export class GameImageModel {
 
 /** Full record (D4): all Game fields incl. rawMetadata + platform. */
 export class GameDetailModel {
-  @ApiProperty({ example: 1 })
-  id!: number;
+  @ApiProperty({ format: 'uuid', example: UUID_V7_EXAMPLE })
+  id!: string;
 
   @ApiProperty({ example: 'Hollow Knight' })
   title!: string;
 
-  @ApiProperty({ example: 1 })
-  platformId!: number;
+  @ApiProperty({ format: 'uuid', example: UUID_V7_EXAMPLE })
+  platformId!: string;
 
   @ApiPropertyOptional({ nullable: true, example: 'GOTY Edition' })
   edition!: string | null;

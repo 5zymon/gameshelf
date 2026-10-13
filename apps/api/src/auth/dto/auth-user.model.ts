@@ -1,8 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 
+import { UUID_V7_EXAMPLE } from '../../common/uuid-v7';
+
 export class AuthUserModel {
-  @ApiProperty({ example: 1 })
-  id!: number;
+  @ApiProperty({ format: 'uuid', example: UUID_V7_EXAMPLE })
+  id!: string;
 
   @ApiProperty({ example: 'player@example.com' })
   email!: string;

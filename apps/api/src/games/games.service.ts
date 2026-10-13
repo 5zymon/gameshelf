@@ -110,13 +110,13 @@ export class GamesService {
     };
   }
 
-  async findOne(id: number): Promise<GameDetailModel> {
+  async findOne(id: string): Promise<GameDetailModel> {
     const game = await this.prisma.game.findUnique({
       where: { id },
       include: GAME_DETAIL_INCLUDE,
     });
     if (!game) {
-      throw new NotFoundException(`Game with id ${String(id)} not found`);
+      throw new NotFoundException(`Game with id ${id} not found`);
     }
     return toGameDetail(game);
   }
@@ -236,13 +236,13 @@ export class GamesService {
     return toGameDetail(game);
   }
 
-  async addCopy(id: number): Promise<GameDetailModel> {
+  async addCopy(id: string): Promise<GameDetailModel> {
     const existing = await this.prisma.game.findUnique({
       where: { id },
       select: { id: true },
     });
     if (!existing) {
-      throw new NotFoundException(`Game with id ${String(id)} not found`);
+      throw new NotFoundException(`Game with id ${id} not found`);
     }
     const game = await this.prisma.game.update({
       where: { id },
@@ -252,7 +252,7 @@ export class GamesService {
     return toGameDetail(game);
   }
 
-  async update(id: number, dto: UpdateGameDto): Promise<GameDetailModel> {
+  async update(id: string, dto: UpdateGameDto): Promise<GameDetailModel> {
     // `PartialType` adds `@IsOptional`, which lets an explicit `null` past
     // validation. So `title`/`platformId` can be `null` at runtime even though
     // the static type (inherited from `CreateGameDto`) says otherwise. Both are
@@ -275,7 +275,7 @@ export class GamesService {
       },
     });
     if (!existing) {
-      throw new NotFoundException(`Game with id ${String(id)} not found`);
+      throw new NotFoundException(`Game with id ${id} not found`);
     }
     if (dto.platformId !== undefined) {
       await this.assertPlatformExists(dto.platformId);
@@ -343,7 +343,7 @@ export class GamesService {
    * identical apply writes nothing (record idempotency).
    */
   async enrich(
-    id: number,
+    id: string,
     dto: EnrichGameDto,
   ): Promise<EnrichGameResponseModel> {
     const raw = await this.prisma.game.findUnique({
@@ -351,7 +351,7 @@ export class GamesService {
       include: GAME_DETAIL_INCLUDE,
     });
     if (!raw) {
-      throw new NotFoundException(`Game with id ${String(id)} not found`);
+      throw new NotFoundException(`Game with id ${id} not found`);
     }
     const game = toGameDetail(raw);
 
@@ -485,13 +485,13 @@ export class GamesService {
     };
   }
 
-  async remove(id: number): Promise<void> {
+  async remove(id: string): Promise<void> {
     const existing = await this.prisma.game.findUnique({
       where: { id },
       select: { id: true, coverUrl: true, images: { select: { url: true } } },
     });
     if (!existing) {
-      throw new NotFoundException(`Game with id ${String(id)} not found`);
+      throw new NotFoundException(`Game with id ${id} not found`);
     }
     await this.prisma.game.delete({ where: { id } });
     await this.maintenance.removeIfUnreferenced(existing.coverUrl);
@@ -531,7 +531,7 @@ export class GamesService {
     const where: Prisma.GameWhereInput = {};
     if (query.platformId !== undefined && query.platformId.length > 0) {
       where.platformId = {
-        in: [...new Set(query.platformId)].sort((a, b) => a - b),
+        in: [...new Set(query.platformId)].sort(),
       };
     }
     const edition = this.trimToUndefined(query.edition);
@@ -591,14 +591,14 @@ export class GamesService {
     return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
   }
 
-  private async assertPlatformExists(platformId: number): Promise<void> {
+  private async assertPlatformExists(platformId: string): Promise<void> {
     const platform = await this.prisma.platform.findUnique({
       where: { id: platformId },
       select: { id: true },
     });
     if (!platform) {
       throw new BadRequestException(
-        `Platform with id ${String(platformId)} does not exist`,
+        `Platform with id ${platformId} does not exist`,
       );
     }
   }

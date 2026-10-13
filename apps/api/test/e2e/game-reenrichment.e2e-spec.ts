@@ -14,6 +14,7 @@ import {
   CoverHttpClient,
   type CoverHttpResponse,
 } from '../../src/covers/cover-http.client';
+import { MISSING_ID } from '../helpers/ids';
 import { resetDatabase } from '../helpers/reset';
 import { seedGame, seedPlatform } from '../helpers/seed';
 import { createTestApp, type TestApp } from '../helpers/test-app';
@@ -53,15 +54,15 @@ interface EnrichCandidateBody {
 }
 
 interface GameVideoBody {
-  id: number;
+  id: string;
   name: string | null;
   videoId: string;
 }
 
 interface GameDetailBody {
-  id: number;
+  id: string;
   title: string;
-  platformId: number;
+  platformId: string;
   edition: string | null;
   releaseYear: number | null;
   publisher: string | null;
@@ -80,7 +81,7 @@ interface GameDetailBody {
   platformUnverified: boolean;
   userEditedFields: string[];
   images: { url: string; thumbUrl: string | null }[];
-  platform: { id: number; name: string; slug: string };
+  platform: { id: string; name: string; slug: string };
 }
 
 interface EnrichBody {
@@ -188,7 +189,7 @@ describe('Game re-enrichment (e2e)', () => {
 
   async function seedGameWith(
     overrides: SeedOverrides = {},
-  ): Promise<{ platformId: number; gameId: number }> {
+  ): Promise<{ platformId: string; gameId: string }> {
     const platform = await seedPlatform(test.prisma, {
       name: PLATFORM_NAME,
       slug: PLATFORM_SLUG,
@@ -210,9 +211,7 @@ describe('Game re-enrichment (e2e)', () => {
     resolver.search.mockResolvedValue(searchMatches(candidate()));
     coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
 
-    const search = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
-      .send({});
+    const search = await test.request.post(`/games/${gameId}/enrich`).send({});
     expect(search.status).toBe(200);
     const searchBody = search.body as EnrichBody;
     expect(searchBody.status).toBe('matched');
@@ -242,7 +241,7 @@ describe('Game re-enrichment (e2e)', () => {
     ).toBeNull();
 
     const apply = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
+      .post(`/games/${gameId}/enrich`)
       .send({ candidate: { source: 'IGDB', externalId: 1036 } });
     expect(apply.status).toBe(200);
     const applyBody = apply.body as EnrichBody;
@@ -287,9 +286,7 @@ describe('Game re-enrichment (e2e)', () => {
       ),
     );
 
-    const res = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
-      .send({});
+    const res = await test.request.post(`/games/${gameId}/enrich`).send({});
     expect(res.status).toBe(200);
     const body = res.body as EnrichBody;
     expect(body.status).toBe('matched');
@@ -322,9 +319,7 @@ describe('Game re-enrichment (e2e)', () => {
       ),
     );
 
-    const res = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
-      .send({});
+    const res = await test.request.post(`/games/${gameId}/enrich`).send({});
     expect(res.status).toBe(200);
     const body = res.body as EnrichBody;
     expect(body.candidates).toHaveLength(2);
@@ -348,7 +343,7 @@ describe('Game re-enrichment (e2e)', () => {
     coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
 
     const res = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
+      .post(`/games/${gameId}/enrich`)
       .send({ candidate: { source: 'IGDB', externalId: 2002 } });
     expect(res.status).toBe(200);
     const body = res.body as EnrichBody;
@@ -375,9 +370,7 @@ describe('Game re-enrichment (e2e)', () => {
     });
     resolver.search.mockResolvedValue(searchMatches());
 
-    const res = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
-      .send({});
+    const res = await test.request.post(`/games/${gameId}/enrich`).send({});
     expect(res.status).toBe(200);
     const body = res.body as EnrichBody;
     expect(body.status).toBe('unrecognized');
@@ -404,7 +397,7 @@ describe('Game re-enrichment (e2e)', () => {
     resolver.search.mockResolvedValue(searchMatches());
 
     const res = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
+      .post(`/games/${gameId}/enrich`)
       .send({ candidate: { source: 'IGDB', externalId: 1036 } });
     expect(res.status).toBe(200);
     const body = res.body as EnrichBody;
@@ -432,7 +425,7 @@ describe('Game re-enrichment (e2e)', () => {
     coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
 
     const res = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
+      .post(`/games/${gameId}/enrich`)
       .send({ candidate: { source: 'IGDB', externalId: 1036 } });
     expect(res.status).toBe(200);
     const body = res.body as EnrichBody;
@@ -455,7 +448,7 @@ describe('Game re-enrichment (e2e)', () => {
     coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
 
     const first = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
+      .post(`/games/${gameId}/enrich`)
       .send({ candidate: { source: 'IGDB', externalId: 1036 } });
     expect(first.status).toBe(200);
     let game = await test.prisma.game.findUniqueOrThrow({
@@ -467,7 +460,7 @@ describe('Game re-enrichment (e2e)', () => {
       searchMatches(candidate({ coverUrl: COVER_URL_B })),
     );
     const second = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
+      .post(`/games/${gameId}/enrich`)
       .send({ candidate: { source: 'IGDB', externalId: 1036 } });
     expect(second.status).toBe(200);
 
@@ -493,7 +486,7 @@ describe('Game re-enrichment (e2e)', () => {
     coverHttp.get.mockRejectedValue(new Error('network down'));
 
     const res = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
+      .post(`/games/${gameId}/enrich`)
       .send({ candidate: { source: 'IGDB', externalId: 1036 } });
     expect(res.status).toBe(200);
 
@@ -512,7 +505,7 @@ describe('Game re-enrichment (e2e)', () => {
     });
 
     const res = await test.request
-      .patch(`/games/${String(gameId)}`)
+      .patch(`/games/${gameId}`)
       .send({ platformId });
 
     expect(res.status).toBe(200);
@@ -528,7 +521,7 @@ describe('Game re-enrichment (e2e)', () => {
     coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
 
     const res = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
+      .post(`/games/${gameId}/enrich`)
       .send({ candidate: { source: 'IGDB', externalId: 1036 } });
 
     expect(res.status).toBe(200);
@@ -547,7 +540,7 @@ describe('Game re-enrichment (e2e)', () => {
     coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
 
     const res = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
+      .post(`/games/${gameId}/enrich`)
       .send({ candidate: { source: 'IGDB', externalId: 1036 } });
     expect(res.status).toBe(200);
 
@@ -557,7 +550,7 @@ describe('Game re-enrichment (e2e)', () => {
     expect(game.source).toBe('IGDB');
     expect(game.externalId).toBe(1036);
 
-    const detail = await test.request.get(`/games/${String(gameId)}`);
+    const detail = await test.request.get(`/games/${gameId}`);
     const detailBody = detail.body as GameDetailBody;
     expect(detailBody.externalId).toBe(1036);
     expect(detailBody.source).toBe('IGDB');
@@ -572,7 +565,7 @@ describe('Game re-enrichment (e2e)', () => {
     coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
 
     const res = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
+      .post(`/games/${gameId}/enrich`)
       .send({ candidate: { source: 'IGDB', externalId: 1036 } });
     expect(res.status).toBe(200);
 
@@ -581,7 +574,7 @@ describe('Game re-enrichment (e2e)', () => {
     });
     expect(game.igdbSlug).toBe('halo-combat-evolved');
 
-    const detail = await test.request.get(`/games/${String(gameId)}`);
+    const detail = await test.request.get(`/games/${gameId}`);
     const detailBody = detail.body as GameDetailBody;
     expect(detailBody.igdbUrl).toBe(
       'https://www.igdb.com/games/halo-combat-evolved',
@@ -596,7 +589,7 @@ describe('Game re-enrichment (e2e)', () => {
       igdbSlug: null,
     });
 
-    const detail = await test.request.get(`/games/${String(gameId)}`);
+    const detail = await test.request.get(`/games/${gameId}`);
     expect((detail.body as GameDetailBody).igdbUrl).toBeNull();
     // Viewing the page never reaches out to IGDB to backfill a slug.
     expect(resolver.search).not.toHaveBeenCalled();
@@ -608,16 +601,14 @@ describe('Game re-enrichment (e2e)', () => {
     coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
     const body = { candidate: { source: 'IGDB', externalId: 1036 } };
 
-    const first = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
-      .send(body);
+    const first = await test.request.post(`/games/${gameId}/enrich`).send(body);
     expect((first.body as EnrichBody).applied).toBe(true);
     const afterFirst = await test.prisma.game.findUniqueOrThrow({
       where: { id: gameId },
     });
 
     const second = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
+      .post(`/games/${gameId}/enrich`)
       .send(body);
     expect(second.status).toBe(200);
     expect((second.body as EnrichBody).applied).toBe(false);
@@ -637,7 +628,7 @@ describe('Game re-enrichment (e2e)', () => {
     coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
 
     const res = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
+      .post(`/games/${gameId}/enrich`)
       .send({ candidate: { source: 'IGDB', externalId: 1036 } });
     expect(res.status).toBe(200);
 
@@ -661,7 +652,7 @@ describe('Game re-enrichment (e2e)', () => {
     }
 
     // The detail response exposes the ordered gallery, same-origin only.
-    const detail = await test.request.get(`/games/${String(gameId)}`);
+    const detail = await test.request.get(`/games/${gameId}`);
     const detailBody = detail.body as GameDetailBody;
     expect(detailBody.images).toEqual([
       {
@@ -684,14 +675,14 @@ describe('Game re-enrichment (e2e)', () => {
     );
     coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
     await test.request
-      .post(`/games/${String(gameId)}/enrich`)
+      .post(`/games/${gameId}/enrich`)
       .send({ candidate: { source: 'IGDB', externalId: 1036 } });
 
     resolver.search.mockResolvedValue(
       searchMatches(candidate({ images: [GALLERY_NEW] })),
     );
     const res = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
+      .post(`/games/${gameId}/enrich`)
       .send({ candidate: { source: 'IGDB', externalId: 1036 } });
     expect(res.status).toBe(200);
 
@@ -716,12 +707,12 @@ describe('Game re-enrichment (e2e)', () => {
     );
     coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
     await test.request
-      .post(`/games/${String(gameId)}/enrich`)
+      .post(`/games/${gameId}/enrich`)
       .send({ candidate: { source: 'IGDB', externalId: 1036 } });
 
     resolver.search.mockResolvedValue(searchMatches(candidate({ images: [] })));
     const res = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
+      .post(`/games/${gameId}/enrich`)
       .send({ candidate: { source: 'IGDB', externalId: 1036 } });
     expect(res.status).toBe(200);
     expect((res.body as EnrichBody).applied).toBe(false);
@@ -749,12 +740,12 @@ describe('Game re-enrichment (e2e)', () => {
     coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
 
     const res = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
+      .post(`/games/${gameId}/enrich`)
       .send({ candidate: { source: 'IGDB', externalId: 1036 } });
     expect(res.status).toBe(200);
     expect((res.body as EnrichBody).applied).toBe(true);
 
-    const detail = await test.request.get(`/games/${String(gameId)}`);
+    const detail = await test.request.get(`/games/${gameId}`);
     const detailBody = detail.body as GameDetailBody;
     expect(detailBody.summary).toBe('IGDB text');
     expect(detailBody.rating).toBe(90);
@@ -770,7 +761,7 @@ describe('Game re-enrichment (e2e)', () => {
     });
 
     const patch = await test.request
-      .patch(`/games/${String(gameId)}`)
+      .patch(`/games/${gameId}`)
       .send({ summary: 'Mine' });
     expect(patch.status).toBe(200);
 
@@ -780,7 +771,7 @@ describe('Game re-enrichment (e2e)', () => {
     coverHttp.get.mockResolvedValue(imageResponse(COVER_BYTES));
 
     const res = await test.request
-      .post(`/games/${String(gameId)}/enrich`)
+      .post(`/games/${gameId}/enrich`)
       .send({ candidate: { source: 'IGDB', externalId: 1036 } });
     expect(res.status).toBe(200);
     expect((res.body as EnrichBody).applied).toBe(true);
@@ -791,7 +782,7 @@ describe('Game re-enrichment (e2e)', () => {
     expect(game.summary).toBe('Mine');
     expect(game.rating).toBe(90);
 
-    const detail = await test.request.get(`/games/${String(gameId)}`);
+    const detail = await test.request.get(`/games/${gameId}`);
     const detailBody = detail.body as GameDetailBody;
     expect(detailBody.userEditedFields).toContain('summary');
     expect(detailBody.summary).toBe('Mine');
@@ -800,7 +791,9 @@ describe('Game re-enrichment (e2e)', () => {
 
   describe('errors', () => {
     it('404 for an unknown game', async () => {
-      const res = await test.request.post('/games/999999/enrich').send({});
+      const res = await test.request
+        .post(`/games/${MISSING_ID}/enrich`)
+        .send({});
       expect(res.status).toBe(404);
     });
 
@@ -808,12 +801,12 @@ describe('Game re-enrichment (e2e)', () => {
       const { gameId } = await seedGameWith();
 
       const unknownField = await test.request
-        .post(`/games/${String(gameId)}/enrich`)
+        .post(`/games/${gameId}/enrich`)
         .send({ bogus: true });
       expect(unknownField.status).toBe(400);
 
       const missingExternalId = await test.request
-        .post(`/games/${String(gameId)}/enrich`)
+        .post(`/games/${gameId}/enrich`)
         .send({ candidate: { source: 'IGDB' } });
       expect(missingExternalId.status).toBe(400);
     });
@@ -821,7 +814,7 @@ describe('Game re-enrichment (e2e)', () => {
     it('400 for an invalid candidate source', async () => {
       const { gameId } = await seedGameWith();
       const res = await test.request
-        .post(`/games/${String(gameId)}/enrich`)
+        .post(`/games/${gameId}/enrich`)
         .send({ candidate: { source: 'Bogus', externalId: 1 } });
       expect(res.status).toBe(400);
     });
@@ -833,9 +826,7 @@ describe('Game re-enrichment (e2e)', () => {
         reason: 'IGDB rate-limited the request',
       });
 
-      const res = await test.request
-        .post(`/games/${String(gameId)}/enrich`)
-        .send({});
+      const res = await test.request.post(`/games/${gameId}/enrich`).send({});
       expect(res.status).toBe(503);
       const game = await test.prisma.game.findUniqueOrThrow({
         where: { id: gameId },
@@ -848,7 +839,7 @@ describe('Game re-enrichment (e2e)', () => {
       resolver.search.mockResolvedValue(searchMatches(candidate()));
 
       const res = await test.request
-        .post(`/games/${String(gameId)}/enrich`)
+        .post(`/games/${gameId}/enrich`)
         .send({ candidate: { source: 'IGDB', externalId: 999 } });
       expect(res.status).toBe(409);
       expect(
@@ -860,7 +851,7 @@ describe('Game re-enrichment (e2e)', () => {
     it('401 for an unauthenticated request', async () => {
       const { gameId } = await seedGameWith();
       const anon = await supertest(app.getHttpServer() as Server)
-        .post(`/games/${String(gameId)}/enrich`)
+        .post(`/games/${gameId}/enrich`)
         .send({});
       expect(anon.status).toBe(401);
     });

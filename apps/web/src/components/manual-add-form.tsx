@@ -250,7 +250,7 @@ export function ManualAddForm({
   }
 
   /** A 409 means the name already exists; reload and select the existing row. */
-  async function refreshPlatformsAndFind(name: string): Promise<number | null> {
+  async function refreshPlatformsAndFind(name: string): Promise<string | null> {
     const list = await api.platforms.list();
     const mapped: GamePlatform[] = list.map((platform) => ({
       id: platform.id,
@@ -263,7 +263,7 @@ export function ManualAddForm({
       (platform) => platform.name.trim().toLowerCase() === target,
     );
     if (match === undefined) return null;
-    setDraft((current) => ({ ...current, platformId: String(match.id) }));
+    setDraft((current) => ({ ...current, platformId: match.id }));
     return match.id;
   }
 
@@ -278,7 +278,7 @@ export function ManualAddForm({
     try {
       const created = await api.platforms.create({ name });
       addPlatform({ id: created.id, name: created.name, slug: created.slug });
-      setDraft((current) => ({ ...current, platformId: String(created.id) }));
+      setDraft((current) => ({ ...current, platformId: created.id }));
       setPlatformOpen(false);
       setNewPlatformName('');
       platformSelectRef.current?.focus();
@@ -344,7 +344,7 @@ export function ManualAddForm({
             <>
               {' '}
               <Link
-                href={`/games/${String(lastCreated.id)}`}
+                href={`/games/${lastCreated.id}`}
                 className="text-accent-text underline-offset-4 hover:underline"
               >
                 {t('viewGame')}

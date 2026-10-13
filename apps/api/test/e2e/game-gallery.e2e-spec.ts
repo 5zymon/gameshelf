@@ -32,7 +32,7 @@ interface GameImageBody {
 }
 
 interface GameDetailBody {
-  id: number;
+  id: string;
   title: string;
   coverUrl: string | null;
   images: GameImageBody[];
@@ -147,7 +147,7 @@ describe('Game gallery (e2e)', () => {
     clearCoversDir(coversDir);
   });
 
-  async function seedPlatformRow(): Promise<number> {
+  async function seedPlatformRow(): Promise<string> {
     const platform = await seedPlatform(test.prisma, {
       name: PLATFORM_NAME,
       slug: PLATFORM_SLUG,
@@ -202,7 +202,7 @@ describe('Game gallery (e2e)', () => {
     expect(rows.map((row) => row.sourceUrl)).toEqual([ART_URL, SHOT_URL]);
 
     // The detail endpoint returns the ordered gallery.
-    const detail = await test.request.get(`/games/${String(created.id)}`);
+    const detail = await test.request.get(`/games/${created.id}`);
     expect(detail.status).toBe(200);
     const detailBody = detail.body as GameDetailBody;
     expect(detailBody.images.map((image) => image.url)).toEqual([
@@ -243,7 +243,7 @@ describe('Game gallery (e2e)', () => {
       await expect(cache.has(file)).resolves.toBe(true);
     }
 
-    const del = await test.request.delete(`/games/${String(created.id)}`);
+    const del = await test.request.delete(`/games/${created.id}`);
     expect(del.status).toBe(204);
 
     for (const row of rows) {

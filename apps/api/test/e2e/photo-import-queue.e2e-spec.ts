@@ -32,14 +32,14 @@ const OK_RESULT: PhotoImportJobResult = {
 
 /** A handler that records every claim and always succeeds. */
 function recordingHandler() {
-  const runs: { importJobId: number; photoRef: string | null }[] = [];
+  const runs: { importJobId: string; photoRef: string | null }[] = [];
   return {
     runs,
     override: {
       provide: PhotoImportHandler,
       useValue: {
         handle: jest.fn(
-          (run: { importJobId: number; photoRef: string | null }) => {
+          (run: { importJobId: string; photoRef: string | null }) => {
             runs.push(run);
             return Promise.resolve(OK_RESULT);
           },
@@ -328,12 +328,33 @@ describe('Photo import queue (e2e)', () => {
       queue.claimNext(1_000),
     ]);
     const ids = [first?.id, second?.id].filter(
-      (id): id is number => id !== undefined,
+      (id): id is string => id !== undefined,
     );
     expect(ids).toHaveLength(2);
     expect(new Set(ids).size).toBe(2);
-    expect(ids.sort((x, y) => x - y)).toEqual(
-      [a.id, b.id].sort((x, y) => x - y),
-    );
+    expect(ids.sort()).toEqual([a.id, b.id].sort());
+  }, 30_000);
+
+  it('claims three jobs created in sequence in creation order', async () => {
+    const app = (await createTestApp([NO_WORKER])).app;
+    openApps.push(app);
+    const queue = app.get(PhotoImportQueue);
+
+    const created = [];
+    for (let i = 0; i < 3; i += 1) {
+      created.push(
+        await test.prisma.importJob.create({
+          data: { status: 'queued', ...runnableNowData() },
+        }),
+      );
+    }
+
+    const claimed = [
+      await queue.claimNext(1_000),
+      await queue.claimNext(1_000),
+      await queue.claimNext(1_000),
+    ];
+
+    expect(claimed.map((row) => row?.id)).toEqual(created.map((row) => row.id));
   }, 30_000);
 });

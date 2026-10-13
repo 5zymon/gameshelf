@@ -3,6 +3,7 @@ import type { Reflector } from '@nestjs/core';
 import type { AuthConfig } from '../../src/auth/auth.config';
 import { SessionGuard } from '../../src/auth/session.guard';
 import type { SessionsService } from '../../src/auth/sessions.service';
+import { testId } from '../helpers/ids';
 
 const CONFIG: AuthConfig = {
   sessionSecret: 'x'.repeat(40),
@@ -12,7 +13,7 @@ const CONFIG: AuthConfig = {
 
 interface RequestMock {
   headers: { cookie?: string };
-  user?: { id: number };
+  user?: { id: string };
   session?: { token: string; expiresAt: Date };
 }
 
@@ -89,13 +90,13 @@ describe('SessionGuard (unit)', () => {
 
   it('attaches user.id + session and slides the cookie (no roles — AC6)', async () => {
     const expiresAt = new Date('2026-10-06T12:00:00.000Z');
-    sessions.validate.mockResolvedValue({ userId: 7, expiresAt });
+    sessions.validate.mockResolvedValue({ userId: testId(7), expiresAt });
     const { context, req, res } = contextMock('gameshelf_session=good');
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
 
     expect(sessions.validate).toHaveBeenCalledWith('good');
-    expect(req.user).toEqual({ id: 7 });
+    expect(req.user).toEqual({ id: testId(7) });
     expect(req.session).toEqual({ token: 'good', expiresAt });
     expect(Object.keys(req.user ?? {})).toEqual(['id']);
     expect(res.cookie).toHaveBeenCalledWith(

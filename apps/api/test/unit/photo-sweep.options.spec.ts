@@ -9,12 +9,13 @@ import {
   decidePhotoSweep,
   type PhotoSweepOwner,
 } from '../../src/import-jobs/photo-sweep.options';
+import { testId } from '../helpers/ids';
 
 const NOW = new Date('2026-10-06T12:00:00.000Z');
 
 function owner(overrides: Partial<PhotoSweepOwner> = {}): PhotoSweepOwner {
   return {
-    id: 1,
+    id: testId(1),
     status: 'queued',
     createdAt: NOW,
     enqueuedAt: null,

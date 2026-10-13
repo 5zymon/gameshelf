@@ -108,7 +108,7 @@ export function ImportProgressView({
 
   const photos = useMemo(() => sortPhotos(items), [items]);
   const photoIndex = useMemo(() => {
-    const map = new Map<number, number>();
+    const map = new Map<string, number>();
     photos.forEach((photo, index) => {
       map.set(photo.id, index + 1);
     });

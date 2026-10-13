@@ -70,13 +70,13 @@ export async function runUsersCli(
   try {
     if (args.command === 'create') {
       const user = await deps.users.createUser({ email, password });
-      deps.out(`Created user ${String(user.id)} <${user.email}>`);
+      deps.out(`Created user ${user.id} <${user.email}>`);
     } else {
       const user = await deps.users.setPassword({
         email,
         password,
       });
-      deps.out(`Updated password for user ${String(user.id)} <${user.email}>`);
+      deps.out(`Updated password for user ${user.id} <${user.email}>`);
     }
     return 0;
   } catch (error) {

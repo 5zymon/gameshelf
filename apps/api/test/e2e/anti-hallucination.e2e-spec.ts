@@ -94,7 +94,7 @@ describe('Anti-hallucination validation (e2e)', () => {
   });
 
   /** Seeds a Platform, writes a photo, and creates a queued import job. */
-  async function seedJob(): Promise<{ id: number; photoRef: string }> {
+  async function seedJob(): Promise<{ id: string; photoRef: string }> {
     await test.prisma.platform.create({
       data: {
         name: 'PlayStation 5',

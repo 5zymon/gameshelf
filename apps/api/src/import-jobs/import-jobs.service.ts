@@ -56,7 +56,7 @@ export interface JobCompletionResult {
 
 /** One persisted recognized item as listed for batch resolution. */
 export interface PipelineRecognizedItem {
-  id: number;
+  id: string;
   position: number;
   rawTitle: string;
   rawEdition: string | null;
@@ -67,7 +67,7 @@ export interface PipelineRecognizedItem {
 
 /** The slice of an import job the pipeline needs before it starts work. */
 export interface PipelineJobState {
-  id: number;
+  id: string;
   status: string;
   declaredCount: number | null;
   photoRef: string | null;
@@ -87,8 +87,8 @@ export interface RecognitionItemInput {
 
 /** A title that resolved to a catalog candidate and can be saved. */
 export interface ResolvedImport {
-  recognizedItemId: number;
-  platformId: number;
+  recognizedItemId: string;
+  platformId: string;
   /** True when the platform was inferred from the catalog (the photo gave no
    *  usable platform); false when it came from the photo. Written to
    *  `Game.platformUnverified` on the create path. */
@@ -103,7 +103,7 @@ export type PlatformProvenance = 'photo' | 'catalog';
 
 /** The outcome of resolving one candidate's platform. */
 export interface ResolvedPlatform {
-  platformId: number;
+  platformId: string;
   /** 'photo' = read off the physical item (matched or created from the photo
    *  string); 'catalog' = inferred from the candidate's own platform list
    *  (name/abbreviation, IGDB id, or created from a candidate name). */
@@ -183,7 +183,7 @@ export function parseCandidateRecords(
 
 /** A title that will never match; it becomes an UnrecognizedItem row. */
 export interface UnrecognizedImport {
-  recognizedItemId: number;
+  recognizedItemId: string;
   rawTitle: string;
   rawPlatform: string | null;
   rawEdition: string | null;
@@ -193,7 +193,7 @@ export interface UnrecognizedImport {
 
 /** A title whose external lookup failed transiently; it stays pending. */
 export interface TransientImport {
-  recognizedItemId: number;
+  recognizedItemId: string;
   reason: string;
 }
 
@@ -206,7 +206,7 @@ export interface ImportBatchOutcome {
 
 /** The persisted job columns the read API needs to build a response model. */
 interface ImportJobRow {
-  id: number;
+  id: string;
   status: string;
   declaredCount: number | null;
   photoRef: string | null;
@@ -275,13 +275,13 @@ export class ImportJobsService {
   }
 
   /** Full trace: job + ALL unrecognized items (dismissed included), id ASC. */
-  async findOne(id: number): Promise<ImportJobDetailModel> {
+  async findOne(id: string): Promise<ImportJobDetailModel> {
     const job = await this.prisma.importJob.findUnique({
       where: { id },
       include: { unrecognizedItems: { orderBy: { id: 'asc' } } },
     });
     if (!job) {
-      throw new NotFoundException(`Import job with id ${String(id)} not found`);
+      throw new NotFoundException(`Import job with id ${id} not found`);
     }
     const counts = await this.progressCountsFor([job]);
     return Object.assign(
@@ -298,7 +298,7 @@ export class ImportJobsService {
    * Review queue: only non-dismissed items (assumption A2 — this endpoint is
    * the flagged-item review, spec §5 "dismiss"). 404 for an unknown job.
    */
-  async listUnrecognized(jobId: number): Promise<UnrecognizedItemModel[]> {
+  async listUnrecognized(jobId: string): Promise<UnrecognizedItemModel[]> {
     await this.assertJobExists(jobId);
     const rows = await this.prisma.unrecognizedItem.findMany({
       where: { importJobId: jobId, dismissedAt: null },
@@ -358,13 +358,13 @@ export class ImportJobsService {
    * no code path ever transitions a dismissed job back (the pipeline
    * refuses terminal jobs, see markCompleted/markFailed).
    */
-  async dismissJob(id: number): Promise<ImportJobDetailModel> {
+  async dismissJob(id: string): Promise<ImportJobDetailModel> {
     const job = await this.prisma.importJob.findUnique({
       where: { id },
       select: { id: true, status: true },
     });
     if (!job) {
-      throw new NotFoundException(`Import job with id ${String(id)} not found`);
+      throw new NotFoundException(`Import job with id ${id} not found`);
     }
     if (job.status === 'dismissed') {
       return this.findOne(id);
@@ -381,9 +381,7 @@ export class ImportJobsService {
       });
     } catch (error) {
       if (this.isRecordNotFound(error)) {
-        throw new NotFoundException(
-          `Import job with id ${String(id)} not found`,
-        );
+        throw new NotFoundException(`Import job with id ${id} not found`);
       }
       throw error;
     }
@@ -395,8 +393,8 @@ export class ImportJobsService {
    * 404 if the item is missing or belongs to another job.
    */
   async dismissUnrecognizedItem(
-    jobId: number,
-    itemId: number,
+    jobId: string,
+    itemId: string,
   ): Promise<UnrecognizedItemModel> {
     const item = await this.prisma.unrecognizedItem.findUnique({
       where: { id: itemId },
@@ -404,7 +402,7 @@ export class ImportJobsService {
     });
     if (item?.importJobId !== jobId) {
       throw new NotFoundException(
-        `Unrecognized item with id ${String(itemId)} not found in import job ${String(jobId)}`,
+        `Unrecognized item with id ${itemId} not found in import job ${jobId}`,
       );
     }
     if (item.dismissedAt === null) {
@@ -416,7 +414,7 @@ export class ImportJobsService {
       } catch (error) {
         if (this.isRecordNotFound(error)) {
           throw new NotFoundException(
-            `Unrecognized item with id ${String(itemId)} not found`,
+            `Unrecognized item with id ${itemId} not found`,
           );
         }
         throw error;
@@ -427,7 +425,7 @@ export class ImportJobsService {
     });
     if (!updated) {
       throw new NotFoundException(
-        `Unrecognized item with id ${String(itemId)} not found`,
+        `Unrecognized item with id ${itemId} not found`,
       );
     }
     return this.toUnrecognizedItemModel(updated);
@@ -449,13 +447,13 @@ export class ImportJobsService {
    * nothing pending. The guarded `updateMany` closes the race between two
    * concurrent retries.
    */
-  async retryJob(id: number): Promise<ImportJobDetailModel> {
+  async retryJob(id: string): Promise<ImportJobDetailModel> {
     const job = await this.prisma.importJob.findUnique({
       where: { id },
       select: { id: true, status: true, photoRef: true, declaredCount: true },
     });
     if (!job) {
-      throw new NotFoundException(`Import job with id ${String(id)} not found`);
+      throw new NotFoundException(`Import job with id ${id} not found`);
     }
     if (job.status !== 'failed') {
       throw new ConflictException(
@@ -488,9 +486,7 @@ export class ImportJobsService {
       if (current?.status === 'failed' && current.photoRef === null) {
         throw new ConflictException('This import has no photo to re-process');
       }
-      throw new ConflictException(
-        `Import job ${String(id)} is no longer failed`,
-      );
+      throw new ConflictException(`Import job ${id} is no longer failed`);
     }
     this.photoQueue.wake();
     return this.findOne(id);
@@ -543,7 +539,7 @@ export class ImportJobsService {
    * queued|processing -> processing (idempotent on processing: the worker's
    * claim already set it).
    */
-  async markProcessing(jobId: number): Promise<void> {
+  async markProcessing(jobId: string): Promise<void> {
     await this.assertTransition(jobId, ['queued', 'processing']);
     await this.prisma.importJob.update({
       where: { id: jobId },
@@ -560,7 +556,7 @@ export class ImportJobsService {
    * user dismissal — acceptance "stays dismissed").
    */
   async markCompleted(
-    jobId: number,
+    jobId: string,
     result: JobCompletionResult,
   ): Promise<ImportJobRow> {
     const job = await this.getJobForTransition(jobId, ['queued', 'processing']);
@@ -584,7 +580,7 @@ export class ImportJobsService {
     });
     if (written.count === 0) {
       throw new ConflictException(
-        `Import job ${String(jobId)} is no longer active; refusing to overwrite a terminal result`,
+        `Import job ${jobId} is no longer active; refusing to overwrite a terminal result`,
       );
     }
     return this.reloadJobRow(jobId);
@@ -600,7 +596,7 @@ export class ImportJobsService {
    * (e.g. a job that never got past `queued`) has nothing to persist.
    */
   async markFailed(
-    jobId: number,
+    jobId: string,
     errorMessage: string,
     counts?: JobCompletionResult,
   ): Promise<ImportJobRow> {
@@ -624,7 +620,7 @@ export class ImportJobsService {
     });
     if (written.count === 0) {
       throw new ConflictException(
-        `Import job ${String(jobId)} is no longer active; refusing to overwrite a terminal result`,
+        `Import job ${jobId} is no longer active; refusing to overwrite a terminal result`,
       );
     }
     return this.reloadJobRow(jobId);
@@ -632,7 +628,7 @@ export class ImportJobsService {
 
   /** Incremental trace write per flagged item (ADR-005 retry semantics). */
   async addUnrecognizedItem(
-    jobId: number,
+    jobId: string,
     data: {
       rawTitle: string;
       rawPlatform?: string | null;
@@ -654,7 +650,7 @@ export class ImportJobsService {
   // ---------- pipeline state (ticket 3.5) ----------
 
   /** The pipeline's job snapshot, or `null` for an unknown id. */
-  async getPipelineJob(jobId: number): Promise<PipelineJobState | null> {
+  async getPipelineJob(jobId: string): Promise<PipelineJobState | null> {
     return this.prisma.importJob.findUnique({
       where: { id: jobId },
       select: {
@@ -714,7 +710,7 @@ export class ImportJobsService {
    * the file delete. Returns true when this call claimed the row.
    */
   async releaseSweptPhoto(
-    jobId: number,
+    jobId: string,
     photoRef: string,
     expectedStatus: string,
     markFailedReason?: string,
@@ -743,7 +739,7 @@ export class ImportJobsService {
    * number of rows written (0 when recognition was already persisted).
    */
   async saveRecognition(
-    jobId: number,
+    jobId: string,
     items: RecognitionItemInput[],
   ): Promise<number> {
     return this.prisma.$transaction(async (tx) => {
@@ -774,7 +770,7 @@ export class ImportJobsService {
 
   /** Unresolved titles for this job, in recognition order (retry re-entry). */
   async listPendingRecognizedItems(
-    jobId: number,
+    jobId: string,
   ): Promise<PipelineRecognizedItem[]> {
     return this.prisma.recognizedItem.findMany({
       where: { importJobId: jobId, status: 'pending' },
@@ -792,7 +788,7 @@ export class ImportJobsService {
   }
 
   /** Counts by per-item status; `status: 'pending'` implies an incomplete run. */
-  async summarizeRecognizedItems(jobId: number): Promise<JobCompletionResult> {
+  async summarizeRecognizedItems(jobId: string): Promise<JobCompletionResult> {
     const groups = await this.prisma.recognizedItem.groupBy({
       by: ['status'],
       where: { importJobId: jobId },
@@ -942,7 +938,7 @@ export class ImportJobsService {
    * permanently failing a job that is actually succeeding.
    */
   async commitImportBatch(
-    jobId: number,
+    jobId: string,
     outcome: ImportBatchOutcome,
   ): Promise<void> {
     // Terminal-status guard (read outside the transaction): a job already
@@ -955,7 +951,7 @@ export class ImportJobsService {
     });
     if (job && isTerminalImportJobStatus(job.status)) {
       throw new RetryableImportError(
-        `Import job ${String(jobId)} is already ${job.status}; refusing to commit a batch`,
+        `Import job ${jobId} is already ${job.status}; refusing to commit a batch`,
       );
     }
 
@@ -986,7 +982,7 @@ export class ImportJobsService {
       });
       if (guard && isTerminalImportJobStatus(guard.status)) {
         throw new RetryableImportError(
-          `Import job ${String(jobId)} is already ${guard.status}; refusing to commit a batch`,
+          `Import job ${jobId} is already ${guard.status}; refusing to commit a batch`,
         );
       }
       for (const item of resolved) {
@@ -1000,7 +996,7 @@ export class ImportJobsService {
         // Already in catalog (overlapping photo / re-upload): link, never a
         // second row, and do NOT increment — this is the same physical copy.
         const existing = await this.identity.findExisting(input, tx);
-        let gameId: number;
+        let gameId: string;
         if (existing !== null) {
           gameId = existing.id;
           duplicateAssets.push(item.data.coverUrl);
@@ -1028,7 +1024,7 @@ export class ImportJobsService {
           // batch rolls back, but this is a benign race, not a permanent
           // failure — the retry re-queries only still-pending titles.
           throw new RetryableImportError(
-            `Recognized item ${String(item.recognizedItemId)} was already resolved; rolling back the batch`,
+            `Recognized item ${item.recognizedItemId} was already resolved; rolling back the batch`,
           );
         }
       }
@@ -1043,7 +1039,7 @@ export class ImportJobsService {
         });
         if (claim.count === 0) {
           throw new RetryableImportError(
-            `Recognized item ${String(item.recognizedItemId)} was already resolved; rolling back the batch`,
+            `Recognized item ${item.recognizedItemId} was already resolved; rolling back the batch`,
           );
         }
         await tx.unrecognizedItem.create({
@@ -1079,9 +1075,9 @@ export class ImportJobsService {
    * titles even before the job is terminal.
    */
   private async deriveCounts(
-    ids: number[],
-  ): Promise<Map<number, JobProgressCounts>> {
-    const counts = new Map<number, JobProgressCounts>();
+    ids: string[],
+  ): Promise<Map<string, JobProgressCounts>> {
+    const counts = new Map<string, JobProgressCounts>();
     for (const id of ids) {
       counts.set(id, emptyCounts());
     }
@@ -1124,9 +1120,9 @@ export class ImportJobsService {
       | 'importedCount'
       | 'unrecognizedCount'
     >[],
-  ): Promise<Map<number, JobProgressCounts>> {
-    const counts = new Map<number, JobProgressCounts>();
-    const liveIds: number[] = [];
+  ): Promise<Map<string, JobProgressCounts>> {
+    const counts = new Map<string, JobProgressCounts>();
+    const liveIds: string[] = [];
     for (const row of rows) {
       if (isTerminalImportJobStatus(row.status)) {
         counts.set(row.id, {
@@ -1205,39 +1201,35 @@ export class ImportJobsService {
     };
   }
 
-  private async assertJobExists(jobId: number): Promise<void> {
+  private async assertJobExists(jobId: string): Promise<void> {
     const job = await this.prisma.importJob.findUnique({
       where: { id: jobId },
       select: { id: true },
     });
     if (!job) {
-      throw new NotFoundException(
-        `Import job with id ${String(jobId)} not found`,
-      );
+      throw new NotFoundException(`Import job with id ${jobId} not found`);
     }
   }
 
   /** Loads the job; 404 for unknown, 409 for a state not in `allowed`. */
-  private async getJobForTransition(jobId: number, allowed: string[]) {
+  private async getJobForTransition(jobId: string, allowed: string[]) {
     const job = await this.prisma.importJob.findUnique({
       where: { id: jobId },
       select: { id: true, status: true, declaredCount: true },
     });
     if (!job) {
-      throw new NotFoundException(
-        `Import job with id ${String(jobId)} not found`,
-      );
+      throw new NotFoundException(`Import job with id ${jobId} not found`);
     }
     if (!allowed.includes(job.status)) {
       throw new ConflictException(
-        `Import job ${String(jobId)} is already ${job.status}; refusing to overwrite a terminal result`,
+        `Import job ${jobId} is already ${job.status}; refusing to overwrite a terminal result`,
       );
     }
     return job;
   }
 
   private async assertTransition(
-    jobId: number,
+    jobId: string,
     allowed: string[],
   ): Promise<void> {
     await this.getJobForTransition(jobId, allowed);
@@ -1248,14 +1240,12 @@ export class ImportJobsService {
    * persisted row so callers see the final status/counters; a vanished row is a
    * 404, matching the rest of the surface.
    */
-  private async reloadJobRow(jobId: number): Promise<ImportJobRow> {
+  private async reloadJobRow(jobId: string): Promise<ImportJobRow> {
     const row = await this.prisma.importJob.findUnique({
       where: { id: jobId },
     });
     if (row === null) {
-      throw new NotFoundException(
-        `Import job with id ${String(jobId)} not found`,
-      );
+      throw new NotFoundException(`Import job with id ${jobId} not found`);
     }
     return row;
   }

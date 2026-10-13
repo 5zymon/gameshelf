@@ -1,10 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+import { UUID_V7_EXAMPLE } from '../../common/uuid-v7';
 import { IMPORT_JOB_STATUSES } from './list-import-jobs-query.dto';
 
 /** One row of `import_jobs` — a single import run (one uploaded photo). */
 export class ImportJobModel {
-  @ApiProperty({ example: 1 })
-  id!: number;
+  @ApiProperty({ format: 'uuid', example: UUID_V7_EXAMPLE })
+  id!: string;
 
   @ApiProperty({
     enum: IMPORT_JOB_STATUSES,
@@ -113,11 +115,11 @@ export class UnrecognizedItemCandidateModel {
 
 /** One row of `unrecognized_items` — a flagged item with its raw title. */
 export class UnrecognizedItemModel {
-  @ApiProperty({ example: 1 })
-  id!: number;
+  @ApiProperty({ format: 'uuid', example: UUID_V7_EXAMPLE })
+  id!: string;
 
-  @ApiProperty({ example: 1 })
-  importJobId!: number;
+  @ApiProperty({ format: 'uuid', example: UUID_V7_EXAMPLE })
+  importJobId!: string;
 
   @ApiProperty({
     example: 'PlayStaton 5',
@@ -158,8 +160,8 @@ export class UnrecognizedItemModel {
  * must outlive dismissal (spec §4.2.5).
  */
 export class ImportJobDetailModel {
-  @ApiProperty({ example: 1 })
-  id!: number;
+  @ApiProperty({ format: 'uuid', example: UUID_V7_EXAMPLE })
+  id!: string;
 
   @ApiProperty({
     enum: IMPORT_JOB_STATUSES,

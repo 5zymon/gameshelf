@@ -9,7 +9,7 @@
 
 /** The fields the matcher needs from a platform row. */
 export interface PlatformMatchCandidate {
-  id: number;
+  id: string;
   name: string;
   abbreviation: string | null;
   alternativeName: string | null;

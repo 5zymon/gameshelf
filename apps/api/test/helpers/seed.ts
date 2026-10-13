@@ -27,7 +27,7 @@ export function seedPlatform(
 
 export function seedPlatformAlias(
   prisma: PrismaService,
-  data: { platformId: number; name: string },
+  data: { platformId: string; name: string },
 ) {
   return prisma.platformAlias.create({
     data: {
@@ -42,7 +42,7 @@ export function seedGame(
   prisma: PrismaService,
   data: {
     title: string;
-    platformId: number;
+    platformId: string;
     edition?: string | null;
     releaseYear?: number | null;
     publisher?: string | null;

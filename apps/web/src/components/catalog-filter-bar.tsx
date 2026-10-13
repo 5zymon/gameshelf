@@ -267,7 +267,7 @@ export function CatalogFilterBar({
   }
 
   /** Multi-select: a chip toggles its id. Reads the in-flight selection so quick successive toggles compose. */
-  function togglePlatform(id: number): void {
+  function togglePlatform(id: string): void {
     commit({
       platformId: togglePlatformId(
         (pendingRef.current ?? valuesRef.current).platformId,
@@ -325,10 +325,8 @@ export function CatalogFilterBar({
     ...platforms.filter((p) => selectedPlatforms.has(p.id)).map((p) => p.id),
     ...selectedPlatformIds.filter((id) => !knownPlatformIds.has(id)),
   ];
-  function platformLabelOf(id: number): string {
-    return (
-      platforms.find((p) => p.id === id)?.name ?? t('platformFallback', { id })
-    );
+  function platformLabelOf(id: string): string {
+    return platforms.find((p) => p.id === id)?.name ?? t('platformFallback');
   }
 
   return (
@@ -600,7 +598,7 @@ export function CatalogFilterBar({
           )}
           {activePlatformIds.map((id) => (
             <Chip
-              key={`platform-${String(id)}`}
+              key={`platform-${id}`}
               label={t('chip.platform', { name: platformLabelOf(id) })}
               onRemove={() => {
                 commit({

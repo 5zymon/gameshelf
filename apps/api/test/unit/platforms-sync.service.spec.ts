@@ -5,6 +5,7 @@ import type {
 import type { PlatformMatchCandidate } from '../../src/platforms/platform-match';
 import { PlatformsSyncService } from '../../src/platforms/platforms-sync.service';
 import type { PlatformsService } from '../../src/platforms/platforms.service';
+import { testId } from '../helpers/ids';
 
 interface IgdbMock {
   fetchPlatforms: jest.Mock;
@@ -38,7 +39,7 @@ function createSync(): {
 }
 
 function existing(
-  overrides: Partial<PlatformMatchCandidate> & { id: number },
+  overrides: Partial<PlatformMatchCandidate> & { id: string },
 ): PlatformMatchCandidate {
   return {
     name: '',
@@ -54,7 +55,7 @@ describe('PlatformsSyncService (unit)', () => {
     igdb.fetchPlatforms.mockResolvedValue([{ id: 1, name: 'PC' }]);
     platforms.listMatchCandidates.mockResolvedValue([]);
     platforms.createCanonical.mockResolvedValue(
-      existing({ id: 100, name: 'PC' }),
+      existing({ id: testId(100), name: 'PC' }),
     );
 
     await sync.sync();
@@ -74,14 +75,14 @@ describe('PlatformsSyncService (unit)', () => {
         platform_family: 1,
       },
     ]);
-    const custom = existing({ id: 9, name: 'PS5' });
+    const custom = existing({ id: testId(9), name: 'PS5' });
     platforms.listMatchCandidates.mockResolvedValue([custom]);
     platforms.updateCanonical.mockResolvedValue(true);
 
     const result = await sync.sync();
 
     expect(platforms.createCanonical).not.toHaveBeenCalled();
-    expect(platforms.updateCanonical).toHaveBeenCalledWith(9, {
+    expect(platforms.updateCanonical).toHaveBeenCalledWith(testId(9), {
       name: 'PlayStation 5',
       abbreviation: 'PS5',
       alternativeName: null,
@@ -102,7 +103,11 @@ describe('PlatformsSyncService (unit)', () => {
       { id: 7, name: 'Xbox', abbreviation: 'XBOX', platform_family: 2 },
     ]);
     platforms.listMatchCandidates.mockResolvedValue([]);
-    const created = existing({ id: 100, name: 'Xbox', abbreviation: 'XBOX' });
+    const created = existing({
+      id: testId(100),
+      name: 'Xbox',
+      abbreviation: 'XBOX',
+    });
     platforms.createCanonical.mockResolvedValue(created);
 
     const result = await sync.sync();
@@ -128,10 +133,10 @@ describe('PlatformsSyncService (unit)', () => {
       { id: 2, name: 'PlayStation 4', abbreviation: 'PS4' },
     ]);
     platforms.listMatchCandidates.mockResolvedValue([
-      existing({ id: 1, name: 'PlayStation 5', abbreviation: 'PS5' }),
+      existing({ id: testId(1), name: 'PlayStation 5', abbreviation: 'PS5' }),
     ]);
     platforms.createCanonical.mockResolvedValue(
-      existing({ id: 100, name: 'PlayStation 4', abbreviation: 'PS4' }),
+      existing({ id: testId(100), name: 'PlayStation 4', abbreviation: 'PS4' }),
     );
 
     const result = await sync.sync();
@@ -145,7 +150,7 @@ describe('PlatformsSyncService (unit)', () => {
     const { sync, igdb, platforms } = createSync();
     igdb.fetchPlatforms.mockResolvedValue([{ id: 6, name: 'PC' }]);
     platforms.listMatchCandidates.mockResolvedValue([
-      existing({ id: 3, name: 'PC' }),
+      existing({ id: testId(3), name: 'PC' }),
     ]);
     platforms.updateCanonical.mockResolvedValue(false);
 
@@ -167,14 +172,14 @@ describe('PlatformsSyncService (unit)', () => {
       { id: 3, name: 'Xbox', abbreviation: 'XBOX' },
     ]);
     platforms.listMatchCandidates.mockResolvedValue([
-      existing({ id: 10, name: 'PC' }),
-      existing({ id: 11, name: 'PS5' }),
+      existing({ id: testId(10), name: 'PC' }),
+      existing({ id: testId(11), name: 'PS5' }),
     ]);
     platforms.updateCanonical
       .mockResolvedValueOnce(true) // PC changed
       .mockResolvedValueOnce(false); // PS5 unchanged
     platforms.createCanonical.mockResolvedValue(
-      existing({ id: 100, name: 'Xbox', abbreviation: 'XBOX' }),
+      existing({ id: testId(100), name: 'Xbox', abbreviation: 'XBOX' }),
     );
 
     const result = await sync.sync();
@@ -211,7 +216,7 @@ describe('PlatformsSyncService (unit)', () => {
     ]);
     platforms.listMatchCandidates.mockResolvedValue([]);
     platforms.createCanonical.mockResolvedValue(
-      existing({ id: 100, name: 'PC' }),
+      existing({ id: testId(100), name: 'PC' }),
     );
     platforms.updateCanonical.mockResolvedValue(false);
 
@@ -238,14 +243,14 @@ describe('PlatformsSyncService (unit)', () => {
       },
     ]);
     platforms.listMatchCandidates.mockResolvedValue([
-      existing({ id: 9, name: 'PS5', aliases: ['PlayStation 5'] }),
+      existing({ id: testId(9), name: 'PS5', aliases: ['PlayStation 5'] }),
     ]);
     platforms.updateCanonical.mockResolvedValue(true);
 
     const result = await sync.sync();
 
     expect(platforms.createCanonical).not.toHaveBeenCalled();
-    expect(platforms.updateCanonical).toHaveBeenCalledWith(9, {
+    expect(platforms.updateCanonical).toHaveBeenCalledWith(testId(9), {
       name: 'PlayStation 5',
       abbreviation: 'PS5',
       alternativeName: null,
@@ -273,7 +278,7 @@ describe('PlatformsSyncService (unit)', () => {
     igdb.fetchPlatforms.mockResolvedValue(fetched);
     platforms.listMatchCandidates.mockResolvedValue([]);
     platforms.createCanonical.mockResolvedValue(
-      existing({ id: 100, name: 'PC' }),
+      existing({ id: testId(100), name: 'PC' }),
     );
 
     await sync.sync();

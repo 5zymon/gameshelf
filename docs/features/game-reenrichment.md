@@ -31,7 +31,7 @@ top — it never creates a duplicate and never wipes data.
 # Endpoint
 
 `POST /games/:id/enrich` — behind the global `SessionGuard` (no `@Public()`),
-`@HttpCode(200)`. Path `id` is a `GameIdParamDto` (integer ≥ 1).
+`@HttpCode(200)`. Path `id` is a `GameIdParamDto` (a UUIDv7 string).
 
 The body is optional and has two forms:
 

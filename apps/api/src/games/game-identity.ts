@@ -3,7 +3,7 @@ import { normalizeTitle } from '../game-catalog/title-match';
 /** Identity inputs for one game (incoming data or an existing row). */
 export interface GameIdentity {
   title: string;
-  platformId: number;
+  platformId: string;
   edition: string | null;
   source: string; // GameSource / CatalogSource
   externalId: number | null;

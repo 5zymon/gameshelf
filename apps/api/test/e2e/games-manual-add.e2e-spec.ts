@@ -12,6 +12,7 @@ import {
   CoverHttpClient,
   type CoverHttpResponse,
 } from '../../src/covers/cover-http.client';
+import { MISSING_ID } from '../helpers/ids';
 import { resetDatabase } from '../helpers/reset';
 import { seedPlatform } from '../helpers/seed';
 import { createTestApp, type TestApp } from '../helpers/test-app';
@@ -43,15 +44,15 @@ interface EnrichCandidateBody {
 }
 
 interface GameVideoBody {
-  id: number;
+  id: string;
   name: string | null;
   videoId: string;
 }
 
 interface GameDetailBody {
-  id: number;
+  id: string;
   title: string;
-  platformId: number;
+  platformId: string;
   edition: string | null;
   releaseYear: number | null;
   publisher: string | null;
@@ -66,7 +67,7 @@ interface GameDetailBody {
   source: string;
   externalId: number | null;
   igdbUrl: string | null;
-  platform: { id: number; name: string; slug: string };
+  platform: { id: string; name: string; slug: string };
 }
 
 interface GameSearchBody {
@@ -157,7 +158,7 @@ describe('Manual add (e2e)', () => {
     clearCoversDir(coversDir);
   });
 
-  async function seedPlatformRow(): Promise<number> {
+  async function seedPlatformRow(): Promise<string> {
     const platform = await seedPlatform(test.prisma, {
       name: PLATFORM_NAME,
       slug: PLATFORM_SLUG,
@@ -384,15 +385,13 @@ describe('Manual add (e2e)', () => {
       // No second row was created.
       expect(await test.prisma.game.count()).toBe(1);
 
-      const copy = await test.request.post(
-        `/games/${String(firstBody.id)}/copies`,
-      );
+      const copy = await test.request.post(`/games/${firstBody.id}/copies`);
       expect(copy.status).toBe(200);
       expect((copy.body as GameDetailBody).copyCount).toBe(2);
 
       // Still exactly one catalog row; detail exposes the incremented count.
       expect(await test.prisma.game.count()).toBe(1);
-      const detail = await test.request.get(`/games/${String(firstBody.id)}`);
+      const detail = await test.request.get(`/games/${firstBody.id}`);
       expect(detail.status).toBe(200);
       expect((detail.body as GameDetailBody).copyCount).toBe(2);
 
@@ -426,7 +425,7 @@ describe('Manual add (e2e)', () => {
 
   describe('POST /games/:id/copies', () => {
     it('returns 404 for an unknown game', async () => {
-      const res = await test.request.post('/games/999999/copies');
+      const res = await test.request.post(`/games/${MISSING_ID}/copies`);
 
       expect(res.status).toBe(404);
     });
@@ -438,8 +437,8 @@ describe('Manual add (e2e)', () => {
         .send({ title: 'Hades', platformId });
       const id = (created.body as GameDetailBody).id;
 
-      await test.request.post(`/games/${String(id)}/copies`);
-      const second = await test.request.post(`/games/${String(id)}/copies`);
+      await test.request.post(`/games/${id}/copies`);
+      const second = await test.request.post(`/games/${id}/copies`);
 
       expect(second.status).toBe(200);
       expect((second.body as GameDetailBody).copyCount).toBe(3);
@@ -455,9 +454,7 @@ describe('Manual add (e2e)', () => {
     });
     resolver.search.mockResolvedValue(searchMatches());
 
-    const res = await test.request
-      .post(`/games/${String(game.id)}/enrich`)
-      .send({});
+    const res = await test.request.post(`/games/${game.id}/enrich`).send({});
 
     expect(res.status).toBe(200);
   });

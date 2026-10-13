@@ -1,4 +1,5 @@
 import type { ListGamesQuery, SortDirection } from '@/lib/api';
+import { isUuidV7 } from '@/lib/uuid';
 
 /** Sort fields the catalog UI exposes (the API also accepts platform/createdAt). */
 export type CatalogSortField = 'title' | 'year';
@@ -45,9 +46,6 @@ const MAX_TEXT = 255;
 /** Mirrors the API's `MAX_PLATFORM_IDS` (`@ArrayMaxSize` on `ListGamesQueryDto.platformId`). */
 export const MAX_PLATFORM_IDS = 100;
 
-/** Mirrors the API's `MAX_PLATFORM_ID` (`@Max` on `ListGamesQueryDto.platformId`). */
-const MAX_PLATFORM_ID = 2147483647;
-
 function firstValue(v: string | string[] | undefined): string | undefined {
   return Array.isArray(v) ? v[0] : v;
 }
@@ -56,33 +54,45 @@ function allValues(v: string | string[] | undefined): string[] {
   return v === undefined ? [] : Array.isArray(v) ? v : [v];
 }
 
-/** De-duplicated, ascending, capped at MAX_PLATFORM_IDS; an empty selection is `undefined`, never `[]`. */
+/**
+ * De-duplicated, lowercased, in lexicographic order (UUIDv7 = creation order),
+ * capped at MAX_PLATFORM_IDS; an empty selection is `undefined`, never `[]`.
+ */
 export function canonicalPlatformIds(
-  ids: readonly number[] | undefined,
-): number[] | undefined {
+  ids: readonly string[] | undefined,
+): string[] | undefined {
   if (ids === undefined) return undefined;
-  const out = [...new Set(ids)]
-    .sort((a, b) => a - b)
+  const out = [...new Set(ids.map((id) => id.toLowerCase()))]
+    .sort()
     .slice(0, MAX_PLATFORM_IDS);
   return out.length === 0 ? undefined : out;
 }
 
-/** Adds `id` when absent, removes it when present; the last removal yields `undefined`. */
+/**
+ * Adds `id` when absent, removes it when present; the last removal yields
+ * `undefined`. `id` is lowercased first, like every entry stored by
+ * `canonicalPlatformIds`, so an uppercase copy of a selected id still toggles.
+ */
 export function togglePlatformId(
-  selected: readonly number[] | undefined,
-  id: number,
-): number[] | undefined {
-  return selected?.includes(id)
-    ? canonicalPlatformIds(selected.filter((x) => x !== id))
-    : canonicalPlatformIds([...(selected ?? []), id]);
+  selected: readonly string[] | undefined,
+  id: string,
+): string[] | undefined {
+  const target = id.toLowerCase();
+  return selected?.includes(target)
+    ? canonicalPlatformIds(selected.filter((x) => x !== target))
+    : canonicalPlatformIds([...(selected ?? []), target]);
 }
 
-/** Removes `id` (idempotent); the last removal yields `undefined`. */
+/**
+ * Removes `id` (idempotent); the last removal yields `undefined`. `id` is
+ * lowercased first, matching the canonical (lowercase) selection.
+ */
 export function removePlatformId(
-  selected: readonly number[] | undefined,
-  id: number,
-): number[] | undefined {
-  return canonicalPlatformIds((selected ?? []).filter((x) => x !== id));
+  selected: readonly string[] | undefined,
+  id: string,
+): string[] | undefined {
+  const target = id.toLowerCase();
+  return canonicalPlatformIds((selected ?? []).filter((x) => x !== target));
 }
 
 /** '' / non-numeric / out-of-range → undefined (dropped, never sent → no 400). */
@@ -109,10 +119,9 @@ export function parseCatalogFilters(
 ): CatalogFilterValues {
   const values: CatalogFilterValues = {};
   const platformId = canonicalPlatformIds(
-    allValues(params.platformId).flatMap((raw) => {
-      const id = boundedInt(raw, 1, MAX_PLATFORM_ID);
-      return id === undefined ? [] : [id];
-    }),
+    allValues(params.platformId)
+      .map((raw) => raw.trim())
+      .filter(isUuidV7),
   );
   if (platformId !== undefined) values.platformId = platformId;
   const year = boundedInt(firstValue(params.year), 1000, 2100);
@@ -169,7 +178,7 @@ export function sortOverrides(
 export function catalogHref(values: CatalogFilterValues): string {
   const params = new URLSearchParams();
   for (const id of canonicalPlatformIds(values.platformId) ?? [])
-    params.append('platformId', String(id));
+    params.append('platformId', id);
   if (values.edition !== undefined) params.set('edition', values.edition);
   if (values.year !== undefined) params.set('year', String(values.year));
   if (values.publisher !== undefined) params.set('publisher', values.publisher);

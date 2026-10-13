@@ -34,7 +34,7 @@ export const NO_WORKER: TestProviderOverride = queueOptions({
  * 1-based `attempt` is `attemptsMade + 1`.
  */
 export function makeRun(
-  importJobId: number,
+  importJobId: string,
   photoRef: string | null,
   attemptsMade = 0,
   maxAttempts = 3,

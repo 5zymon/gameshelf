@@ -87,7 +87,7 @@ export class ImportUploadService {
       });
       jobs.push({
         id: row.id,
-        jobId: String(row.id),
+        jobId: row.id,
         status: row.status,
         declaredCount,
       });

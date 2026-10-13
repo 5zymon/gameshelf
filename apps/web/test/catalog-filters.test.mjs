@@ -61,6 +61,17 @@ const {
   togglePlatformId,
 } = await import('../src/lib/catalog-filters.ts');
 
+/** Deterministic valid UUIDv7 fixtures; lexical order follows n. */
+const testId = (n) => `01900000-0000-7000-8000-${String(n).padStart(12, '0')}`;
+const ID_A = testId(1);
+const ID_B = testId(2);
+const ID_C = testId(3);
+const ID_D = testId(4);
+/** A valid UUIDv4: the right shape, the wrong version. */
+const UUID_V4 = '6f1c2e44-3b0a-4c2e-9d1f-0a1b2c3d4e5f';
+/** An id with hex letters, so case-insensitivity is observable. */
+const ID_MIXED = '0190000a-000b-7c00-8d00-00000000e0f1';
+
 test('parseCatalogFilters: empty params parse to no values', () => {
   assert.deepEqual(parseCatalogFilters({}), {});
 });
@@ -111,7 +122,7 @@ test('parseCatalogFilters: array params take the first value', () => {
 
 test('hasActiveFilters: sort alone is not a filter', () => {
   assert.equal(hasActiveFilters({ sort: 'year', order: 'desc' }), false);
-  assert.equal(hasActiveFilters({ platformId: [2] }), true);
+  assert.equal(hasActiveFilters({ platformId: [ID_A] }), true);
   assert.equal(hasActiveFilters({ platformId: [] }), false);
 });
 
@@ -126,77 +137,98 @@ test('catalogHref: sort/order are written and page is always dropped', () => {
 
 test('catalogHref: several params serialise together and page is dropped', () => {
   const href = catalogHref({
-    platformId: [232],
+    platformId: [ID_A],
     year: 2024,
     sort: 'year',
     order: 'desc',
   });
-  assert.equal(href, '/?platformId=232&year=2024&sort=year&order=desc');
+  assert.equal(href, `/?platformId=${ID_A}&year=2024&sort=year&order=desc`);
   assert.equal(href.includes('page'), false);
 });
 
 test('parseCatalogFilters: a single platformId parses to a one-element array', () => {
-  assert.deepEqual(parseCatalogFilters({ platformId: '232' }), {
-    platformId: [232],
+  assert.deepEqual(parseCatalogFilters({ platformId: ID_A }), {
+    platformId: [ID_A],
   });
 });
 
-test('parseCatalogFilters: repeated platformIds are de-duplicated and ascending', () => {
-  assert.deepEqual(parseCatalogFilters({ platformId: ['5', '2', '5'] }), {
-    platformId: [2, 5],
-  });
+test('parseCatalogFilters: repeated platformIds are de-duplicated and lexicographic', () => {
+  assert.deepEqual(
+    parseCatalogFilters({ platformId: [ID_B, ID_A, ID_B, ID_A] }),
+    { platformId: [ID_A, ID_B] },
+  );
+});
+
+test('parseCatalogFilters: case-insensitive ids collapse onto the lowercase form', () => {
+  assert.notEqual(ID_MIXED.toUpperCase(), ID_MIXED);
+  assert.deepEqual(
+    parseCatalogFilters({ platformId: [ID_MIXED.toUpperCase(), ID_MIXED] }),
+    { platformId: [ID_MIXED] },
+  );
 });
 
 test('parseCatalogFilters: invalid platformId entries are dropped one at a time', () => {
   assert.deepEqual(
-    parseCatalogFilters({ platformId: ['0', 'abc', '3', '-1', '', ' 4 '] }),
-    { platformId: [3, 4] },
+    parseCatalogFilters({
+      platformId: ['0', 'abc', ID_C, UUID_V4, '', ` ${ID_D} `],
+    }),
+    { platformId: [ID_C, ID_D] },
   );
   assert.deepEqual(parseCatalogFilters({ platformId: ['0', 'x'] }), {});
-  assert.deepEqual(parseCatalogFilters({ platformId: ['2147483648', '3'] }), {
-    platformId: [3],
-  });
-  assert.deepEqual(parseCatalogFilters({ platformId: ['2147483648'] }), {});
 });
 
-test('parseCatalogFilters: more than 100 platformIds keep the 100 smallest', () => {
+test('parseCatalogFilters: more than 100 platformIds keep the 100 lexically smallest', () => {
   assert.equal(MAX_PLATFORM_IDS, 100);
-  const ids = Array.from({ length: 101 }, (_, i) => String(i + 1));
+  // Reversed input: canonicalisation sorts before it caps.
+  const ids = Array.from({ length: 101 }, (_, i) => testId(101 - i));
   const parsed = parseCatalogFilters({ platformId: ids });
   assert.equal(parsed.platformId.length, 100);
-  assert.equal(parsed.platformId[99], 100);
+  assert.equal(parsed.platformId[99], testId(100));
+  assert.equal(parsed.platformId.includes(testId(101)), false);
 });
 
-test('catalogHref: repeated platformIds are canonical (ascending, de-duplicated)', () => {
+test('catalogHref: repeated platformIds are canonical (lexicographic, de-duplicated)', () => {
   assert.equal(
-    catalogHref({ platformId: [5, 2, 5] }),
-    '/?platformId=2&platformId=5',
+    catalogHref({ platformId: [ID_B, ID_A, ID_B] }),
+    `/?platformId=${ID_A}&platformId=${ID_B}`,
   );
   assert.equal(catalogHref({ platformId: [] }), '/');
 });
 
 test('catalogHref: a multi-platform selection survives a getAll → parse round trip', () => {
-  const href = catalogHref({ platformId: [3, 1], q: 'x' });
+  const href = catalogHref({ platformId: [ID_B, ID_A], q: 'x' });
   const search = new URLSearchParams(href.slice(2));
   const parsed = parseCatalogFilters({
     platformId: search.getAll('platformId'),
     q: search.get('q'),
   });
-  assert.deepEqual(parsed, { platformId: [1, 3], q: 'x' });
+  assert.deepEqual(parsed, { platformId: [ID_A, ID_B], q: 'x' });
 });
 
 test('togglePlatformId: adds when absent, removes when present', () => {
-  assert.deepEqual(togglePlatformId(undefined, 4), [4]);
-  assert.deepEqual(togglePlatformId([4], 2), [2, 4]);
-  assert.deepEqual(togglePlatformId([2, 4], 2), [4]);
-  assert.equal(togglePlatformId([4], 4), undefined);
+  assert.deepEqual(togglePlatformId(undefined, ID_A), [ID_A]);
+  assert.deepEqual(togglePlatformId([ID_A], ID_B), [ID_A, ID_B]);
+  assert.deepEqual(togglePlatformId([ID_A, ID_B], ID_A), [ID_B]);
+  assert.equal(togglePlatformId([ID_A], ID_A), undefined);
 });
 
 test('removePlatformId: removes (idempotent), the last removal yields undefined', () => {
-  assert.deepEqual(removePlatformId([1, 2], 2), [1]);
-  assert.deepEqual(removePlatformId([1], 9), [1]);
-  assert.equal(removePlatformId([1], 1), undefined);
-  assert.equal(removePlatformId(undefined, 1), undefined);
+  assert.deepEqual(removePlatformId([ID_A, ID_B], ID_B), [ID_A]);
+  assert.deepEqual(removePlatformId([ID_A], ID_D), [ID_A]);
+  assert.equal(removePlatformId([ID_A], ID_A), undefined);
+  assert.equal(removePlatformId(undefined, ID_A), undefined);
+});
+
+test('togglePlatformId/removePlatformId: an uppercase id matches its lowercase entry', () => {
+  assert.notEqual(ID_MIXED.toUpperCase(), ID_MIXED);
+  assert.deepEqual(togglePlatformId(undefined, ID_MIXED.toUpperCase()), [
+    ID_MIXED,
+  ]);
+  assert.equal(togglePlatformId([ID_MIXED], ID_MIXED.toUpperCase()), undefined);
+  assert.equal(removePlatformId([ID_MIXED], ID_MIXED.toUpperCase()), undefined);
+  assert.deepEqual(removePlatformId([ID_A, ID_MIXED], ID_MIXED.toUpperCase()), [
+    ID_A,
+  ]);
 });
 
 test('sortOverrides: the default clears both keys, others split', () => {

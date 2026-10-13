@@ -47,7 +47,7 @@ export class CoverRecoveryService {
    * start". Rotating the start across sweeps means a permanently-failing row
    * cannot starve later rows, while each sweep stays bounded.
    */
-  private retryCursorId: number | null = null;
+  private retryCursorId: string | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -107,7 +107,7 @@ export class CoverRecoveryService {
         } catch (error) {
           result.failed += 1;
           this.logger.warn(
-            `Failed to restore cover for game ${String(game.id)}: ${
+            `Failed to restore cover for game ${game.id}: ${
               error instanceof Error ? error.message : String(error)
             }`,
           );
@@ -125,7 +125,7 @@ export class CoverRecoveryService {
    * failure, so it is never counted as one: the row is still re-selected
    * cheaply on each sweep, but no download is attempted for it.
    */
-  async refreshGame(gameId: number): Promise<boolean> {
+  async refreshGame(gameId: string): Promise<boolean> {
     try {
       const game = await this.prisma.game.findUnique({
         where: { id: gameId },
@@ -140,7 +140,7 @@ export class CoverRecoveryService {
       return (await this.restoreOne(game)) !== 'failed';
     } catch (error) {
       this.logger.warn(
-        `Failed to refresh cover for game ${String(gameId)}: ${
+        `Failed to refresh cover for game ${gameId}: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
@@ -197,7 +197,7 @@ export class CoverRecoveryService {
   }
 
   private async restoreOne(game: {
-    id: number;
+    id: string;
     coverUrl: string | null;
     sourceCoverUrl: string | null;
   }): Promise<'present' | 'downloaded' | 'failed' | 'unrecoverable'> {

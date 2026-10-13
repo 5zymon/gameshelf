@@ -142,43 +142,43 @@ export interface ApiClient {
       query: SearchGamesQuery,
       options?: ApiRequestOptions,
     ): Promise<GameSearchResponse>;
-    get(id: number, options?: ApiRequestOptions): Promise<GameDetail>;
+    get(id: string, options?: ApiRequestOptions): Promise<GameDetail>;
     create(
       body: CreateGameRequest,
       options?: ApiRequestOptions,
     ): Promise<GameDetail>;
-    addCopy(id: number, options?: ApiRequestOptions): Promise<GameDetail>;
+    addCopy(id: string, options?: ApiRequestOptions): Promise<GameDetail>;
     update(
-      id: number,
+      id: string,
       body: UpdateGameRequest,
       options?: ApiRequestOptions,
     ): Promise<GameDetail>;
-    remove(id: number, options?: ApiRequestOptions): Promise<void>;
+    remove(id: string, options?: ApiRequestOptions): Promise<void>;
     enrich(
-      id: number,
+      id: string,
       body?: EnrichGameRequest,
       options?: ApiRequestOptions,
     ): Promise<EnrichGameResponse>;
   };
   platforms: {
     list(options?: ApiRequestOptions): Promise<Platform[]>;
-    get(id: number, options?: ApiRequestOptions): Promise<Platform>;
+    get(id: string, options?: ApiRequestOptions): Promise<Platform>;
     create(
       body: CreatePlatformRequest,
       options?: ApiRequestOptions,
     ): Promise<Platform>;
     update(
-      id: number,
+      id: string,
       body: UpdatePlatformRequest,
       options?: ApiRequestOptions,
     ): Promise<Platform>;
-    confirm(id: number, options?: ApiRequestOptions): Promise<Platform>;
+    confirm(id: string, options?: ApiRequestOptions): Promise<Platform>;
     merge(
-      id: number,
+      id: string,
       body: MergePlatformRequest,
       options?: ApiRequestOptions,
     ): Promise<Platform>;
-    remove(id: number, options?: ApiRequestOptions): Promise<void>;
+    remove(id: string, options?: ApiRequestOptions): Promise<void>;
     refresh(options?: ApiRequestOptions): Promise<PlatformSyncResult>;
   };
   importJobs: {
@@ -186,26 +186,26 @@ export interface ApiClient {
       query?: ListImportJobsQuery,
       options?: ApiRequestOptions,
     ): Promise<ListImportJobsResponse>;
-    get(id: number, options?: ApiRequestOptions): Promise<ImportJobDetail>;
+    get(id: string, options?: ApiRequestOptions): Promise<ImportJobDetail>;
     getBatch(
       batchId: string,
       options?: ApiRequestOptions,
     ): Promise<ImportBatchProgress>;
-    retry(id: number, options?: ApiRequestOptions): Promise<ImportJobDetail>;
+    retry(id: string, options?: ApiRequestOptions): Promise<ImportJobDetail>;
     resume(options?: ApiRequestOptions): Promise<ImportQueueState>;
     listUnrecognized(
-      id: number,
+      id: string,
       options?: ApiRequestOptions,
     ): Promise<UnrecognizedItem[]>;
-    dismiss(id: number, options?: ApiRequestOptions): Promise<ImportJobDetail>;
+    dismiss(id: string, options?: ApiRequestOptions): Promise<ImportJobDetail>;
     dismissUnrecognizedItem(
-      id: number,
-      itemId: number,
+      id: string,
+      itemId: string,
       options?: ApiRequestOptions,
     ): Promise<UnrecognizedItem>;
     pickUnrecognizedCandidate(
-      id: number,
-      itemId: number,
+      id: string,
+      itemId: string,
       body: PickUnrecognizedCandidateRequest,
       options?: ApiRequestOptions,
     ): Promise<UnrecognizedItem>;
@@ -270,11 +270,7 @@ export function createApiClient(transport: Transport): ApiClient {
           getInit(options),
         ),
       get: (id, options) =>
-        request<GameDetail>(
-          transport,
-          `/games/${String(id)}`,
-          getInit(options),
-        ),
+        request<GameDetail>(transport, `/games/${id}`, getInit(options)),
       create: (body, options) =>
         request<GameDetail>(
           transport,
@@ -284,25 +280,21 @@ export function createApiClient(transport: Transport): ApiClient {
       addCopy: (id, options) =>
         request<GameDetail>(
           transport,
-          `/games/${String(id)}/copies`,
+          `/games/${id}/copies`,
           noBodyInit('POST', options),
         ),
       update: (id, body, options) =>
         request<GameDetail>(
           transport,
-          `/games/${String(id)}`,
+          `/games/${id}`,
           jsonInit('PATCH', body, options),
         ),
       remove: (id, options) =>
-        request(
-          transport,
-          `/games/${String(id)}`,
-          noBodyInit('DELETE', options),
-        ),
+        request(transport, `/games/${id}`, noBodyInit('DELETE', options)),
       enrich: (id, body = {}, options) =>
         request<EnrichGameResponse>(
           transport,
-          `/games/${String(id)}/enrich`,
+          `/games/${id}/enrich`,
           jsonInit('POST', body, options),
         ),
     },
@@ -310,11 +302,7 @@ export function createApiClient(transport: Transport): ApiClient {
       list: (options) =>
         request<Platform[]>(transport, '/platforms', getInit(options)),
       get: (id, options) =>
-        request<Platform>(
-          transport,
-          `/platforms/${String(id)}`,
-          getInit(options),
-        ),
+        request<Platform>(transport, `/platforms/${id}`, getInit(options)),
       create: (body, options) =>
         request<Platform>(
           transport,
@@ -324,27 +312,23 @@ export function createApiClient(transport: Transport): ApiClient {
       update: (id, body, options) =>
         request<Platform>(
           transport,
-          `/platforms/${String(id)}`,
+          `/platforms/${id}`,
           jsonInit('PATCH', body, options),
         ),
       confirm: (id, options) =>
         request<Platform>(
           transport,
-          `/platforms/${String(id)}/confirm`,
+          `/platforms/${id}/confirm`,
           noBodyInit('POST', options),
         ),
       merge: (id, body, options) =>
         request<Platform>(
           transport,
-          `/platforms/${String(id)}/merge`,
+          `/platforms/${id}/merge`,
           jsonInit('POST', body, options),
         ),
       remove: (id, options) =>
-        request(
-          transport,
-          `/platforms/${String(id)}`,
-          noBodyInit('DELETE', options),
-        ),
+        request(transport, `/platforms/${id}`, noBodyInit('DELETE', options)),
       refresh: (options) =>
         request<PlatformSyncResult>(
           transport,
@@ -362,7 +346,7 @@ export function createApiClient(transport: Transport): ApiClient {
       get: (id, options) =>
         request<ImportJobDetail>(
           transport,
-          `/import-jobs/${String(id)}`,
+          `/import-jobs/${id}`,
           getInit(options),
         ),
       getBatch: (batchId, options) =>
@@ -374,7 +358,7 @@ export function createApiClient(transport: Transport): ApiClient {
       retry: (id, options) =>
         request<ImportJobDetail>(
           transport,
-          `/import-jobs/${String(id)}/retry`,
+          `/import-jobs/${id}/retry`,
           noBodyInit('POST', options),
         ),
       resume: (options) =>
@@ -386,13 +370,13 @@ export function createApiClient(transport: Transport): ApiClient {
       listUnrecognized: (id, options) =>
         request<UnrecognizedItem[]>(
           transport,
-          `/import-jobs/${String(id)}/unrecognized`,
+          `/import-jobs/${id}/unrecognized`,
           getInit(options),
         ),
       dismiss: (id, options) =>
         request<ImportJobDetail>(
           transport,
-          `/import-jobs/${String(id)}`,
+          `/import-jobs/${id}`,
           jsonInit(
             'PATCH',
             { status: 'dismissed' } satisfies DismissImportJobRequest,
@@ -402,7 +386,7 @@ export function createApiClient(transport: Transport): ApiClient {
       dismissUnrecognizedItem: (id, itemId, options) =>
         request<UnrecognizedItem>(
           transport,
-          `/import-jobs/${String(id)}/unrecognized/${String(itemId)}`,
+          `/import-jobs/${id}/unrecognized/${itemId}`,
           jsonInit(
             'PATCH',
             { dismissed: true } satisfies DismissUnrecognizedItemRequest,
@@ -412,7 +396,7 @@ export function createApiClient(transport: Transport): ApiClient {
       pickUnrecognizedCandidate: (id, itemId, body, options) =>
         request<UnrecognizedItem>(
           transport,
-          `/import-jobs/${String(id)}/unrecognized/${String(itemId)}/pick`,
+          `/import-jobs/${id}/unrecognized/${itemId}/pick`,
           jsonInit(
             'POST',
             body satisfies PickUnrecognizedCandidateRequest,
