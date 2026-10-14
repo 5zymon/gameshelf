@@ -331,6 +331,7 @@
     "savedAndAnother": "Added “{title}”.",
     "notLinked": "Not linked to a game database.",
     "viewGame": "View game",
+    "compactHint": "Adds the game with just a title and platform. Fill in the rest later from the catalog.",
     "conflict": {
       "title": "“{title}” is already in the catalog.",
       "body": "{meta}. Add another copy?"
@@ -413,9 +414,9 @@
     "progressAria": "{done} of {total, plural, one {# photo} other {# photos}} processed",
     "processed": "{done} of {total, plural, one {# photo} other {# photos}} processed",
     "counts": {
-      "added": "Added",
-      "needsReview": "Needs review",
-      "failed": "Failed",
+      "added": "Added automatically",
+      "needsReview": "Titles to review",
+      "failed": "Failed photos",
       "pending": "Still to process"
     },
     "photos": "Photos",
@@ -424,24 +425,6 @@
     "reconnecting": "Reconnecting…",
     "backToCatalog": "Back to catalog",
     "importMore": "Import more photos",
-    "status": {
-      "queued": "Queued",
-      "processing": "Reading",
-      "done": "Completed",
-      "needs_attention": "Completed · needs review",
-      "failed": "Failed",
-      "dismissed": "Dismissed"
-    },
-    "photoCounts": {
-      "queued": "Waiting in the queue.",
-      "processing": "Reading the photo…",
-      "added": "Added {count, plural, one {# game} other {# games}}.",
-      "flagged": "{count, plural, one {# game needs} other {# games need}} review."
-    },
-    "recognition": {
-      "recognized": "Recognized {count, plural, one {# game} other {# games}}.",
-      "declared": "You declared {declared}; recognized {recognized}."
-    },
     "pause": {
       "llm": {
         "reason": "The language model rejected the request.",
@@ -458,38 +441,71 @@
     }
   },
   "importAttention": {
-    "heading": "Needs attention",
-    "summary": "{count, plural, one {# photo needs} other {# photos need}} a decision. Add the missing games, retry a failed photo, or dismiss what you don’t need to act on.",
-    "flaggedItems": "Flagged items",
-    "loading": "Loading flagged items…",
-    "loadError": "We couldn’t load the flagged items for this photo.",
-    "allReviewed": "All flagged items for this photo have been reviewed.",
+    "summary": {
+      "decision": "{count, plural, one {# photo needs} other {# photos need}} your decision.",
+      "working": "Nothing needs your decision so far. We’ll flag anything that does as photos finish.",
+      "allDone": "All done. Nothing needs your decision."
+    },
+    "jumpTo": "Photos that need your decision",
+    "state": {
+      "queued": "Waiting",
+      "processing": "Reading",
+      "failed": "Failed",
+      "decision": "Needs your decision",
+      "ready": "Done",
+      "dismissed": "Dismissed"
+    },
+    "photoSummary": {
+      "queued": "Waiting to be read.",
+      "processing": "Reading the photo…",
+      "added": "{count, plural, =0 {No games added.} one {Added # game.} other {Added # games.}}",
+      "open": "{count, plural, one {# title needs} other {# titles need}} your decision.",
+      "reviewed": "You reviewed {count, plural, one {# flagged title} other {# flagged titles}}.",
+      "nothingFound": "No games recognized.",
+      "dismissed": "You dismissed this photo."
+    },
+    "why": {
+      "failed": "We couldn’t finish this photo. Retry it. Games already added won’t be added twice.",
+      "unmatched": "We couldn’t match these titles to the game database. For each one, pick a match, add it by hand, or dismiss it if it isn’t a game you own.",
+      "nothingFound": "We didn’t recognize any games in this photo. Try a sharper photo with the spines facing the camera, or dismiss this one.",
+      "countFewer": "You said this photo shows {declared, plural, one {# game} other {# games}}, but we recognized {recognized}. Add any missing games by hand, then dismiss this photo.",
+      "countMore": "You said this photo shows {declared, plural, one {# game} other {# games}}, but we recognized {recognized}. Check the games added from it, then dismiss this photo."
+    },
+    "technicalDetails": "Technical details",
+    "item": {
+      "platform": "Platform: {platform}",
+      "reason": {
+        "ambiguous": "Several games match this title. Pick the right one.",
+        "noPlatform": "Found the game, but not which platform it’s for. Add it by hand and choose the platform.",
+        "notFound": "Not found in the game database. Check the spelling and search again, or add it by hand."
+      }
+    },
+    "itemDismissed": "Dismissed “{title}”.",
+    "added": "Added “{title}” to your catalog.",
+    "loading": "Loading flagged titles…",
+    "loadError": "We couldn’t load the flagged titles for this photo.",
+    "allReviewed": "Every flagged title from this photo is reviewed.",
     "dismiss": "Dismiss",
     "dismissing": "Dismissing…",
     "addManually": "Add manually",
     "close": "Close",
     "addToCatalog": "Add to catalog",
-    "countMismatch": "Count mismatch",
     "retry": "Retry photo",
     "retrying": "Retrying…",
-    "retryHint": "Retry re-runs only the games that aren’t saved yet. Games already in your catalog won’t be added again.",
     "dismissPhoto": "Dismiss photo",
-    "confirmTitle": "Dismiss this photo?",
-    "confirmBody": "It leaves the review list and can’t be brought back. Its record is kept.",
+    "confirmTitle": "Dismiss Photo {n}?",
+    "confirmBody": "It stops asking for a decision. Games already added from it stay in your catalog, and titles you haven’t reviewed are left out. You can’t undo this.",
     "cancel": "Cancel",
-    "added": "Added “{title}”. This flagged item is now marked as reviewed.",
-    "candidatesHeading": "Choose a match",
     "pick": "Pick",
     "picking": "Picking…",
     "coverAlt": "Cover for {title}",
     "lookup": {
-      "heading": "Search the game database",
-      "hint": "Correct the title above, then search again. Matches on the selected platform are listed first.",
-      "search": "Search again",
+      "search": "Search the game database",
+      "hint": "Finds the game with its cover and details. Fix the title first if it’s misspelled. Matches for the selected platform come first.",
       "searching": "Searching…",
       "titleTooShort": "Enter at least 2 characters to search.",
       "results": "{count, plural, one {# match} other {# matches}} for “{title}”. Pick one to add it with its details.",
-      "noMatches": "Nothing found for “{title}”. Fix the title and search again, or fill in the details below and add it manually.",
+      "noMatches": "Nothing found for “{title}”. Fix the title and search again, or use Add to catalog.",
       "error": {
         "search": "We couldn’t reach the game database. Try again, or add the game manually."
       }
@@ -498,7 +514,7 @@
       "retry": "We couldn’t retry this photo. Check your connection and try again.",
       "dismissPhoto": "We couldn’t dismiss this photo. Check your connection and try again.",
       "dismissItem": "We couldn’t dismiss this item. Check your connection and try again.",
-      "processing": "The photo could not be processed.",
+      "savedDismissFailed": "Added “{title}” to your catalog, but we couldn’t dismiss this flagged title. Dismiss it to finish reviewing this photo.",
       "pick": "We couldn’t pick this candidate. Check your connection and try again."
     }
   },

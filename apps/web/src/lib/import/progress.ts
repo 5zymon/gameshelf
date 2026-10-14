@@ -5,92 +5,113 @@ import type {
   ImportJob,
   ImportJobStatus,
   ImportPauseSource,
+  UnrecognizedItem,
 } from '@/lib/api';
 
-/** Visual tone of a status; maps to the shared `@theme` color tokens. */
-export type ProgressTone =
-  'muted' | 'active' | 'success' | 'warning' | 'danger';
+/** API token for a title with no usable platform name (photo-import-pipeline.service.ts PLATFORM_NOT_IN_CATALOG_REASON). */
+export const PLATFORM_NOT_IN_CATALOG_REASON = 'platform_not_in_catalog';
 
-export interface PhotoStatusView {
-  label: string;
-  tone: ProgressTone;
-  /** Whether the status is actively working (drives the pulsing dot). */
-  busy: boolean;
+/** One state per photo; `needs_attention` is split by what still needs a decision. */
+export type PhotoState =
+  | 'queued'
+  | 'processing'
+  | 'failed'
+  | 'unmatched'
+  | 'nothingFound'
+  | 'countMismatch'
+  | 'ready'
+  | 'dismissed';
+
+export function isTerminalStatus(status: ImportJobStatus): boolean {
+  return status !== 'queued' && status !== 'processing';
 }
 
 /**
- * One status vocabulary for the whole view. `needs_attention` is a terminal
- * success-with-caveat, not a failure; `dismissed` is a terminal no-op.
- * Labels come from the `importProgress` namespace (`status.*`).
+ * One state per photo. `needs_attention` is split by what still needs a
+ * decision; a `needs_attention` row with nothing open and no other trigger
+ * (a pre-fix row) reads as ready.
  */
-const PHOTO_STATUS: Readonly<
-  Record<ImportJobStatus, { tone: ProgressTone; busy: boolean }>
-> = {
-  queued: { tone: 'muted', busy: false },
-  processing: { tone: 'active', busy: true },
-  done: { tone: 'success', busy: false },
-  needs_attention: { tone: 'warning', busy: false },
-  failed: { tone: 'danger', busy: false },
-  dismissed: { tone: 'muted', busy: false },
-};
-
-export function statusView(
-  status: ImportJobStatus,
-  t: TranslatorFor<'importProgress'>,
-): PhotoStatusView {
-  const { tone, busy } = PHOTO_STATUS[status];
-  return { label: t(`status.${status}`), tone, busy };
+export function photoState(photo: ImportJob): PhotoState {
+  switch (photo.status) {
+    case 'queued':
+      return 'queued';
+    case 'processing':
+      return 'processing';
+    case 'failed':
+      return 'failed';
+    case 'dismissed':
+      return 'dismissed';
+    case 'done':
+      return 'ready';
+    case 'needs_attention':
+      if (photo.openFlaggedCount > 0) return 'unmatched';
+      if (photo.recognizedCount === 0) return 'nothingFound';
+      if (photo.declaredCountMismatch) return 'countMismatch';
+      return 'ready';
+  }
 }
 
-export interface JobCounts {
-  /** Games committed to the catalog (`importedCount`). */
+export function needsDecision(state: PhotoState): boolean {
+  return (
+    state === 'failed' ||
+    state === 'unmatched' ||
+    state === 'nothingFound' ||
+    state === 'countMismatch'
+  );
+}
+
+/** Mirrors the API dismissJob guard. */
+export function canDismissPhoto(photo: ImportJob): boolean {
+  return photo.status === 'needs_attention' || photo.status === 'failed';
+}
+
+export interface PhotoReviewCounts {
   added: number;
-  /** Recognized but unresolved titles (`unrecognizedCount`). */
-  flagged: number;
-  /** Titles still waiting on resolution. */
-  pending: number;
-  /** Titles the model recognized. */
-  recognized: number;
-  /** Failure is photo-level (`status === 'failed'`), never a count. */
-  failed: boolean;
+  open: number;
+  reviewed: number;
 }
 
-/**
- * Per-photo counts. There is deliberately no distinct "skipped" counter: a
- * photo either commits games (`added`), flags titles for review (`flagged`), or
- * fails as a whole.
- */
-export function jobCounts(job: ImportJob): JobCounts {
+export function photoReviewCounts(photo: ImportJob): PhotoReviewCounts {
   return {
-    added: job.importedCount,
-    flagged: job.unrecognizedCount,
-    pending: job.pendingCount,
-    recognized: job.recognizedCount,
-    failed: job.status === 'failed',
+    added: photo.importedCount,
+    open: photo.status === 'dismissed' ? 0 : photo.openFlaggedCount,
+    reviewed: Math.max(0, photo.unrecognizedCount - photo.openFlaggedCount),
   };
 }
 
 export interface BatchCounts {
   added: number;
-  flagged: number;
+  toReview: number;
   failed: number;
 }
 
-/**
- * Batch totals. Added/flagged games are summed per photo; photo failures come
- * from the aggregate endpoint (a failed photo contributes zero games).
- */
 export function batchCounts(
   items: readonly ImportJob[],
   progress: ImportBatchProgress,
 ): BatchCounts {
   let added = 0;
-  let flagged = 0;
+  let toReview = 0;
   for (const item of items) {
-    added += item.importedCount;
-    flagged += item.unrecognizedCount;
+    const c = photoReviewCounts(item);
+    added += c.added;
+    toReview += c.open;
   }
-  return { added, flagged, failed: progress.failed };
+  return { added, toReview, failed: progress.failed };
+}
+
+export type MismatchDirection = 'fewer' | 'more';
+
+export function mismatchDirection(photo: ImportJob): MismatchDirection {
+  return (photo.declaredCount ?? 0) > photo.recognizedCount ? 'fewer' : 'more';
+}
+
+export type FlaggedItemReason = 'ambiguous' | 'noPlatform' | 'notFound';
+
+/** Plain-language category; the raw `reason` (provider text) is never shown. */
+export function flaggedItemReason(item: UnrecognizedItem): FlaggedItemReason {
+  if (item.candidates.length > 0) return 'ambiguous';
+  if (item.reason === PLATFORM_NOT_IN_CATALOG_REASON) return 'noPlatform';
+  return 'notFound';
 }
 
 /**
@@ -134,50 +155,6 @@ export function pauseCopy(
     hint: t('pause.none.hint'),
     settingsHref: null,
   };
-}
-
-/** The per-photo counts sentence (games committed / flagged for review). */
-export function photoCountsLine(
-  photo: ImportJob,
-  t: TranslatorFor<'importProgress'>,
-): string {
-  if (photo.status === 'queued') return t('photoCounts.queued');
-  if (photo.status === 'processing') return t('photoCounts.processing');
-  const counts = jobCounts(photo);
-  const parts = [t('photoCounts.added', { count: counts.added })];
-  if (counts.flagged > 0) {
-    parts.push(t('photoCounts.flagged', { count: counts.flagged }));
-  }
-  return parts.join(' ');
-}
-
-/** Declared vs recognized sentence, plus whether to flag the mismatch. */
-export function recognitionLine(
-  photo: ImportJob,
-  t: TranslatorFor<'importProgress'>,
-): {
-  text: string;
-  mismatch: boolean;
-} {
-  const recognized = jobCounts(photo).recognized;
-  if (photo.declaredCount === null) {
-    return {
-      text: t('recognition.recognized', { count: recognized }),
-      mismatch: false,
-    };
-  }
-  return {
-    text: t('recognition.declared', {
-      declared: photo.declaredCount,
-      recognized,
-    }),
-    mismatch: photo.declaredCountMismatch,
-  };
-}
-
-/** A photo the owner must act on: needs review, or failed. (D1) */
-export function needsReview(photo: ImportJob): boolean {
-  return photo.needsAttention || photo.status === 'failed';
 }
 
 /**

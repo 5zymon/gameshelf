@@ -34,10 +34,12 @@ const PRIMARY_BUTTON =
 const SECONDARY_BUTTON =
   'inline-flex items-center justify-center rounded-control border border-edge bg-surface px-4 py-2.5 text-sm leading-none font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60';
 
-type Intent = 'save' | 'save-and-add-another';
+export type ManualAddIntent = 'save' | 'save-and-add-another';
 
 /** Which submit button was pressed; the first button is the implicit Enter default. */
-function readIntent(event: React.SubmitEvent<HTMLFormElement>): Intent {
+function readIntent(
+  event: React.SubmitEvent<HTMLFormElement>,
+): ManualAddIntent {
   const submitter = event.nativeEvent.submitter;
   return submitter instanceof HTMLButtonElement &&
     submitter.value === 'save-and-add-another'
@@ -47,7 +49,7 @@ function readIntent(event: React.SubmitEvent<HTMLFormElement>): Intent {
 
 function savedMessage(
   game: GameDetail,
-  intent: Intent,
+  intent: ManualAddIntent,
   t: TranslatorFor<'manualAdd'>,
 ): string {
   const base =
@@ -66,7 +68,13 @@ export interface ManualAddFormProps {
   /** Primary submit label. Defaults to the translated `saveGame` message. */
   submitLabel?: string;
   /** Called with the created game after a successful save. */
-  onSaved?: (game: GameDetail) => void;
+  onSaved?: (game: GameDetail, intent: ManualAddIntent) => void;
+  /**
+   * 'compact' renders only Title and Platform (plus New platform and the
+   * catalog lookup) with no card chrome — the import review's inline panel.
+   * Default 'full' (/games/new).
+   */
+  variant?: 'full' | 'compact';
   /** Flagged-item catalog re-search; omitted on /games/new. */
   catalogLookup?: CatalogLookup;
   /**
@@ -87,12 +95,14 @@ export function ManualAddForm({
   initialPlatformId = '',
   submitLabel,
   onSaved,
+  variant = 'full',
   catalogLookup,
   disabled = false,
   onLookupBusyChange,
 }: ManualAddFormProps): React.ReactElement {
   const router = useRouter();
   const t = useTranslations('manualAdd');
+  const compact = variant === 'compact';
   // The inline platform-create Cancel reuses the shared common label.
   const tCommon = useTranslations('common');
   // DOM ids come from `useId` so several forms can share one document (e.g. a
@@ -121,6 +131,7 @@ export function ManualAddForm({
   const platformSelectRef = useRef<HTMLSelectElement>(null);
   const newPlatformRef = useRef<HTMLInputElement>(null);
   const conflictDismissRef = useRef<HTMLButtonElement>(null);
+  const intentRef = useRef<ManualAddIntent>('save');
 
   const busy = saving || addingCopy || lookupBusy || disabled;
 
@@ -174,6 +185,7 @@ export function ManualAddForm({
     if (busy) return;
 
     const intent = readIntent(event);
+    intentRef.current = intent;
     const { request, errors } = buildCreateRequest(draft, t);
     if (request === null) {
       setFieldErrors(errors);
@@ -192,7 +204,7 @@ export function ManualAddForm({
       const created = await api.games.create(request);
       setStatus(savedMessage(created, intent, t));
       setLastCreated(created);
-      onSaved?.(created);
+      onSaved?.(created, intent);
       setPlatformError(null);
       setDraft(emptyManualAddDraft(keptPlatformId));
       titleRef.current?.focus();
@@ -234,7 +246,7 @@ export function ManualAddForm({
         t('addCopyStatus', { title: updated.title, count: updated.copyCount }),
       );
       setLastCreated(updated);
-      onSaved?.(updated);
+      onSaved?.(updated, intentRef.current);
       setConflict(null);
       setDraft(emptyManualAddDraft(draft.platformId));
       titleRef.current?.focus();
@@ -348,12 +360,16 @@ export function ManualAddForm({
       onSubmit={(event) => {
         void handleSubmit(event);
       }}
-      className="space-y-6"
+      className={compact ? 'space-y-4' : 'space-y-6'}
     >
       {formError !== null && (
         <p
           role="alert"
-          className="rounded-control border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger"
+          className={
+            compact
+              ? 'text-sm text-danger'
+              : 'rounded-control border border-danger/40 bg-danger/10 px-3 py-2 text-sm text-danger'
+          }
         >
           {formError}
         </p>
@@ -363,7 +379,11 @@ export function ManualAddForm({
         <p
           role="status"
           aria-live="polite"
-          className="rounded-control border border-edge bg-surface px-3 py-2 text-sm text-muted"
+          className={
+            compact
+              ? 'text-sm text-muted'
+              : 'rounded-control border border-edge bg-surface px-3 py-2 text-sm text-muted'
+          }
         >
           {status}
           {lastCreated !== null && (
@@ -385,7 +405,11 @@ export function ManualAddForm({
           role="alertdialog"
           aria-labelledby={`${uid}-conflict-title`}
           aria-describedby={`${uid}-conflict-body`}
-          className="rounded-card border border-accent/40 bg-accent-soft p-4"
+          className={
+            compact
+              ? 'rounded-control border border-accent/40 bg-accent-soft p-3'
+              : 'rounded-card border border-accent/40 bg-accent-soft p-4'
+          }
         >
           <p
             id={`${uid}-conflict-title`}
@@ -423,7 +447,13 @@ export function ManualAddForm({
         </div>
       )}
 
-      <div className="grid gap-3 rounded-card border border-edge bg-surface p-4 shadow-[var(--shadow-card)] sm:grid-cols-2 sm:p-6">
+      <div
+        className={
+          compact
+            ? 'grid gap-3'
+            : 'grid gap-3 rounded-card border border-edge bg-surface p-4 shadow-[var(--shadow-card)] sm:grid-cols-2 sm:p-6'
+        }
+      >
         <div className="space-y-1.5 sm:col-span-2">
           <label htmlFor={`${uid}-title`} className={LABEL}>
             {t('field.title')}
@@ -495,7 +525,13 @@ export function ManualAddForm({
             <p className="text-xs text-muted">{t('noPlatforms')}</p>
           )}
           {platformOpen && (
-            <div className="mt-2 rounded-control border border-edge bg-canvas p-3">
+            <div
+              className={
+                compact
+                  ? 'mt-2'
+                  : 'mt-2 rounded-control border border-edge bg-canvas p-3'
+              }
+            >
               <label htmlFor={`${uid}-new-platform`} className={LABEL}>
                 {t('newPlatformName')}
               </label>
@@ -575,147 +611,156 @@ export function ManualAddForm({
           </div>
         )}
 
-        <div className="space-y-1.5">
-          <label htmlFor={`${uid}-edition`} className={LABEL}>
-            {t('field.edition')}
-          </label>
-          <input
-            id={`${uid}-edition`}
-            name="edition"
-            type="text"
-            maxLength={255}
-            value={draft.edition}
-            onChange={(event) => {
-              setField('edition', event.target.value);
-            }}
-            className={FIELD}
-            aria-invalid={fieldErrors.edition !== undefined}
-            aria-describedby={
-              fieldErrors.edition !== undefined
-                ? `${uid}-edition-error`
-                : undefined
-            }
-          />
-          {fieldErrors.edition !== undefined && (
-            <p id={`${uid}-edition-error`} className="text-xs text-danger">
-              {fieldErrors.edition}
-            </p>
-          )}
-        </div>
+        {!compact && (
+          <>
+            <div className="space-y-1.5">
+              <label htmlFor={`${uid}-edition`} className={LABEL}>
+                {t('field.edition')}
+              </label>
+              <input
+                id={`${uid}-edition`}
+                name="edition"
+                type="text"
+                maxLength={255}
+                value={draft.edition}
+                onChange={(event) => {
+                  setField('edition', event.target.value);
+                }}
+                className={FIELD}
+                aria-invalid={fieldErrors.edition !== undefined}
+                aria-describedby={
+                  fieldErrors.edition !== undefined
+                    ? `${uid}-edition-error`
+                    : undefined
+                }
+              />
+              {fieldErrors.edition !== undefined && (
+                <p id={`${uid}-edition-error`} className="text-xs text-danger">
+                  {fieldErrors.edition}
+                </p>
+              )}
+            </div>
 
-        <div className="space-y-1.5">
-          <label htmlFor={`${uid}-year`} className={LABEL}>
-            {t('field.releaseYear')}
-          </label>
-          <input
-            id={`${uid}-year`}
-            name="releaseYear"
-            type="text"
-            inputMode="numeric"
-            pattern="\d*"
-            maxLength={4}
-            value={draft.releaseYear}
-            onChange={(event) => {
-              setField('releaseYear', event.target.value);
-            }}
-            className={FIELD}
-            aria-invalid={fieldErrors.releaseYear !== undefined}
-            aria-describedby={
-              fieldErrors.releaseYear !== undefined
-                ? `${uid}-year-error`
-                : undefined
-            }
-          />
-          {fieldErrors.releaseYear !== undefined && (
-            <p id={`${uid}-year-error`} className="text-xs text-danger">
-              {fieldErrors.releaseYear}
-            </p>
-          )}
-        </div>
+            <div className="space-y-1.5">
+              <label htmlFor={`${uid}-year`} className={LABEL}>
+                {t('field.releaseYear')}
+              </label>
+              <input
+                id={`${uid}-year`}
+                name="releaseYear"
+                type="text"
+                inputMode="numeric"
+                pattern="\d*"
+                maxLength={4}
+                value={draft.releaseYear}
+                onChange={(event) => {
+                  setField('releaseYear', event.target.value);
+                }}
+                className={FIELD}
+                aria-invalid={fieldErrors.releaseYear !== undefined}
+                aria-describedby={
+                  fieldErrors.releaseYear !== undefined
+                    ? `${uid}-year-error`
+                    : undefined
+                }
+              />
+              {fieldErrors.releaseYear !== undefined && (
+                <p id={`${uid}-year-error`} className="text-xs text-danger">
+                  {fieldErrors.releaseYear}
+                </p>
+              )}
+            </div>
 
-        <div className="space-y-1.5">
-          <label htmlFor={`${uid}-players`} className={LABEL}>
-            {t('field.players')}
-          </label>
-          <input
-            id={`${uid}-players`}
-            name="playerCount"
-            type="text"
-            inputMode="numeric"
-            pattern="\d*"
-            maxLength={3}
-            value={draft.playerCount}
-            onChange={(event) => {
-              setField('playerCount', event.target.value);
-            }}
-            className={FIELD}
-            aria-invalid={fieldErrors.playerCount !== undefined}
-            aria-describedby={
-              fieldErrors.playerCount !== undefined
-                ? `${uid}-players-error`
-                : undefined
-            }
-          />
-          {fieldErrors.playerCount !== undefined && (
-            <p id={`${uid}-players-error`} className="text-xs text-danger">
-              {fieldErrors.playerCount}
-            </p>
-          )}
-        </div>
+            <div className="space-y-1.5">
+              <label htmlFor={`${uid}-players`} className={LABEL}>
+                {t('field.players')}
+              </label>
+              <input
+                id={`${uid}-players`}
+                name="playerCount"
+                type="text"
+                inputMode="numeric"
+                pattern="\d*"
+                maxLength={3}
+                value={draft.playerCount}
+                onChange={(event) => {
+                  setField('playerCount', event.target.value);
+                }}
+                className={FIELD}
+                aria-invalid={fieldErrors.playerCount !== undefined}
+                aria-describedby={
+                  fieldErrors.playerCount !== undefined
+                    ? `${uid}-players-error`
+                    : undefined
+                }
+              />
+              {fieldErrors.playerCount !== undefined && (
+                <p id={`${uid}-players-error`} className="text-xs text-danger">
+                  {fieldErrors.playerCount}
+                </p>
+              )}
+            </div>
 
-        <div className="space-y-1.5">
-          <label htmlFor={`${uid}-publisher`} className={LABEL}>
-            {t('field.publisher')}
-          </label>
-          <input
-            id={`${uid}-publisher`}
-            name="publisher"
-            type="text"
-            maxLength={255}
-            value={draft.publisher}
-            onChange={(event) => {
-              setField('publisher', event.target.value);
-            }}
-            className={FIELD}
-            aria-invalid={fieldErrors.publisher !== undefined}
-            aria-describedby={
-              fieldErrors.publisher !== undefined
-                ? `${uid}-publisher-error`
-                : undefined
-            }
-          />
-          {fieldErrors.publisher !== undefined && (
-            <p id={`${uid}-publisher-error`} className="text-xs text-danger">
-              {fieldErrors.publisher}
-            </p>
-          )}
-        </div>
+            <div className="space-y-1.5">
+              <label htmlFor={`${uid}-publisher`} className={LABEL}>
+                {t('field.publisher')}
+              </label>
+              <input
+                id={`${uid}-publisher`}
+                name="publisher"
+                type="text"
+                maxLength={255}
+                value={draft.publisher}
+                onChange={(event) => {
+                  setField('publisher', event.target.value);
+                }}
+                className={FIELD}
+                aria-invalid={fieldErrors.publisher !== undefined}
+                aria-describedby={
+                  fieldErrors.publisher !== undefined
+                    ? `${uid}-publisher-error`
+                    : undefined
+                }
+              />
+              {fieldErrors.publisher !== undefined && (
+                <p
+                  id={`${uid}-publisher-error`}
+                  className="text-xs text-danger"
+                >
+                  {fieldErrors.publisher}
+                </p>
+              )}
+            </div>
 
-        <div className="space-y-1.5">
-          <label htmlFor={`${uid}-genre`} className={LABEL}>
-            {t('field.genre')}
-          </label>
-          <input
-            id={`${uid}-genre`}
-            name="genre"
-            type="text"
-            maxLength={255}
-            value={draft.genre}
-            onChange={(event) => {
-              setField('genre', event.target.value);
-            }}
-            className={FIELD}
-            aria-invalid={fieldErrors.genre !== undefined}
-            aria-describedby={
-              fieldErrors.genre !== undefined ? `${uid}-genre-error` : undefined
-            }
-          />
-          {fieldErrors.genre !== undefined && (
-            <p id={`${uid}-genre-error`} className="text-xs text-danger">
-              {fieldErrors.genre}
-            </p>
-          )}
-        </div>
+            <div className="space-y-1.5">
+              <label htmlFor={`${uid}-genre`} className={LABEL}>
+                {t('field.genre')}
+              </label>
+              <input
+                id={`${uid}-genre`}
+                name="genre"
+                type="text"
+                maxLength={255}
+                value={draft.genre}
+                onChange={(event) => {
+                  setField('genre', event.target.value);
+                }}
+                className={FIELD}
+                aria-invalid={fieldErrors.genre !== undefined}
+                aria-describedby={
+                  fieldErrors.genre !== undefined
+                    ? `${uid}-genre-error`
+                    : undefined
+                }
+              />
+              {fieldErrors.genre !== undefined && (
+                <p id={`${uid}-genre-error`} className="text-xs text-danger">
+                  {fieldErrors.genre}
+                </p>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -737,6 +782,9 @@ export function ManualAddForm({
         >
           {saving ? t('saving') : t('saveAndAddAnother')}
         </button>
+        {compact && (
+          <p className="w-full text-xs text-muted">{t('compactHint')}</p>
+        )}
       </div>
     </form>
   );

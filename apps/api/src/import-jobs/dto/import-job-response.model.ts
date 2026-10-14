@@ -40,9 +40,16 @@ export class ImportJobModel {
   @ApiProperty({
     example: 2,
     description:
-      'Flagged items: recognized titles whose status is unrecognized',
+      'Flagged items at completion (recognized titles with status unrecognized); never decremented by review',
   })
   unrecognizedCount!: number;
+
+  @ApiProperty({
+    example: 1,
+    description:
+      'Flagged items still awaiting review (not dismissed, picked or added by hand); counted live for every status',
+  })
+  openFlaggedCount!: number;
 
   @ApiPropertyOptional({
     nullable: true,
@@ -71,7 +78,7 @@ export class ImportJobModel {
   pendingCount!: number;
 
   @ApiProperty({
-    description: 'Completed with at least one review trigger',
+    description: 'status === needs_attention: a review trigger is still open',
     example: true,
   })
   needsAttention!: boolean;
@@ -189,6 +196,13 @@ export class ImportJobDetailModel {
   @ApiProperty({ example: 2 })
   unrecognizedCount!: number;
 
+  @ApiProperty({
+    example: 1,
+    description:
+      'Flagged items still awaiting review (not dismissed, picked or added by hand); counted live for every status',
+  })
+  openFlaggedCount!: number;
+
   @ApiPropertyOptional({ nullable: true })
   errorMessage!: string | null;
 
@@ -212,7 +226,7 @@ export class ImportJobDetailModel {
   pendingCount!: number;
 
   @ApiProperty({
-    description: 'Completed with at least one review trigger',
+    description: 'status === needs_attention: a review trigger is still open',
     example: true,
   })
   needsAttention!: boolean;
