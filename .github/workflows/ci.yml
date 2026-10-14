@@ -6,7 +6,7 @@
 #   install -> prisma generate -> lint -> typecheck -> build
 #   -> test (unit + e2e) -> prisma migrate deploy -> migration drift check
 #
-# The same checks run locally: `task ci` (README, "CI").
+# The same checks run locally: `task ci` (docs/features/references/development.md, "CI").
 
 name: CI
 

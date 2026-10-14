@@ -2,7 +2,7 @@
 #
 # Convenience only: the application has no dependency on Docker or on this
 # file. It only needs a MySQL 8.4 server reachable through DATABASE_URL,
-# with character set utf8mb4 (see README, "Database (local dev)").
+# with character set utf8mb4 (see docs/features/references/operations.md, "Database (local dev)").
 #
 # Credentials come from the environment (the .env file next to this file).
 # Never commit real values — .env is gitignored.
@@ -26,12 +26,12 @@ services:
     volumes:
       # Docker-managed named volume — never an ephemeral container path and
       # never a repo bind mount. Recreating the container keeps the data;
-      # `docker compose down -v` removes it (see README, "Persistent data
-      # directory").
+      # `docker compose down -v` removes it (see docs/features/references/operations.md,
+      # "Persistent data directory").
       - mysql-data:/var/lib/mysql
       # One-time bootstrap: creates the Prisma shadow database for
       # `prisma migrate dev` (runs only on first initialization of an
-      # empty data dir — see README, "Migrations").
+      # empty data dir — see docs/features/references/operations.md, "Migrations (Prisma)").
       - ./docker/mysql-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test:
@@ -46,6 +46,6 @@ services:
 
 volumes:
   mysql-data:
-    # Fixed name, so the reset/snapshot commands in the README are the same
+    # Fixed name, so the reset/snapshot commands in docs/features/references/operations.md are the same
     # for every checkout. Lives wherever Docker stores volumes on this host.
     name: gameshelf-mysql-data

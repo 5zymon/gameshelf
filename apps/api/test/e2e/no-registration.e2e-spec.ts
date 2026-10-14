@@ -5,9 +5,10 @@ import { resetDatabase } from '../helpers/reset';
 
 /**
  * Paths a scaffolded "sign up" would plausibly occupy. None may be routed:
- * public self-registration is deliberately disabled (see README, "Accounts and
- * registration"). User creation is reachable only through the one-time
- * `POST /setup` and the operator CLI.
+ * public self-registration is deliberately disabled (see
+ * docs/features/references/installation.md, "Accounts and registration"). User
+ * creation is reachable only through the one-time `POST /setup` and the
+ * operator CLI.
  */
 const FORBIDDEN_SIGNUP_PATHS = [
   '/auth/register',

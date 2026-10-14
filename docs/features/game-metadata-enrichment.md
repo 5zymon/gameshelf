@@ -111,8 +111,9 @@ browser <img src="/api/covers/<file>"> ──rewrite /api──▶ API GET /cove
   API's `/covers/<file>` into the browser's same-origin `/api/covers/<file>`, so
   the cover never touches an external host and satisfies `img-src 'self'`.
 - **Configuration.** `COVERS_DIR` overrides the cache directory; blank/absent
-  falls back to `~/.gameshelf/covers`. See the root `README.md` and
-  `.env.example`.
+  falls back to `~/.gameshelf/covers`. See
+  [Environment variables](/references/configuration.md#environment-variables)
+  and `.env.example`.
 
 Locally generated thumbnails, the signed same-origin preview for unsaved
 candidates, background retry, ref-counted deletion/replacement, and the

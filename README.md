@@ -1,712 +1,158 @@
+<div align="center">
+
 # GameShelf
 
-Track, organize, and discover your video game library.
+**Photograph your shelf. Get a catalog of your games.**
 
-GameShelf is an npm-workspaces monorepo with two packages:
+A self-hosted library for your physical video game collection. Upload a photo of
+a shelf, let a vision LLM read the spines, and GameShelf adds every game it can
+confirm against IGDB — with cover, platform, release year, publisher and genre.
 
-| Package          | Path       | Description                                        |
-| ---------------- | ---------- | -------------------------------------------------- |
-| `@gameshelf/api` | `apps/api` | HTTP API built with [NestJS](https://nestjs.com/)  |
-| `@gameshelf/web` | `apps/web` | Frontend built with [Next.js](https://nextjs.org/) |
+<a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue"></a>
+<img alt="Node.js 24" src="https://img.shields.io/badge/Node.js-24-339933?logo=nodedotjs&logoColor=white">
+<img alt="MySQL 8.4" src="https://img.shields.io/badge/MySQL-8.4-4479A1?logo=mysql&logoColor=white">
+<img alt="Next.js" src="https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white">
+<img alt="NestJS" src="https://img.shields.io/badge/NestJS-E0234E?logo=nestjs&logoColor=white">
+
+</div>
+
+<!-- TODO(demo-gif): record .github/assets/photo-import.gif (see .github/assets/README.md), then remove the comment markers around the block below. -->
+<!--
+<p align="center">
+  <img src=".github/assets/photo-import.gif" width="900" alt="A shelf photo is uploaded to GameShelf; the import view reads each title, confirms it against IGDB and adds the games to the catalog">
+</p>
+-->
+
+## How it works
+
+1. **Upload.** Drag, paste or browse up to 50 shelf photos at once (20 MB each;
+   HEIC photos are converted in the browser). Each photo becomes a job in a
+   MySQL-backed queue, so nothing is lost when the server restarts.
+2. **Recognize.** A worker sends each photo once to your vision model, which
+   returns the list of titles it can read.
+3. **Confirm.** Every title is looked up in IGDB, with MobyGames as an optional
+   fallback. Only confirmed titles become games, so a title the model invents
+   never reaches your library.
+4. **Enrich.** Confirmed games get platform, release year, publisher, genre,
+   player count and a cover, downloaded once and served from your own server.
+5. **Review.** Titles nobody could confirm are flagged on the import page, where
+   you search for the right match, add the game by hand, or dismiss it.
+
+Any OpenAI-compatible endpoint works, as long as its model accepts images: a
+local model through Ollama, LM Studio or vLLM, or a hosted one through
+OpenRouter or LiteLLM.
+
+## Features
+
+- **Photo import** with per-photo live progress, automatic retries, and a queue
+  that pauses itself when a credential is rejected and resumes once it is fixed.
+- **Catalog**: a cover-art grid with search, multi-select platform filters,
+  sorting and advanced filters (year, players, publisher, genre, edition), all
+  kept in the URL.
+- **Game pages**: high-resolution covers, a screenshot and artwork gallery,
+  summary, rating and YouTube videos. Edit any field, then re-enrich from IGDB
+  without losing your edits.
+- **Manual add** with catalog search and duplicate detection; a second physical
+  copy bumps the copy count instead of creating a duplicate.
+- **Platforms**: the canonical IGDB platform list synced locally, plus rename
+  with aliases, merge and hide.
+- **English and Polish UI**, with a light, dark or system theme.
+- **Private by design**: one user, no public sign-up, server-side sessions and
+  a strict same-origin Content Security Policy. Pages load nothing from third
+  parties except YouTube videos on game pages.
+- **Plain MySQL**: your whole library is one database you can back up with
+  `mysqldump`.
+
+<!-- TODO(demo-gif): record .github/assets/catalog-tour.gif (see .github/assets/README.md), then remove the comment markers around the block below. -->
+<!--
+## See it in action
+
+<p align="center">
+  <img src=".github/assets/catalog-tour.gif" width="900" alt="Browsing the GameShelf catalog: searching, filtering by platform, opening a game page with its gallery, and switching to the dark theme">
+</p>
+-->
+
+## Quick start
+
+You need **Node.js 24** and **Docker**. `npm run setup` starts the bundled MySQL
+8.4 in Docker; to use your own MySQL 8.4 server instead, follow the manual setup
+in the installation guide. [nvm](https://github.com/nvm-sh/nvm) is optional.
+
+```bash
+git clone https://github.com/5zymon/gameshelf.git
+cd gameshelf
+nvm install && nvm use   # Node 24, from .nvmrc
+npm run setup            # install, create .env, start MySQL, apply migrations
+npm run dev              # web on :3000, API on :3001
+```
+
+Open <http://localhost:3000>. On first run GameShelf sends you to `/setup` to
+create your account; there is no public sign-up page.
+
+Just looking around? Skip `/setup` and run `npm run db:seed` (development only).
+It creates the login `qa@gameshelf.local` / `gameshelf-qa-password` and a few
+sample games. Seeding creates a user, so `/setup` is closed afterwards.
+
+To set up by hand, change ports, or open the app from your phone, see
+[Installation & first run](docs/features/references/installation.md).
+
+### Turn on photo import
+
+The catalog works without any external service. Photo import needs two:
+
+1. **A vision model.** In **Settings**, enter the base URL, model and API key of
+   an OpenAI-compatible endpoint with a vision-capable model, save, and run the
+   connection test. Local servers accept any non-empty key.
+2. **IGDB credentials.** Create an application in the
+   [Twitch developer console](https://dev.twitch.tv/console/apps) (no scopes),
+   put its `IGDB_CLIENT_ID` and `IGDB_CLIENT_SECRET` in `.env`, restart
+   `npm run dev`, and run `npm run platforms:sync` once to load the platform
+   list.
+
+MobyGames is an optional fallback (`MOBYGAMES_API_KEY`). Access is granted by
+application, so leave it unset until you have a key. Details are in
+[Configuration](docs/features/references/configuration.md).
+
+## Documentation
+
+| Guide                                                                | What's inside                                                            |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| [Installation & first run](docs/features/references/installation.md) | Prerequisites, one-command and manual setup, ports, LAN access, accounts |
+| [Configuration](docs/features/references/configuration.md)           | LLM, IGDB and MobyGames credentials; every environment variable          |
+| [Operations](docs/features/references/operations.md)                 | MySQL, migrations, backup and restore, health checks                     |
+| [Development](docs/features/references/development.md)               | Scripts, Task shortcuts, tests, CI, repository layout                    |
+| [Operator runbook](docs/features/references/runbook.md)              | Which guide to open for each situation                                   |
+| [Feature docs](docs/features/index.md)                               | One document per feature, plus architecture decisions (ADRs)             |
 
 ## Scope
 
-GameShelf is a **single-user, single-origin** app for one operator's own library.
-Two things are deliberately out of scope, and **no requirement in this project
-depends on them**:
+GameShelf is built for **one person's library on one machine**: a single-user
+app you run at `http://localhost` or on your home network. There is no
+production deployment story (no reverse proxy, TLS terminator or multi-instance
+setup), and Docker is a convenience for the database, not a requirement.
 
-- **Deployment is out of scope.** There is no production deployment story — no
-  reverse proxy, no TLS terminator, no load balancing, no multi-instance setup.
-  The app runs on one host, reachable at `http://localhost` (or a LAN IP), by its
-  operator.
-- **No requirement depends on a container.** `docker-compose.yml` is a
-  _convenience_ that starts a local MySQL. The application has no
-  dependency on Docker or on that file: it needs only a MySQL 8.4 server
-  reachable at the host and port in `DATABASE_URL`.
-  System-installed servers work identically.
+## Tech stack
 
-## Prerequisites
+| Package                | Path                 | What it is                                    |
+| ---------------------- | -------------------- | --------------------------------------------- |
+| `@gameshelf/web`       | `apps/web`           | Next.js frontend (Tailwind CSS v4, next-intl) |
+| `@gameshelf/api`       | `apps/api`           | NestJS API with Prisma on MySQL 8.4           |
+| `@gameshelf/contracts` | `packages/contracts` | Shared TypeScript wire types                  |
 
-- **Node.js 24 LTS** (`>=24 <25`) — pinned in `.nvmrc` and `package.json` (`engines.node`).
-- **npm 11+** (ships with Node 24).
-- [nvm](https://github.com/nvm-sh/nvm) (optional but recommended) to select the pinned Node version.
-- **Docker** (optional) — only for the convenience `docker-compose.yml` that starts the dev MySQL. The app itself needs just a MySQL 8.4 server reachable at the host and port in `DATABASE_URL`; system-installed servers work identically.
+TypeScript throughout, in one npm-workspaces monorepo.
 
-The root scripts call `concurrently` and the workspace CLIs, so everything runs from the repository root.
+## Contributing
 
-## Setup
+Issues and pull requests are welcome. Before opening a PR, run `task check`
+(format, lint, typecheck) and `npm run test`. The
+[Development guide](docs/features/references/development.md) covers the test
+database, the CI gates and the git hooks.
 
-### One command
+## License
 
-From a clean clone, one command takes you from nothing to a running, migrated,
-client-generated local install:
+[MIT](LICENSE) © 2026 Szymon Nowak.
 
-```bash
-npm run setup        # or: task setup
-```
-
-It runs, in order (idempotent — safe to re-run):
-
-1. `npm install` — install both workspaces and set up git hooks.
-2. `cp .env.example .env` — **only if `.env` is missing**, and generates a random
-   `SESSION_SECRET` in the copy so you never ship the placeholder.
-3. `docker compose up -d mysql` — start the pinned `mysql:8.4`
-   (convenience only — see "Scope").
-4. Wait until MySQL reports **healthy**.
-5. `npm run db:deploy` — apply the committed Prisma migrations (creates every
-   table; `migrate deploy` needs no shadow DB).
-6. `npm run db:generate` — generate the Prisma client (a gitignored build artifact).
-
-Then start the app:
-
-```bash
-npm run dev          # API on :3001, web on :3000 (API_PORT / WEB_PORT)
-```
-
-Open <http://localhost:3000> (or your `WEB_PORT`) — the app redirects to `/setup` when no users exist; create your first account there.
-
-### Manual fallback
-
-If you prefer to do it by hand (or `task`/the script is unavailable):
-
-```bash
-nvm install && nvm use          # reads .nvmrc (Node 24)
-npm install
-cp .env.example .env            # then edit .env (at minimum set SESSION_SECRET)
-docker compose up -d mysql
-docker compose ps               # wait until it is "healthy"
-npm run db:deploy               # apply committed migrations
-npm run db:generate             # generate the Prisma client
-npm run dev
-```
-
-`.env` is gitignored; `.env.example` lists every variable the app, its tests, and
-`docker-compose.yml` read, with placeholder values only.
-
-## Running
-
-Start the API and the web app together with a single command:
-
-```bash
-npm run dev
-```
-
-`npm run dev` runs `concurrently` and starts:
-
-- **API** — NestJS on `API_HOST:API_PORT`, default <http://localhost:3001> (health check at `/health`)
-- **Web** — Next.js on `WEB_HOST:WEB_PORT`, default <http://localhost:3000>
-
-Other useful scripts (all run from the root):
-
-| Command                     | Description                                                                    |
-| --------------------------- | ------------------------------------------------------------------------------ |
-| `npm run dev`               | Start API + web in watch mode                                                  |
-| `npm run dev:api`           | Start only the NestJS API                                                      |
-| `npm run dev:web`           | Start only the Next.js frontend                                                |
-| `npm run build`             | Build both workspaces                                                          |
-| `npm run db:migrate`        | Local migration (Prisma, shadow DB)                                            |
-| `npm run platforms:sync`    | Fetch and reconcile the canonical IGDB platform list locally                   |
-| `npm run covers:redownload` | Re-download every missing game cover from its stored link                      |
-| `npm run db:clear-dev`      | Dev only: delete all games, import data and platforms, keep accounts           |
-| `npm run db:seed`           | Dev only: create the QA account and sample platforms/games (idempotent)        |
-| `npm run db:deploy`         | Apply committed migrations                                                     |
-| `npm run db:migrate:check`  | Fail if schema and deployed DB diverge                                         |
-| `npm run db:generate`       | Regenerate the Prisma client                                                   |
-| `npm run db:studio`         | Open Prisma Studio                                                             |
-| `npm run user:create`       | Create an account from the terminal (prompts for email and password)           |
-| `npm run user:passwd`       | Reset an account's password from the terminal (prompts for email and password) |
-| `npm run typecheck`         | Type-check both workspaces                                                     |
-| `npm run test`              | Run the API test suite (unit + e2e)                                            |
-| `npm run lint`              | Lint both workspaces                                                           |
-| `npm run lint:fix`          | Lint both workspaces and autofix                                               |
-| `npm run format`            | Format the whole repo with Prettier                                            |
-| `npm run format:check`      | Check formatting without writing                                               |
-
-### Reaching the app from another device (LAN)
-
-Both servers bind every interface by default (`WEB_HOST` and `API_HOST` blank),
-so a phone or another computer on the same network can use the app:
-
-1. Optionally pick a port in `.env` (e.g. `WEB_PORT=4000`) and restart `npm run dev`.
-2. Find this machine's LAN IP — Next prints a `Network:` URL on start, or on
-   macOS run `ipconfig getifaddr en0`.
-3. On the other device open `http://<LAN IP>:<WEB_PORT>` and sign in.
-
-Only the web port has to be reachable: the browser talks to the web app alone,
-which forwards `/api` to the API server-side (see "Single origin, CSP, and fonts"),
-so no CORS, cookie or CSP setting changes. Keep `SESSION_COOKIE_SECURE=false` on
-plain HTTP. Set `API_HOST=127.0.0.1` (with
-`NEXT_PUBLIC_API_URL=http://127.0.0.1:<API_PORT>`) to keep the API off the network,
-or `WEB_HOST=127.0.0.1` to keep the whole app on this machine. Allow incoming
-connections for `node` if the OS firewall asks. In dev, Next may log a
-"Cross origin request detected … allowedDevOrigins" warning for a LAN address; it
-is informational and does not block the page or hot reload.
-
-### Code quality and git hooks
-
-ESLint runs the typed `strictTypeChecked` and `stylisticTypeChecked` presets, while Prettier owns formatting (conflicting ESLint rules are disabled via `eslint-config-prettier`).
-
-`npm install` runs `husky`, which points Git at `.husky/`. The `pre-commit` hook runs `lint-staged` (ESLint `--fix` + Prettier on staged files) and then a full `npm run typecheck`; commits that fail either check are rejected.
-
-### Task shortcuts
-
-A [`Taskfile.yml`](./Taskfile.yml) provides [Task](https://taskfile.dev/) shortcuts (install the `task` binary first):
-
-| Command       | Description                                                         |
-| ------------- | ------------------------------------------------------------------- |
-| `task --list` | List all available tasks                                            |
-| `task check`  | Run all quality gates: format check, lint, typecheck                |
-| `task test`   | Run the API test suite (unit + e2e)                                 |
-| `task ci`     | `task check` plus a production build, tests and the migration check |
-| `task fix`    | Apply ESLint autofixes and Prettier formatting                      |
-
-## Single origin, CSP, and fonts
-
-The browser talks to **one origin only** — the Next.js web app. Every API call
-goes to a same-origin `/api/:path*` URL, which Next.js rewrites server-side to
-the NestJS API (`apps/web/next.config.mjs`). `NEXT_PUBLIC_API_URL` is the
-internal server-side target of that rewrite and of SSR; the browser never calls
-it directly. Because of this, the `gameshelf_session` cookie is a host-only
-**first-party** cookie on the app's own origin — there is no CORS configuration,
-no cookie `Domain`, and no external reverse proxy or TLS terminator assumed
-anywhere in the stack.
-
-The app ships a strict Content Security Policy (`apps/web/src/middleware.ts`):
-
-- every directive (`default-src`, `script-src`, `style-src`, `img-src`,
-  `font-src`, `connect-src`, …) is `'self'`-only; there is no external host, no
-  `*`, and no `'unsafe-inline'`;
-- a fresh per-request nonce (plus `'strict-dynamic'`) lets Next.js run its inline
-  bootstrap/flight scripts without `'unsafe-inline'`;
-- `'unsafe-eval'` is present in development only;
-- there is deliberately no `upgrade-insecure-requests`, so the supported
-  `http://localhost` install keeps working.
-
-Fonts are **self-hosted at build time**: `next/font/google` downloads Sora
-(display) and Manrope (body) during `npm run build` and emits them under
-`/_next/static/media/*.woff2`, served by the app. No font CDN is contacted at
-runtime, which is why `font-src 'self'` is sufficient.
-
-**Zero-external-request guarantee.** A page load makes no request to a
-non-GameShelf origin. Verify it in DevTools → Network (hard-reload any page; every
-request host is the app origin), or from the shell:
-
-```bash
-curl -sS http://localhost:3000/login | grep -oE '(src|href)="https?://[^"]+"' || echo 'OK: none'
-grep -rIlE 'fonts\.(gstatic|googleapis)' apps/web/.next/static || echo OK
-```
-
-See [`docs/features/single-origin-frontend-api.md`](./docs/features/single-origin-frontend-api.md)
-for the full CSP directive table and verification steps.
-
-## Accounts and registration
-
-GameShelf has **no public self-registration**. There is deliberately no signup
-route or signup link, and paths such as `POST /auth/register`, `POST /signup`
-or `POST /users` return `404`. This is a security decision, not an unfinished
-feature — do not "helpfully" add a public registration endpoint. The absence
-is enforced by the regression test
-`apps/api/test/e2e/no-registration.e2e-spec.ts` (part of `npm run test`).
-
-Accounts are provisioned only by:
-
-- **First-run setup** — `POST /setup` creates the very first account and is
-  permanently disabled (`409 Setup has already been completed`) once a user
-  exists. See [`docs/features/first-run-setup.md`](./docs/features/first-run-setup.md).
-- **The CLI** — operator-run commands that reuse `UsersService`, for when the
-  first account already exists (or the only account is locked out):
-  - `npm run user:create` — create an account. It prompts for `Email: ` (unless
-    `--email <email>` is given), then `Password: ` and `Confirm password: `
-    without echoing them.
-  - `npm run user:passwd` — set a new password (the account-recovery path: there
-    is no email/SMTP reset flow).
-
-  `--password <password>` / `--password=<password>` skips both password prompts
-  and the confirmation, but it shows up in shell history and `ps`, so prefer the
-  stdin pipe when running non-interactively (off a TTY, `--email` is required):
-
-  ```bash
-  printf '%s\n' "$NEW_PASSWORD" | npm run user:passwd -- --email player@example.com
-  ```
-
-  Failures — missing `--email` off a TTY, blank email, empty password, password
-  mismatch, duplicate email on create, unknown email on passwd — print a
-  readable message to stderr and exit non-zero. Validation and hashing use the
-  same code path as first-run setup (`UsersService.prepareUser`); the CLI adds
-  no separate rules. See
-  [`docs/features/user-cli.md`](./docs/features/user-cli.md).
-
-- **Dev seed** — `npm run db:seed` (development only) creates
-  `qa@gameshelf.local` / `gameshelf-qa-password` for QA, plus a small sample
-  catalog. It is idempotent: re-running resets the password and never
-  duplicates games. It needs `NODE_ENV=development` (set in `.env.example`)
-  or it refuses to run. See
-  [`docs/features/dev-seed.md`](./docs/features/dev-seed.md).
-
-Additional users therefore require operator action. The web client exposes no
-signup page or link either; that is enforced by the frontend ticket.
-
-## Testing
-
-The API has a two-tier Jest suite (`apps/api/jest.config.js`), run from the repository root:
-
-| Command             | What it runs                                                                        |
-| ------------------- | ----------------------------------------------------------------------------------- |
-| `npm run test`      | Both tiers (unit, then e2e)                                                         |
-| `npm run test:unit` | Unit tests only — services with a mocked `PrismaService`, **no database needed**    |
-| `npm run test:e2e`  | E2E tests only — a real Nest app (supertest) against a real MySQL **test** database |
-
-(`test:unit` / `test:e2e` are `apps/api` workspace scripts; from the root use `npm run test:unit --workspace apps/api` etc., or `task test` for the full suite.)
-
-The e2e tier boots the full `AppModule`, which starts the in-process MySQL-backed photo-import worker on start (ADR-005) — so e2e needs only MySQL (`docker compose up -d mysql`). The queue specs shrink the worker's timings through the `PHOTO_IMPORT_QUEUE_OPTIONS` override (or pass `autoStart: false` when a spec only observes enqueueing), and `resetDatabase` clears the queue rows, so the suite can run while `npm run dev` is up.
-
-The Jest scripts set `NODE_OPTIONS=--experimental-vm-modules` because `@nestjs/schedule` is ESM-only while ts-jest runs in CommonJS mode. This is test-only and does not affect runtime.
-
-**Test database.** The e2e tier uses a dedicated `gameshelf_test` database (never the dev `gameshelf` one), selected by `DATABASE_TEST_URL` in `.env` (`.env.example` sets `mysql://gameshelf:gameshelf@localhost:3306/gameshelf_test?charset=utf8mb4`; when it is unset the tests use the same database on `127.0.0.1`).
-
-- **Fresh data dir:** `docker compose up -d mysql` creates it automatically — `docker/mysql-init/02-test-database.sql` runs on first initialization of an empty data directory.
-- **Existing data dir:** the init scripts only run once, so create it manually one time:
-
-  ```bash
-  docker compose exec -T mysql mysql -uroot -p"$(grep '^MYSQL_ROOT_PASSWORD=' .env | cut -d= -f2)" < docker/mysql-init/02-test-database.sql
-  ```
-
-The e2e tier is **re-runnable**: before the suite it applies the committed migrations (`prisma migrate deploy`) and wipes all tables; every test starts from a reset database.
-
-## CI (GitHub Actions)
-
-[`.github/workflows/ci.yml`](./.github/workflows/ci.yml) runs on **pull requests** (any base branch) on an `ubuntu-latest` runner — a plain branch push starts no run, and CI is (re)triggered by the PR including `synchronize` on each new commit. The single job is named `ci` and gates the run with:
-
-| Step                  | Command                    | What it does                                                        |
-| --------------------- | -------------------------- | ------------------------------------------------------------------- |
-| Install               | `npm ci`                   | Deterministic install with lockfile-based caching                   |
-| Prisma generate       | `npm run db:generate`      | Generate the client before any TypeScript check or build            |
-| Lint                  | `npm run lint`             | ESLint (typed, strict) on both workspaces                           |
-| Typecheck             | `npm run typecheck`        | `tsc --noEmit` on both workspaces                                   |
-| Build                 | `npm run build`            | Production build of both workspaces                                 |
-| Test                  | `npm run test`             | API unit + e2e tests (e2e against the `gameshelf_test` database)    |
-| Apply migrations      | `npm run db:deploy`        | `prisma migrate deploy` against a throwaway MySQL service container |
-| Migration drift check | `npm run db:migrate:check` | Fail if `schema.prisma` and the deployed database have diverged     |
-
-**Pinned versions.** Node is pinned to **24.21.0** (kept in sync with `.nvmrc` and `engines.node` in `package.json`); the MySQL service container is pinned to **8.4** per ADR-001, with throwaway credentials that are discarded with the run.
-
-**Failure semantics.** Any lint error or type error fails the run — type errors are never warnings-only (`tsc --noEmit` plus error-level typed ESLint rules). A schema change without a committed migration fails the drift check, because the deployed state no longer matches `schema.prisma`.
-
-### Running the same checks locally
-
-```bash
-docker compose up -d mysql   # needed for the tests and the migration check
-task ci                       # generate, format check, lint, typecheck, build, test, migration check
-```
-
-On machines without [`task`](https://taskfile.dev/), the raw-npm equivalent:
-
-```bash
-npm run db:generate
-npm run format:check
-npm run lint
-npm run typecheck
-npm run build
-npm run test
-npm run db:deploy
-npm run db:migrate:check
-```
-
-If the local drift check fails because the dev database is stale, run `npm run db:migrate` first — the check compares the _live_ dev database against `schema.prisma`.
-
-## Database (local dev)
-
-GameShelf uses **MySQL 8.4** with `utf8mb4` / `utf8mb4_0900_ai_ci` (ADR-001 — game titles contain CJK and accented characters; `latin1`/`utf8mb3` would corrupt them).
-
-### Starting the database
-
-Docker Compose is a **convenience, not a dependency**: the app only needs a MySQL server reachable at the host and port in `DATABASE_URL`. A system-installed MySQL 8.4 configured with the same charset works identically.
-
-```bash
-docker compose up -d mysql     # starts the pinned mysql:8.4
-docker compose ps              # wait until the service is "healthy"
-```
-
-### Confirming the character set
-
-```bash
-docker compose exec mysql mysql --default-character-set=utf8mb4 \
-  -ugameshelf -pgameshelf \
-  -e "SHOW VARIABLES LIKE 'character_set%'; SHOW VARIABLES LIKE 'collation_server';"
-```
-
-Expected (abridged):
-
-```
-character_set_client      utf8mb4
-character_set_connection  utf8mb4
-character_set_database    utf8mb4
-character_set_results     utf8mb4
-character_set_server      utf8mb4
-collation_server          utf8mb4_0900_ai_ci
-```
-
-Round-trip check — accented Latin and CJK must come back byte-identical:
-
-```bash
-docker compose exec mysql mysql --default-character-set=utf8mb4 \
-  -ugameshelf -pgameshelf gameshelf -e "
-  CREATE TABLE _charset_check (id INT PRIMARY KEY, title VARCHAR(255));
-  INSERT INTO _charset_check VALUES (1,'Pokémon'),(2,'ポケットモンスター'),(3,'Świąteczna edycja');
-  SELECT id,title FROM _charset_check;
-  DROP TABLE _charset_check;"
-```
-
-(The `mysql` CLI prints a password-on-command-line warning on stderr; that is expected.)
-
-### Persistent data directory
-
-The data directory is a **Docker named volume** — `gameshelf-mysql-data`, declared in `docker-compose.yml` — Docker-managed storage on the host, **not** an ephemeral container path and **not** a bind mount into this repository. Recreating the container never loses data. The application cannot verify that this volume sits on durable storage — that is a human check.
-
-To reset the dev database completely (destructive — it deletes the volume):
-
-```bash
-docker compose down -v
-docker compose up -d mysql
-```
-
-**Coming from the old bind-mounted `./data/mysql`?** The volume starts empty and this repository's directory is no longer read. Keep the old data by dumping it out once and loading it into the volume, or start fresh:
-
-```bash
-docker run -d --name gameshelf-bindmount -v "$PWD/data/mysql":/var/lib/mysql mysql:8.4
-PW=$(grep '^MYSQL_ROOT_PASSWORD=' .env | cut -d= -f2)
-docker exec gameshelf-bindmount sh -c "until mysqladmin ping -uroot -p'$PW' --silent; do sleep 1; done; mysqldump -uroot -p'$PW' --single-transaction --routines --triggers --no-tablespaces gameshelf" > backups/gameshelf-bindmount.sql
-docker rm -f gameshelf-bindmount
-```
-
-Then load the dump with the [restore procedure](#restore-the-critical-procedure) (steps 3–6). Do **not** copy the old directory into the volume file by file: on macOS and Windows the bind mount was a case-insensitive filesystem, so MySQL served it with `lower_case_table_names=2`, and the volume (like CI, `0`) refuses that data dictionary. A logical dump moves the data cleanly.
-
-Note: the MySQL image creates the database and user only on **first** initialization (empty volume). Changing `MYSQL_USER`/`MYSQL_PASSWORD` in `.env` later has no effect until you reset.
-
-### Migrations (Prisma)
-
-Prisma is the data-access layer (ADR-003). The schema lives at `apps/api/prisma/schema.prisma`, and every schema change is captured as a committed migration under `apps/api/prisma/migrations/`. Because the migrations are in git, the schema is fully rebuildable from a clean clone — the container filesystem is disposable (ADR-001).
-
-| Command              | Prisma command          | When to use                             |
-| -------------------- | ----------------------- | --------------------------------------- |
-| `npm run db:migrate` | `prisma migrate dev`    | Local development (uses the shadow DB)  |
-| `npm run db:deploy`  | `prisma migrate deploy` | Durable environments (apply migrations) |
-
-**`prisma db push` is forbidden outside throwaway experiments.** It syncs the schema directly and bypasses the migration history, so it must never be used in a durable environment.
-
-The generated Prisma client is a **build artifact**: it is written to `apps/api/src/generated/` (gitignored) and regenerated automatically by `npm run build` — never commit it.
-
-The **shadow database** (`gameshelf_shadow`) is created by `docker/mysql-init/01-prisma-shadow.sql` on **first initialization only**, and is required by `prisma migrate dev` (local work). The **test database** (`gameshelf_test`, used by the e2e tier — see "Testing") is created the same way by `docker/mysql-init/02-test-database.sql`. To change either you must reset the volume: `docker compose down -v`.
-
-**Character set:** the `?charset=utf8mb4` suffix in `DATABASE_URL` is declarative — Prisma's MySQL connector does not parse it. The real enforcement is threefold: the migration engine connects with `utf8mb4` (MySQL ≥ 5.5.3), every generated table declares `DEFAULT CHARACTER SET utf8mb4`, and the server runs with `--character-set-server=utf8mb4` (see "Confirming the character set").
-
-## Photo import queue (MySQL)
-
-There is no separate queue service: the **`import_jobs` table is the
-photo-import queue**, drained by a single in-process worker inside the API
-(ADR-005). `docker compose up -d mysql` is all the infrastructure it needs. See
-[ADR-005 — MySQL Photo-import Queue](./docs/features/adr-005-mysql-photo-import-queue.md).
-
-### Worker restart and shutdown
-
-Queued jobs live in MySQL, so they survive an API restart: stop the API, start it
-again, and the worker claims the due rows. Every upload, user retry and resume
-wakes the worker immediately; otherwise it polls once a second.
-
-Each photo gets up to `IMPORT_MAX_ATTEMPTS = 3` attempts with exponential backoff
-(`IMPORT_RETRY_BACKOFF_MS = 5000` → 5 s, then 10 s). A transient failure (e.g. an
-external 429) throws a retryable error, the row is re-queued with the backoff
-delay, and the retry re-runs only the titles that are still unresolved — the
-vision provider is called at most once per photo (a `vision_completed_at` marker
-plus a transaction make the recognition write one-shot). A row is marked `failed`
-only on a non-retryable error (`PermanentImportError`) or on the final attempt.
-Confirmed games are saved in one MySQL transaction per batch (batch size 10), so
-a worker killed mid-job leaves the earlier batches committed.
-
-**Metadata and covers.** Each confirmed candidate is mapped to a `Game` by the reusable `GameEnrichmentService` (title, canonical platform, vision-only edition, year, publisher, genre, player count, provenance, and the raw archival payload); a source field that is absent stays empty rather than being invented. The candidate's external cover is downloaded once **outside** the DB transaction into the local cache (`COVERS_DIR`, default `~/.gameshelf/covers`) and the saved `coverUrl` becomes a same-origin `/api/covers/<file>` served by the API — never an external host. A catalog thumbnail is generated locally with `sharp` (WebP, width ≤300) and served at `/api/covers/thumbs/<file>`, and `GET /games` exposes both as `coverUrl` and `coverThumbUrl`. A failed download leaves `coverUrl` null without failing the import item, keeps the external URL internally as `sourceCoverUrl`, and a 15-minute `@Interval` sweep retries it (no second queue, ADR-005). Re-enrichment search candidates are passed through a signed same-origin `/api/covers/preview` route so the external host never reaches the browser. Replacing a cover or deleting a game removes the stored file only when no other game references it, and `npm run covers:redownload` repopulates every missing cover from its stored `sourceCoverUrl` (e.g. after the cover directory is wiped). Manual `coverUrl` inputs to `POST /games`/`PATCH /games/:id` are downloaded and kept same-origin too. See `docs/features/local-cover-cache.md` and `docs/features/game-metadata-enrichment.md`.
-
-**Re-enrichment.** `POST /games/:id/enrich` re-runs the same IGDB → MobyGames → unresolved chain against a game's current (corrected) title: with no body it returns the candidate(s) and mutates nothing, and with a `{ "candidate": { "source", "externalId" } }` body it applies fresh metadata to the **existing** row — never a duplicate. The merge only fills a field the candidate provides, never changes `title`/`platformId`/`edition`, and never overwrites a hand-edited (provenance-tracked) field; `source`+`externalId` link the game and `platformUnverified` is cleared. A second identical apply writes nothing. See `docs/features/game-reenrichment.md`.
-
-**Manual add.** `GET /games/search?q=` searches the external game database (through the same per-provider rate limiters) and returns a ranked `candidates` list with same-origin preview covers; queries below 2 normalized characters return an empty list without an upstream call, successful results are cached briefly, and identical concurrent queries are coalesced. `POST /games` accepts an optional `candidate: { "source", "externalId" }` picked from that list: with it the row is saved **linked** (catalog metadata/cover, using the submitted `platformId`/`edition`, re-verified against a fresh search by title); without it the body is saved as typed data (`source: "MANUAL"`, `externalId: null`), which also works with no game database configured. A game whose identity already exists (external record + platform + edition, or normalized title + platform + edition when unlinked) is never inserted twice: `POST /games` returns `409` with `code: "GAME_ALREADY_IN_CATALOG"` and the existing `game`, and `POST /games/:id/copies` increments the new `copyCount` (exposed on `GameDetailModel`) for a deliberate second physical copy. The same identity rule is reused by the import commit, so re-uploaded shelves / overlapping photos link to the existing row and never increment the count. See `docs/features/manual-add-and-copy-count.md`.
-
-**Worker settings** (ADR-005; all compile-time constants, not env vars, injected
-under the `PHOTO_IMPORT_QUEUE_OPTIONS` token):
-
-| Setting              | Value                                  | Constant                          |
-| -------------------- | -------------------------------------- | --------------------------------- |
-| Concurrency          | 1 (ADR-005)                            | `PHOTO_IMPORT_CONCURRENCY`        |
-| Attempts             | 3 total (initial + 2 retries)          | `IMPORT_MAX_ATTEMPTS`             |
-| Backoff              | exponential, base 5 s (5 s, then 10 s) | `IMPORT_RETRY_BACKOFF_MS`         |
-| Per-job timeout      | 420 s (7 min)                          | `IMPORT_JOB_TIMEOUT_MS`           |
-| Lease                | 480 s (8 min, > timeout)               | `IMPORT_JOB_LEASE_MS`             |
-| Stall-check interval | 30 s                                   | `IMPORT_STALL_CHECK_INTERVAL_MS`  |
-| Poll interval        | 1 s                                    | `IMPORT_QUEUE_POLL_INTERVAL_MS`   |
-| Shutdown grace       | 5 s                                    | `IMPORT_WORKER_SHUTDOWN_GRACE_MS` |
-
-Worker options come from `photoImportQueueOptions()`, injected under the `PHOTO_IMPORT_QUEUE_OPTIONS` token (tests shrink the timings with it). A job that exceeds the per-job timeout fails with a retryable error and is retried per the backoff above, and is marked `failed` on the last attempt. The timeout **aborts** the attempt (`AbortController`): the in-flight pipeline stops at the next batch boundary and commits no further batch, and `commitImportBatch` refuses to write once the job is terminal — so an abandoned attempt cannot collide with the retry or mutate the DB after `markFailed`. `markCompleted`/`markFailed` write conditionally (`WHERE status IN ('queued','processing')`), so a late writer can never clobber a newer terminal status. **Timeout headroom:** the 420 s budget is sized for a shelf of up to ~50 titles (one vision call at `VISION_REQUEST_TIMEOUT_MS = 120 s`, plus ~50 sequential IGDB lookups through the central rate limiter — 4 req/s, 8 concurrent, so a single sequential path is paced at ~250 ms per request — at up to `IGDB_REQUEST_TIMEOUT_MS = 5 s` each ≈ 120 s + 50 × 5.25 s ≈ 383 s); IGDB 429s are retried internally up to `IGDB_MAX_ATTEMPTS = 3` with exponential backoff (base 500 ms, cap 5 s), while timeouts/5xx/network failures remain the queue's responsibility (worker retry). A photo recognized with substantially more titles can hit the timeout and be retried. The worker claims a due row in one transaction with `SELECT … WHERE status = 'queued' AND next_run_at <= now ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED`, setting `lease_until = now + 480 s`; the lease deliberately outlives the whole permitted job (`IMPORT_JOB_LEASE_MS > IMPORT_JOB_TIMEOUT_MS`), so a live attempt cannot lose its lease mid-job and a second claim can never process the same row concurrently, and there is no lease renewal. A killed worker's lease simply expires, and the stall recovery (on boot, and every 30 s) re-queues the row with the backoff delay — or marks it `failed` once its attempts are exhausted. Because the pipeline is idempotent, the re-run never duplicates a saved game or a second vision call. Every attempt emits exactly one structured JSON outcome line (`event: "photo_import_job"`) with the import job id, photo, counts, duration, attempt, and outcome.
-
-MobyGames is an optional fallback. When `MOBYGAMES_API_KEY` is set, the anti-hallucination chain appends a MobyGames v2 source after IGDB, consulted only for titles IGDB did not resolve; it is throttled to 1 request/second with a hard 720 requests/hour budget that **waits** at the window boundary rather than firing past the cap (so a request is never fired and then retried on `429`). With no key the fallback is not registered at all: imports validate against IGDB alone and a title IGDB misses is flagged unrecognized, never failing the job. Free MobyGames access is granted by application and is not instant, so start that approval early; a configured-but-rejected key (`401`/`403`) pauses the photo-import queue exactly like a broken IGDB credential (ticket 3.10), which is why `.env.example` keeps the key commented out.
-
-The uploaded photo is kept while its job is `queued`/`processing` or `failed`-retryable, deleted by the pipeline once the job completes, and cleaned up by an hourly backstop sweep otherwise. The sweep removes a leftover file from a failed pipeline delete, `dismissed` job photos, a `failed` job's photo after a 7-day retry window, an abandoned `queued`/`processing` job's photo after 48 h, and files with no owning job; a `failed` job is retryable only while its photo exists. See `docs/features/photo-lifecycle.md`.
-
-Shutdown stops the poller and waits up to `IMPORT_WORKER_SHUTDOWN_GRACE_MS = 5 s`
-for the in-flight attempt, then returns. A job still running past the grace keeps
-its lease, so the stall recovery reclaims it — on the next boot, or at the next
-30 s stall check — and, because the pipeline is idempotent, the re-run never
-duplicates a saved game or a second vision call.
-
-### Upgrading from Redis
-
-An existing install no longer needs Redis. Apply the migration, then remove the
-retired service and its data directory:
-
-```bash
-npm run db:deploy
-docker compose down --remove-orphans && rm -rf data/redis
-```
-
-The migration backfills every `queued`/`processing` job to runnable, so jobs that
-were waiting in, or running on, the old Redis queue are processed on the next
-start.
-
-## Backup and restore
-
-The only durable, user-created data is the **`gameshelf` MySQL database**
-(library, users, sessions, LLM settings, import history). Everything else is
-rebuildable or ephemeral:
-
-- **Schema** — fully rebuildable from the committed Prisma migrations (ADR-003);
-  you back up _data_, never schema.
-- **`gameshelf_shadow` / `gameshelf_test`** — disposable; never back them up.
-- **Import jobs / queue** — part of the `gameshelf` MySQL database (ADR-005):
-  `import_jobs`, `recognized_items` and `unrecognized_items` are backed up with it.
-- **Cover cache** (`COVERS_DIR`, default `~/.gameshelf/covers`) — re-downloadable
-  via `npm run covers:redownload`.
-
-> **⚠️ ADR-001 — the app cannot verify your data directory is durable.** GameShelf
-> assumes the MySQL data directory is on durable storage, but it **cannot check
-> this itself** — that is a human check. Confirm the `gameshelf-mysql-data`
-> Docker volume (or your system MySQL's data dir) is on real, backed-up storage,
-> not an ephemeral container layer, tmpfs, or an unbacked disk. On macOS and
-> Windows the volume lives inside the Docker VM's disk image — back it up as
-> part of this machine.
-
-### Backup (recommended: logical dump)
-
-A logical `mysqldump` is consistent (`--single-transaction` for InnoDB),
-portable, restorable to a fresh database, and does **not** require stopping the app:
-
-> **Credentials.** The commands below assume the default `gameshelf`/`gameshelf`
-> credentials from `.env.example`. If you changed `MYSQL_USER`/`MYSQL_PASSWORD`,
-> substitute them in the `-u`/`-p` flags.
-
-```bash
-mkdir -p backups
-docker compose exec -T mysql mysqldump -ugameshelf -pgameshelf \
-  --single-transaction --routines --triggers --no-tablespaces \
-  gameshelf > "backups/gameshelf-$(date +%Y%m%d-%H%M%S).sql"
-```
-
-The dump lands in `backups/` (gitignored). Store it somewhere durable — it _is_
-your library.
-
-### Restore (the critical procedure)
-
-Load a dump into a **fresh, empty** `gameshelf` database — after data loss, a
-rebuild, or a move to a new host:
-
-```bash
-# 1. Stop the app so it does not write while you restore (Ctrl-C `npm run dev`).
-
-# 2. Ensure MySQL is up and healthy.
-docker compose up -d mysql && docker compose ps    # wait for "healthy"
-
-# 3. Drop and recreate an empty gameshelf database.
-docker compose exec mysql mysql -ugameshelf -pgameshelf -e \
-  "DROP DATABASE IF EXISTS gameshelf; CREATE DATABASE gameshelf CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci;"
-
-# 4. Load the dump (recreates schema + data).
-docker compose exec -T mysql mysql -ugameshelf -pgameshelf gameshelf \
-  < "backups/gameshelf-<your-timestamp>.sql"
-
-# 5. Verify the data came back.
-docker compose exec mysql mysql -ugameshelf -pgameshelf gameshelf -e \
-  "SELECT COUNT(*) AS users FROM users; SELECT COUNT(*) AS games FROM games;"
-
-# 6. Start the app; confirm you can log in and see your library.
-npm run dev
-```
-
-Expected: `users`/`games` counts match the source, you can log in, and the
-library is intact. On a **brand-new host** the same steps work — `docker compose
-up -d mysql` creates an empty `gameshelf` database, then run steps 3–6. The
-committed migrations are not needed for a restore (the dump already contains the
-schema); they are only needed for a from-scratch setup (see "Setup").
-
-### Alternative: physical data-directory snapshot
-
-For a full point-in-time snapshot of the MySQL data dir, stop the service and
-copy the named volume out (a live InnoDB copy is unsafe, so MySQL must be
-stopped):
-
-```bash
-docker compose stop mysql
-ts=$(date +%s)
-mkdir -p data
-docker run --rm -v gameshelf-mysql-data:/from:ro -v "$PWD/data":/to \
-  alpine tar czf "/to/mysql.bak.$ts.tgz" -C /from .
-docker compose start mysql
-```
-
-Restore — this replaces the volume's contents, so MySQL must be stopped:
-
-```bash
-docker compose stop mysql
-docker run --rm -v gameshelf-mysql-data:/from -v "$PWD/data":/to \
-  alpine sh -c 'rm -rf /from/* /from/.[!.]* ; tar xzf "/to/mysql.bak.<ts>.tgz" -C /from'
-docker compose start mysql
-```
-
-Prefer the logical dump for game data.
-
-## External services (LLM, IGDB, MobyGames)
-
-Photo import calls an LLM (vision) and validates titles against IGDB, with an
-optional MobyGames fallback. You obtain all three sets of credentials yourself.
-**None are required to run the app** — they are only needed for import/enrichment.
-
-### LLM (vision) — required for photo import
-
-Recognition calls one OpenAI-compatible endpoint, configured **at runtime** in
-Settings (`PUT /settings/llm`) — no env edit or restart:
-
-- **Base URL** — required; set in Settings only (no env fallback).
-- **Model** — stored in Settings, or the `LLM_MODEL` env override.
-- **Key** — stored encrypted in Settings, or the `CUSTOM_API_KEY` env fallback.
-  Local servers accept any non-empty value.
-- **Encryption secret** — `LLM_SETTINGS_SECRET` derives the AES-256-GCM key for
-  the stored key; falls back to `SESSION_SECRET`.
-
-Recognition is enabled only when a base URL and a key are both available;
-otherwise uploads are refused with `503`.
-
-Verify a key with the live test `POST /settings/llm/test`
-(`ok` / `unauthorized` / `not_configured` / …). See
-`docs/features/llm-settings-api.md`.
-
-### IGDB — required for title validation
-
-IGDB is reached via **Twitch OAuth client credentials**. Create a Twitch
-application (https://dev.twitch.tv/console/apps, no scopes) and copy its Client
-ID + Secret:
-
-| Variable             | Required | Purpose                                    |
-| -------------------- | -------- | ------------------------------------------ |
-| `IGDB_CLIENT_ID`     | yes      | Twitch client id (sent as `Client-ID`)     |
-| `IGDB_CLIENT_SECRET` | yes      | Twitch client secret (token endpoint only) |
-| `IGDB_TOKEN_URL`     | no       | Token endpoint override (default Twitch)   |
-
-The secret is never logged or surfaced in errors. Check with `GET /health/igdb`
-(`{"status":"ok","token":"cached"}` or `acquired`). See `docs/features/igdb-client.md`.
-
-### MobyGames — optional fallback
-
-Consulted only for titles IGDB missed. It is **absent from the chain entirely
-when `MOBYGAMES_API_KEY` is unset**, so an unconfigured fallback degrades to
-IGDB-only and never fails a job.
-
-> **⚠️ Approval step — start early.** Free non-commercial MobyGames access is
-> granted **by application and is not instant**. Request it at
-> https://www.mobygames.com/ and wait for approval before you need it. Until then
-> leave `MOBYGAMES_API_KEY` **commented out**. Do **not** set a placeholder: a
-> configured-but-rejected key (`401`/`403`) **pauses the photo-import queue**
-> exactly like a broken IGDB credential.
-
-| Variable            | Required | Purpose                                     |
-| ------------------- | -------- | ------------------------------------------- |
-| `MOBYGAMES_API_KEY` | no       | MobyGames v2 key; blank disables the source |
-
-See `docs/features/mobygames-fallback.md`.
-
-## Environment variables
-
-All variables live in a single root `.env` file (see `.env.example`):
-
-| Variable                        | Used by    | Purpose                                                                                                                                                                            |
-| ------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `NODE_ENV`                      | both       | Runtime environment                                                                                                                                                                |
-| `API_PORT`                      | `apps/api` | API listen port (default `3001`)                                                                                                                                                   |
-| `API_HOST`                      | `apps/api` | API bind address (blank = every interface; `127.0.0.1` keeps it off the LAN)                                                                                                       |
-| `WEB_PORT`                      | `apps/web` | Web listen port for `dev`/`start` (default `3000`)                                                                                                                                 |
-| `WEB_HOST`                      | `apps/web` | Web bind address (blank = every interface, reachable from the LAN)                                                                                                                 |
-| `NEXT_PUBLIC_API_URL`           | `apps/web` | Internal API origin for the `/api` rewrite and SSR (never called by the browser); blank derives it from `API_PORT`                                                                 |
-| `MYSQL_PORT`                    | compose    | Host port compose publishes MySQL on (default `3306`); must match `DATABASE_URL`                                                                                                   |
-| `MYSQL_DATABASE`                | compose    | Database compose creates on first init (default `gameshelf`); must match `DATABASE_URL`                                                                                            |
-| `MYSQL_USER`                    | compose    | App user compose creates on first init (default `gameshelf`); must match `DATABASE_URL`                                                                                            |
-| `MYSQL_PASSWORD`                | compose    | Password for that user; must match `DATABASE_URL`                                                                                                                                  |
-| `MYSQL_ROOT_PASSWORD`           | compose    | MySQL root password (compose only)                                                                                                                                                 |
-| `DATABASE_URL`                  | `apps/api` | Prisma connection string (utf8mb4)                                                                                                                                                 |
-| `DATABASE_SHADOW_URL`           | `apps/api` | Prisma shadow DB (migrate dev only)                                                                                                                                                |
-| `DATABASE_TEST_URL`             | `apps/api` | E2E test database, tests only (default `gameshelf_test` on `127.0.0.1:3306`)                                                                                                       |
-| `PRISMA_LOG_QUERIES`            | `apps/api` | `1` logs every SQL statement the API runs (dev aid; default off)                                                                                                                   |
-| `SESSION_SECRET`                | `apps/api` | HMAC-SHA256 key for session tokens (≥32 chars)                                                                                                                                     |
-| `SESSION_TTL_MINUTES`           | `apps/api` | Sliding session lifetime in minutes (default `10080`; no "never")                                                                                                                  |
-| `SESSION_COOKIE_SECURE`         | `apps/api` | Send the session cookie only over HTTPS (`true`/`1` or `false`/`0`, default `false`)                                                                                               |
-| `CUSTOM_API_KEY`                | `apps/api` | API key for the OpenAI-compatible vision endpoint (fallback when no encrypted DB key is stored)                                                                                    |
-| `LLM_MODEL`                     | `apps/api` | Vision model override when none is stored                                                                                                                                          |
-| `LLM_SETTINGS_SECRET`           | `apps/api` | Key-derivation secret for the stored API key's AES-256-GCM key (falls back to `SESSION_SECRET`)                                                                                    |
-| `IMPORT_PHOTOS_DIR`             | `apps/api` | Ephemeral upload directory (default `<OS temp>/gameshelf-import-photos`); the pipeline deletes a photo after its job completes and a sweep removes leftovers (see Photo Lifecycle) |
-| `COVERS_DIR`                    | `apps/api` | Durable cover-cache directory (default `~/.gameshelf/covers`); saves a same-origin `/api/covers/<file>` and serves generated thumbnails at `/api/covers/thumbs/<file>`             |
-| `COVER_PREVIEW_HOSTS`           | `apps/api` | Comma list of hosts the local cover cache and the signed `/api/covers/preview` passthrough may fetch (default `images.igdb.com,www.mobygames.com,mobygames.com`)                   |
-| `COVER_PREVIEW_SECRET`          | `apps/api` | HMAC key for preview URLs (falls back to `SESSION_SECRET`)                                                                                                                         |
-| `COVER_RETRY_SWEEP_INTERVAL_MS` | `apps/api` | Background cover-retry interval in ms (default `900000`)                                                                                                                           |
-| `IGDB_CLIENT_ID`                | `apps/api` | IGDB credentials                                                                                                                                                                   |
-| `IGDB_CLIENT_SECRET`            | `apps/api` | IGDB credentials                                                                                                                                                                   |
-| `IGDB_TOKEN_URL`                | `apps/api` | Optional OAuth token endpoint override (default `https://id.twitch.tv/oauth2/token`)                                                                                               |
-| `MOBYGAMES_API_KEY`             | `apps/api` | Optional MobyGames fallback key; blank = fallback disabled, IGDB-only                                                                                                              |
-
-`WEB_PORT`/`WEB_HOST` are read by `apps/web/scripts/run-next.mjs`, which passes them
-to `next dev`/`next start` as `--port`/`--hostname`; Next's own `PORT`/`HOSTNAME` are
-not used. A variable exported in the shell overrides `.env` (e.g.
-`WEB_PORT=4000 npm run dev`). Next inlines `NEXT_PUBLIC_*` at build time, so run
-`npm run build` again after changing `API_PORT` or `NEXT_PUBLIC_API_URL` for `npm start`.
-
-## Operational checks
-
-Run these after setup and after any incident. All are read-only and safe while
-the app is up.
-
-The URLs below use the default ports; substitute your `API_PORT` / `WEB_PORT`.
-
-| Check                  | Command                                                                                      | Expected                                                              |
-| ---------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| API health             | `curl -fsS http://localhost:3001/health`                                                     | `{"status":"ok"}`                                                     |
-| Queue health           | `curl -fsS http://localhost:3001/health/queue`                                               | job counts per status from MySQL + worker ready (HTTP 200)            |
-| IGDB connectivity      | `curl -fsS http://localhost:3001/health/igdb`                                                | `{"status":"ok","token":"cached"}` (or `acquired`)                    |
-| MySQL charset          | see "Confirming the character set"                                                           | `character_set_server=utf8mb4`, `collation_server=utf8mb4_0900_ai_ci` |
-| Migration drift        | `npm run db:migrate:check`                                                                   | exit 0 (no drift)                                                     |
-| Durable data dir       | **human check** — confirm the `gameshelf-mysql-data` volume is on durable, backed-up storage | you confirm it                                                        |
-| Zero external requests | see "Single origin, CSP, and fonts"                                                          | no non-GameShelf hosts                                                |
-
-The **durable data dir** row is the ADR-001 check the application cannot perform
-for you — it is always a human decision.
-
-## Repository layout
-
-```
-.
-├── apps/
-│   ├── api/            # NestJS API
-│   │   └── prisma/     # Prisma schema + committed migrations
-│   └── web/            # Next.js frontend
-├── docs/               # OKF feature documentation bundle
-├── tsconfig.base.json  # Shared strict TypeScript config
-├── .husky/             # Git hooks (pre-commit)
-├── .env.example        # Environment variable template
-├── docker/             # One-time MySQL init scripts (shadow DB + test DB)
-├── docker-compose.yml  # Local dev MySQL (convenience only)
-├── data/               # Physical MySQL volume snapshots (gitignored)
-├── backups/            # Logical MySQL dumps (gitignored)
-├── .nvmrc              # Pinned Node version
-└── package.json        # Workspaces + root scripts
-```
+Game metadata and covers come from [IGDB](https://www.igdb.com/) and, optionally,
+[MobyGames](https://www.mobygames.com/). Agent skills vendored under
+`.opencode/skills/` keep their upstream licenses (see
+`.opencode/skills/manifest.json`).

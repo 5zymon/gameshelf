@@ -7,7 +7,7 @@ import type {
 import type { PrismaService } from '../prisma/prisma.service';
 import type { UsersService } from '../auth/users.service';
 
-/** Documented QA account (AGENTS.md, README, docs/features/dev-seed.md). Dev only. */
+/** Documented QA account (AGENTS.md, docs/features/dev-seed.md). Dev only. */
 export const SEED_QA_USER = {
   email: 'qa@gameshelf.local',
   password: 'gameshelf-qa-password',

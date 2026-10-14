@@ -10,8 +10,8 @@ generated: { by: opencode/home-model, at: 2026-10-11T22:30:00Z }
 # Overview
 
 GameShelf has **no public self-registration** (see
-[Auth Foundation](/auth-foundation.md) and the README, "Accounts and
-registration"). The one-time [First-run Setup](/first-run-setup.md) creates the
+[Auth Foundation](/auth-foundation.md) and
+[Accounts and registration](/references/installation.md#accounts-and-registration)). The one-time [First-run Setup](/first-run-setup.md) creates the
 very first account, but after that there is deliberately no web route that can
 create or re-provision a user. The User CLI is the operator escape hatch: it
 runs on the server host, boots the same Nest application context as the API, and
