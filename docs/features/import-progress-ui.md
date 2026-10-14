@@ -4,7 +4,7 @@ title: Import Progress UI
 description: The authenticated /import/progress/[batchId] view — aggregate X-of-Y progress, one Photos list with a per-photo state (chip, summary, why line, actions), inline flagged-title review with a compact add form, live polling with a throttled heartbeat while the queue is paused, and a queue-paused banner with resume.
 tags: [web, import, ui]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-13T22:15:26Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-14T18:22:41Z }
 ---
 
 # Overview
@@ -207,8 +207,13 @@ stays false and the page keeps polling at the throttled heartbeat.
 
 # Accessibility
 
-- The aggregate progress bar is `role="progressbar"` with
-  `aria-valuenow/min/max` and an accessible label naming X and Y.
+- The aggregate progress bar is the shared `ProgressBar`
+  (`apps/web/src/components/progress-bar.tsx`): `role="progressbar"` with
+  `aria-valuenow/min/max` and an accessible label naming X and Y. While the
+  batch runs (`!allCompleted && !paused`), the determinate fill is drawn muted
+  (`bg-accent/40`) and a full-strength accent segment bounces between the
+  track's edges over it, so the sweep stays visible across the whole track;
+  nothing moves when the queue is paused or the batch has finished.
 - The aggregate "X of Y photos processed" line is the **only** polled
   `aria-live` region (`role="status"`, `aria-live="polite"`); the footer
   "Reconnecting…" line and the photo rows are not live, so a noisy list never
@@ -231,7 +236,9 @@ stays false and the page keeps polling at the throttled heartbeat.
   `<body>`; the card moves it to the photo heading instead (`tabIndex={-1}`).
 - Status is conveyed by text as well as the colour dot; the dot is
   `aria-hidden`. The busy dot uses `animate-pulse motion-reduce:animate-none`,
-  and the decision bars are decorative (`before:` pseudo-elements).
+  the progress bar's busy segment is `motion-reduce:hidden` (nothing animates
+  under reduced motion), and the decision bars are decorative (`before:`
+  pseudo-elements).
 - A failed photo's raw `errorMessage` is only inside a native **Technical
   details** `<details>` disclosure, not exposed as a live region.
 - All controls are real links/buttons with focus-visible rings; the counts grid

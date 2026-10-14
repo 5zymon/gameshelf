@@ -388,6 +388,7 @@
     "heicError": "Nie udało się odczytać tego zdjęcia HEIC.",
     "uploading": "Przesyłanie…",
     "uploadProgress": "Postęp przesyłania",
+    "starting": "Rozpoczynanie importu…",
     "ready": "{count, plural, one {# zdjęcie gotowe ({size})} few {# zdjęcia gotowe ({size})} many {# zdjęć gotowych ({size})} other {# zdjęć gotowych ({size})}}",
     "noPhotos": "Nie wybrano jeszcze żadnych zdjęć.",
     "uploadButton": {

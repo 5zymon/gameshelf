@@ -4,6 +4,7 @@ import { useLocale, useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState } from 'react';
+import { ProgressBar } from '@/components/progress-bar';
 import { isApiError } from '@/lib/api';
 import { uploadImportPhotos } from '@/lib/api/upload';
 import {
@@ -18,6 +19,7 @@ import {
   type PhotoKind,
 } from '@/lib/import/selection';
 import { convertHeicToJpeg } from '@/lib/import/heic';
+import { uploadStatus } from '@/lib/import/upload-status';
 import { createClientId } from '@/lib/id';
 
 const FIELD =
@@ -34,6 +36,12 @@ const HEIC_CONCURRENCY = 3;
 
 /** Where the last uploaded batch id is kept so a returning user can find it. */
 const LAST_BATCH_KEY = 'gameshelf.lastImportBatchId';
+
+/**
+ * How long a successful submit stays busy before the form re-enables itself,
+ * in case the client-side navigation to the progress page never lands.
+ */
+const ACCEPT_FALLBACK_MS = 15000;
 
 let heicInFlight = 0;
 const heicWaiting: (() => void)[] = [];
@@ -96,6 +104,7 @@ export function PhotoImportForm({
     loaded: number;
     total: number;
   } | null>(null);
+  const [accepted, setAccepted] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [lastBatchId, setLastBatchId] = useState<string | null>(null);
 
@@ -104,13 +113,19 @@ export function PhotoImportForm({
   const removedRef = useRef<Set<string>>(new Set());
   const mountedRef = useRef(true);
   const pasteRef = useRef<(event: ClipboardEvent) => void>(() => undefined);
+  const inFlightRef = useRef(false);
+  const acceptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Revoke every object URL when the screen unmounts.
+  // Revoke every object URL and drop the post-accept fallback timer (if one is
+  // pending) when the screen unmounts.
   useEffect(() => {
     mountedRef.current = true;
     const urls = urlsRef.current;
     return () => {
       mountedRef.current = false;
+      if (acceptTimerRef.current !== null) {
+        clearTimeout(acceptTimerRef.current);
+      }
       for (const url of urls) URL.revokeObjectURL(url);
       urls.clear();
     };
@@ -155,10 +170,9 @@ export function PhotoImportForm({
     !hasInvalidCount &&
     !submitting;
   const readyBytes = ready.reduce((sum, photo) => sum + photo.sizeBytes, 0);
-  const percent =
-    progress !== null && progress.total > 0
-      ? Math.round((progress.loaded / progress.total) * 100)
-      : 0;
+  const status = uploadStatus(progress, accepted);
+  const phaseText =
+    status.phase === 'starting' ? t('starting') : t('uploading');
 
   function addFiles(list: FileList | readonly File[]): void {
     const incoming = Array.from(list);
@@ -318,7 +332,10 @@ export function PhotoImportForm({
     event: React.SubmitEvent<HTMLFormElement>,
   ): Promise<void> {
     event.preventDefault();
-    if (!canSubmit) return;
+    if (inFlightRef.current || !canSubmit) return;
+    // `canSubmit` is closure-captured, so a very fast double Enter could get
+    // past it before `setSubmitting(true)` commits; the ref closes that gap.
+    inFlightRef.current = true;
 
     const files = ready
       .map((photo) => photo.uploadFile)
@@ -331,6 +348,7 @@ export function PhotoImportForm({
     setSubmitting(true);
     setFormError(null);
     setProgress(null);
+    setAccepted(false);
     try {
       const res = await uploadImportPhotos(files, counts, {
         onProgress: setProgress,
@@ -340,6 +358,16 @@ export function PhotoImportForm({
       } catch {
         // Non-blocking: navigation still works if storage is unavailable.
       }
+      setAccepted(true);
+      // Success leaves `submitting` set: router.push returns immediately and the
+      // form must stay busy (and not re-submittable) until the progress page
+      // replaces it. This fallback only fires if that client navigation never
+      // replaces the form, so a stalled route cannot disable it for good.
+      acceptTimerRef.current = setTimeout(() => {
+        acceptTimerRef.current = null;
+        inFlightRef.current = false;
+        setSubmitting(false);
+      }, ACCEPT_FALLBACK_MS);
       router.push(`/import/progress/${res.batchId}`);
     } catch (caught) {
       if (isApiError(caught) && caught.status === 401) {
@@ -354,7 +382,7 @@ export function PhotoImportForm({
             : caught.userMessage
           : t('error.generic'),
       );
-    } finally {
+      inFlightRef.current = false;
       setSubmitting(false);
     }
   }
@@ -565,25 +593,19 @@ export function PhotoImportForm({
 
         {submitting && (
           <div>
-            <div
-              role="progressbar"
-              aria-label={t('uploadProgress')}
-              aria-valuenow={percent}
-              aria-valuemin={0}
-              aria-valuemax={100}
-              className="h-2 w-full overflow-hidden rounded-full bg-edge"
-            >
-              <div
-                className="h-full bg-accent transition-[width] motion-reduce:transition-none"
-                style={{ width: `${String(percent)}%` }}
-              />
-            </div>
+            <ProgressBar
+              label={t('uploadProgress')}
+              value={status.phase === 'uploading' ? status.percent : null}
+            />
             <p
               role="status"
               aria-live="polite"
-              className="mt-1 text-xs text-muted"
+              className="mt-1.5 text-xs text-muted"
             >
-              {t('uploading')} {percent}%
+              {phaseText}
+              {status.phase === 'uploading' && status.percent !== null && (
+                <span aria-hidden> {status.percent}%</span>
+              )}
             </p>
           </div>
         )}
@@ -603,7 +625,7 @@ export function PhotoImportForm({
             className={PRIMARY_BUTTON}
           >
             {submitting
-              ? t('uploading')
+              ? phaseText
               : ready.length === 0
                 ? t('uploadButton.none')
                 : ready.length === 1

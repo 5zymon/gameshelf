@@ -4,7 +4,7 @@ title: Photo Import Upload UI
 description: The authenticated /import screen — a drag-and-drop, browse, or paste multi-photo picker with thumbnails, optional per-photo game counts, client-side validation, in-browser HEIC→JPEG conversion, an LLM-readiness gate, and an upload that navigates to the batch progress view.
 tags: [web, import, ui, heic]
 status: draft
-generated: { by: opencode/home-model, at: 2026-10-12T13:00:00Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-14T18:22:41Z }
 ---
 
 # Overview
@@ -103,12 +103,33 @@ repeated `files` parts, then one `declaredCounts` part per photo. No
 `content-type` header is set — the browser supplies the multipart boundary. The
 same-origin `/api` rewrite carries the session cookie.
 
-While `submitting`, a `role="progressbar"` bar and "Uploading… N%" status render
-from the progress event, and the submit button is disabled. On success the form
-navigates to `/import/progress/<batchId>` and records the batch id under
-`localStorage` key `gameshelf.lastImportBatchId`, so a return visit to `/import`
-shows a **Check your most recent import** link. A `401` redirects to `/login`; other
-errors show a `role="alert"` message.
+While `submitting`, the shared `ProgressBar`
+(`apps/web/src/components/progress-bar.tsx`) and a `role="status"` line render
+through three phases, derived by `lib/import/upload-status.ts`:
+
+1. **Before the first progress event** — and whenever the browser reports a
+   non-computable size: indeterminate. A `w-1/3` accent segment bounces between
+   the `bg-edge` track's edges and the bar carries no `aria-valuenow`. It shows
+   from the click itself, so the form never looks frozen while the request
+   starts.
+2. **Bytes in flight:** a determinate fill at `floor(loaded / total × 100)`% and
+   the line "Uploading… N%". The percentage is floored, so 100% never shows
+   while a byte is still in flight.
+3. **Every byte sent, waiting for the `202`:** indeterminate again, with the
+   status line and the button reading "Starting the import…". The API writes
+   each photo and creates its job row before responding, so this wait is real.
+
+The submit button stays disabled for the whole of it. On success the form
+**stays busy**: `router.push` returns immediately, so the button, the paste
+guard and the drop guard remain blocked until the progress page replaces the
+form — a duplicate batch cannot be started mid-navigation. If that client
+navigation never lands, a 15-second fallback timer (and the in-flight ref
+the submit checks) re-enables the form so it cannot stay blocked for good.
+The form navigates to `/import/progress/<batchId>` and records the batch id
+under `localStorage` key `gameshelf.lastImportBatchId`, so a return visit to
+`/import` shows a **Check your most recent import** link. A `401` redirects
+to `/login` without re-enabling the form; other errors clear the bar, show a
+`role="alert"` message and re-enable the button.
 
 # Accessibility
 
@@ -117,6 +138,19 @@ for rejections and errors, `role="status"`/`aria-live` for upload progress, a
 focus-visible ring on the dropzone (`focus-within`), and `motion-reduce:` on all
 transitions. The dropzone is a `<label>` wrapping a visually hidden
 `<input type="file" multiple>`.
+
+- The upload progressbar carries `aria-valuemin`/`aria-valuemax` always and
+  `aria-valuenow` only while the value is known — the indeterminate phases omit
+  it. Its moving segment is decorative (the bar's children are presentational,
+  so they need no ARIA).
+- The live `role="status"` line announces **phase changes** ("Uploading…" →
+  "Starting the import…") only; the percent is `aria-hidden`, because screen
+  readers get the number from the progressbar's `aria-valuenow`.
+- Under `prefers-reduced-motion` nothing animates: the indeterminate segment
+  renders as a static full-width full-strength `bg-accent` track
+  (`motion-reduce:animate-none`), a `busy` determinate fill keeps full
+  strength instead of muting (`motion-reduce:bg-accent`), and the width
+  transition is off (`motion-reduce:transition-none`).
 
 # Backend contract
 
@@ -163,9 +197,11 @@ npm run dev               # API :3001, web :3000
    blanks elsewhere; expect `202` and that photo's row carrying the number in
    the progress API.
 8. **Submit + progress.** Throttle the network (DevTools → Network → Slow 3G)
-   and upload several photos. Expect a progress bar with an increasing
-   percentage and the button disabled — the screen must not look frozen. Expect
-   the request body field name `files` and one `declaredCounts` per photo.
+   and upload several photos. Expect the bar to appear immediately with a
+   bouncing segment and "Uploading…", then an increasing percentage, then
+   "Starting the import…" once the bytes are sent, with the button disabled the
+   whole time — the screen must not look frozen. Expect the request body field
+   name `files` and one `declaredCounts` per photo.
 9. **Navigation.** On success, land on `/import/progress/<batchId>` with an
    "X of Y photos processed" line. Reload the URL; expect it still resolves
    (reload-safe).

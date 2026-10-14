@@ -388,6 +388,7 @@
     "heicError": "We couldn’t read this HEIC photo.",
     "uploading": "Uploading…",
     "uploadProgress": "Upload progress",
+    "starting": "Starting the import…",
     "ready": "{count, plural, one {# photo ready ({size})} other {# photos ready ({size})}}",
     "noPhotos": "No photos selected yet.",
     "uploadButton": {
