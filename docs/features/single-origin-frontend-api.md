@@ -113,8 +113,8 @@ const sora = Sora({
 });
 ```
 
-`latin-ext` is required because the UI's default locale is Polish (see
-[Internationalization (PL default, EN)](/i18n.md)): the base `latin` subset
+`latin-ext` is required because the UI supports Polish (see
+[Internationalization (EN default, PL)](/i18n.md)): the base `latin` subset
 does not contain the accented characters, and without the extra subset the
 browser would fall back to a different font for every ą/ę/ł/ó/ś/ź/ż.
 

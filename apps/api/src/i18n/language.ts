@@ -1,5 +1,5 @@
 /**
- * Supported UI languages (ticket 7.2). Polish is the default; the set is
+ * Supported UI languages (ticket 7.2). English is the default; the set is
  * closed and shared by the validation rule, the wire contract, and the
  * `NEXT_LOCALE` cookie, so a typo can never reach the database or the browser.
  */
@@ -7,7 +7,7 @@ export const SUPPORTED_LANGUAGES = ['pl', 'en'] as const;
 
 export type Language = (typeof SUPPORTED_LANGUAGES)[number];
 
-export const DEFAULT_LANGUAGE: Language = 'pl';
+export const DEFAULT_LANGUAGE: Language = 'en';
 
 export function isLanguage(value: unknown): value is Language {
   return (

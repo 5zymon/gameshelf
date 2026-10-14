@@ -6,7 +6,7 @@ import { DEFAULT_LOCALE, isLocale, LOCALE_COOKIE_NAME } from './config';
 /**
  * Per-request i18n configuration (no i18n routing). The locale comes from the
  * `NEXT_LOCALE` cookie the API writes on login/setup/preferences-PUT; anything
- * missing or invalid falls back to the Polish default. Reading the cookie makes
+ * missing or invalid falls back to the English default. Reading the cookie makes
  * the app request-dynamic, which is fine: every route is already
  * `force-dynamic`.
  */

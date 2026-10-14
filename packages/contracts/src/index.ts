@@ -424,7 +424,7 @@ export interface GameDatabaseStatus {
 }
 
 // ── Auth / setup ─────────────────────────────────────────────────────────
-/** Supported UI languages (ticket 7.2); Polish is the default. */
+/** Supported UI languages (ticket 7.2); English is the default. */
 export type AppLanguage = 'pl' | 'en';
 
 /** Supported UI themes (ticket 7.3); 'system' tracks the OS preference. */

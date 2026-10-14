@@ -33,7 +33,7 @@ export function setLocaleCookie(
  * expiry (SessionGuard): the locale is a per-user preference, so a stale
  * cookie on a shared device would otherwise render the login screen in the
  * previous user's language. With the cookie gone the web app falls back to
- * the `pl` default.
+ * the `en` default.
  */
 export function clearLocaleCookie(res: Response, cookieSecure: boolean): void {
   res.clearCookie(LOCALE_COOKIE_NAME, {

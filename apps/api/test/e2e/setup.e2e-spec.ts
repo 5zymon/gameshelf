@@ -12,7 +12,7 @@ interface ErrorBody {
 }
 
 interface SetupBody {
-  user: { id: string; email: string; createdAt: string };
+  user: { id: string; email: string; language: string; createdAt: string };
 }
 
 describe('First-run setup API (e2e)', () => {
@@ -50,9 +50,17 @@ describe('First-run setup API (e2e)', () => {
     expect(res.status).toBe(201);
     const body = res.body as SetupBody;
     expect(body.user.email).toBe('player@example.com');
+    expect(body.user.language).toBe('en');
     expect(body.user).not.toHaveProperty('passwordHash');
     expect(body.user.id).toMatch(UUID_V7_PATTERN);
     await expect(test.prisma.user.count()).resolves.toBe(1);
+
+    // The first account picks up the DB default, and setup bridges it to the
+    // web app in the NEXT_LOCALE cookie.
+    const cookies = res.headers['set-cookie'] as unknown as string[];
+    const locale = cookies.find((c) => c.startsWith('NEXT_LOCALE='));
+    expect(locale).toBeDefined();
+    expect(locale).toContain('NEXT_LOCALE=en');
 
     const status = await request(server()).get('/setup/status');
     expect(status.status).toBe(200);

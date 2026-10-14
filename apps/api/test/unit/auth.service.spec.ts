@@ -153,13 +153,13 @@ describe('AuthService (unit)', () => {
     });
 
     const result = await service.login('ash@example.com', 'pikachu123');
-    expect(result.user.language).toBe('pl');
+    expect(result.user.language).toBe('en');
     expect(result.user.theme).toBe('system');
 
     users.findById.mockResolvedValue(corrupt);
     await expect(service.me(testId(7))).resolves.toEqual({
       ...corrupt,
-      language: 'pl',
+      language: 'en',
       theme: 'system',
     });
   });

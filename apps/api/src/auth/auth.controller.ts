@@ -75,7 +75,7 @@ export class AuthController {
     await this.auth.logout(req.session.token);
     clearSessionCookie(res, this.config);
     // Drop the locale and theme too so a shared device never shows the
-    // previous user's language (which falls back to the `pl` default) or
+    // previous user's language (which falls back to the `en` default) or
     // theme (which falls back to the `system` default) on the login screen.
     clearLocaleCookie(res, this.config.cookieSecure);
     clearThemeCookie(res, this.config.cookieSecure);

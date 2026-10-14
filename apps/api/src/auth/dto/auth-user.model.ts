@@ -9,7 +9,7 @@ export class AuthUserModel {
   @ApiProperty({ example: 'player@example.com' })
   email!: string;
 
-  @ApiProperty({ enum: ['pl', 'en'], example: 'pl' })
+  @ApiProperty({ enum: ['pl', 'en'], example: 'en' })
   language!: string;
 
   @ApiProperty({ enum: ['light', 'dark', 'system'], example: 'system' })

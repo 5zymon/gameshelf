@@ -41,7 +41,7 @@ describe('Preferences API (e2e)', () => {
     await test.login();
 
     const res = await test.request.get(BASE).expect(200);
-    expect(res.body).toEqual({ language: 'pl', theme: 'system' });
+    expect(res.body).toEqual({ language: 'en', theme: 'system' });
   });
 
   it('PUT updates the language and rewrites the NEXT_LOCALE cookie', async () => {
@@ -149,15 +149,15 @@ describe('Preferences API (e2e)', () => {
   });
 
   it('login sets NEXT_LOCALE from the stored language', async () => {
-    // Create the account (language defaults to 'pl'), then flip the stored
-    // language to 'en' so a fresh login must heal the cookie from the DB.
+    // Create the account (language defaults to 'en'), then flip the stored
+    // language to 'pl' so a fresh login must heal the cookie from the DB.
     await users.createUser({
       email: TEST_USER_EMAIL,
       password: TEST_USER_PASSWORD,
     });
     await test.prisma.user.update({
       where: { email: TEST_USER_EMAIL },
-      data: { language: 'en' },
+      data: { language: 'pl' },
     });
 
     const res = await request
@@ -169,7 +169,7 @@ describe('Preferences API (e2e)', () => {
     const cookies = res.headers['set-cookie'] as unknown as string[];
     const locale = cookies.find((c) => c.startsWith('NEXT_LOCALE='));
     expect(locale).toBeDefined();
-    expect(locale).toContain('NEXT_LOCALE=en');
+    expect(locale).toContain('NEXT_LOCALE=pl');
   });
 
   it('logout clears the NEXT_LOCALE cookie', async () => {

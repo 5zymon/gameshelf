@@ -126,8 +126,8 @@ Alongside the session cookie, the API manages a second `httpOnly` cookie,
 on login and first-run setup (healing a stale or missing value from the
 stored preference) and cleared on logout and passive session expiry, so a
 shared device never renders the login screen in the previous user's language.
-The web app reads it in `getRequestConfig` and falls back to the Polish
-default — see [Internationalization (PL default, EN)](/i18n.md).
+The web app reads it in `getRequestConfig` and falls back to the English
+default — see [Internationalization (EN default, PL)](/i18n.md).
 
 A repository check confirms the absence:
 

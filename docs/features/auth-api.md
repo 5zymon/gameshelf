@@ -27,10 +27,10 @@ There is exactly **one permission level** — no roles, no permission checks
 | `POST` | `/auth/logout` | session     | `204`   | —                                              |
 | `GET`  | `/auth/me`     | session     | `200`   | `{ id, email, language, createdAt }`           |
 
-`language` is the user's stored UI language (`'pl' | 'en'`, default `pl`,
+`language` is the user's stored UI language (`'pl' | 'en'`, default `en`,
 coerced by `toLanguage()` so a corrupt row can never reach the body). Login
 and setup also (re)write the `NEXT_LOCALE` cookie and logout clears it — see
-[Internationalization (PL default, EN)](/i18n.md).
+[Internationalization (EN default, PL)](/i18n.md).
 
 `POST /auth/login` accepts `{ email, password }` (both strings, `email` ≤ 255,
 `password` ≤ 1024). It intentionally does **not** apply `@IsEmail()`: the

@@ -184,7 +184,7 @@ refresh.
   from config plus the durable import pause (see above).
 - Theme settings (ticket 7.3). The language preference is no longer out of
   scope: it lives in the Preferences section of this screen (see
-  [Internationalization (PL default, EN)](/i18n.md)).
+  [Internationalization (EN default, PL)](/i18n.md)).
 - Non-OpenAI-compatible protocols (e.g. Anthropic-native, Gemini-native);
   several providers at once; key rotation/audit tooling.
 - The full `/platforms` management view (still a placeholder).

@@ -229,7 +229,7 @@ state changes.
 
 # Related
 
-- [Internationalization (PL default, EN)](/i18n.md) — the mirrored
+- [Internationalization (EN default, PL)](/i18n.md) — the mirrored
   per-user-language feature; same Preferences view, same cookie pattern.
 - [Auth API](/auth-api.md) — login/logout set/clear the theme cookie, and the
   user model carries `theme`.
