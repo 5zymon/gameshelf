@@ -37,7 +37,8 @@ without importing the decorator-based Nest DTOs into the web bundle.
 Centralised in the `Transport`:
 
 - **Server** (`server.ts`): `baseUrl` is `NEXT_PUBLIC_API_URL` (default
-  `http://localhost:3001`); `getHeaders()` reads `next/headers` `cookies()` and
+  `http://localhost:<API_PORT>`, `3001` when unset); `getHeaders()` reads
+  `next/headers` `cookies()` and
   forwards the `cookie` header; `cache: 'no-store'`. This is the only place
   `NEXT_PUBLIC_API_URL` is read on the web side (besides `next.config.mjs`).
 - **Browser** (`browser.ts`): `baseUrl` is the relative `/api` prefix that

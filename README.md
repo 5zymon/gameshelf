@@ -60,10 +60,10 @@ It runs, in order (idempotent — safe to re-run):
 Then start the app:
 
 ```bash
-npm run dev          # API on :3001, web on :3000
+npm run dev          # API on :3001, web on :3000 (API_PORT / WEB_PORT)
 ```
 
-Open <http://localhost:3000> — the app redirects to `/setup` when no users exist; create your first account there.
+Open <http://localhost:3000> (or your `WEB_PORT`) — the app redirects to `/setup` when no users exist; create your first account there.
 
 ### Manual fallback
 
@@ -93,8 +93,8 @@ npm run dev
 
 `npm run dev` runs `concurrently` and starts:
 
-- **API** — NestJS on <http://localhost:3001> (health check at `/health`)
-- **Web** — Next.js on <http://localhost:3000>
+- **API** — NestJS on `API_HOST:API_PORT`, default <http://localhost:3001> (health check at `/health`)
+- **Web** — Next.js on `WEB_HOST:WEB_PORT`, default <http://localhost:3000>
 
 Other useful scripts (all run from the root):
 
@@ -121,6 +121,26 @@ Other useful scripts (all run from the root):
 | `npm run lint:fix`          | Lint both workspaces and autofix                                               |
 | `npm run format`            | Format the whole repo with Prettier                                            |
 | `npm run format:check`      | Check formatting without writing                                               |
+
+### Reaching the app from another device (LAN)
+
+Both servers bind every interface by default (`WEB_HOST` and `API_HOST` blank),
+so a phone or another computer on the same network can use the app:
+
+1. Optionally pick a port in `.env` (e.g. `WEB_PORT=4000`) and restart `npm run dev`.
+2. Find this machine's LAN IP — Next prints a `Network:` URL on start, or on
+   macOS run `ipconfig getifaddr en0`.
+3. On the other device open `http://<LAN IP>:<WEB_PORT>` and sign in.
+
+Only the web port has to be reachable: the browser talks to the web app alone,
+which forwards `/api` to the API server-side (see "Single origin, CSP, and fonts"),
+so no CORS, cookie or CSP setting changes. Keep `SESSION_COOKIE_SECURE=false` on
+plain HTTP. Set `API_HOST=127.0.0.1` (with
+`NEXT_PUBLIC_API_URL=http://127.0.0.1:<API_PORT>`) to keep the API off the network,
+or `WEB_HOST=127.0.0.1` to keep the whole app on this machine. Allow incoming
+connections for `node` if the OS firewall asks. In dev, Next may log a
+"Cross origin request detected … allowedDevOrigins" warning for a LAN address; it
+is informational and does not block the page or hot reload.
 
 ### Code quality and git hooks
 
@@ -592,7 +612,10 @@ All variables live in a single root `.env` file (see `.env.example`):
 | ------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `NODE_ENV`                      | both       | Runtime environment                                                                                                                                                                |
 | `API_PORT`                      | `apps/api` | API listen port (default `3001`)                                                                                                                                                   |
-| `NEXT_PUBLIC_API_URL`           | `apps/web` | Internal API origin for the `/api` rewrite and SSR (never called by the browser)                                                                                                   |
+| `API_HOST`                      | `apps/api` | API bind address (blank = every interface; `127.0.0.1` keeps it off the LAN)                                                                                                       |
+| `WEB_PORT`                      | `apps/web` | Web listen port for `dev`/`start` (default `3000`)                                                                                                                                 |
+| `WEB_HOST`                      | `apps/web` | Web bind address (blank = every interface, reachable from the LAN)                                                                                                                 |
+| `NEXT_PUBLIC_API_URL`           | `apps/web` | Internal API origin for the `/api` rewrite and SSR (never called by the browser); blank derives it from `API_PORT`                                                                 |
 | `MYSQL_PORT`                    | compose    | Host port compose publishes MySQL on (default `3306`); must match `DATABASE_URL`                                                                                                   |
 | `MYSQL_DATABASE`                | compose    | Database compose creates on first init (default `gameshelf`); must match `DATABASE_URL`                                                                                            |
 | `MYSQL_USER`                    | compose    | App user compose creates on first init (default `gameshelf`); must match `DATABASE_URL`                                                                                            |
@@ -618,13 +641,18 @@ All variables live in a single root `.env` file (see `.env.example`):
 | `IGDB_TOKEN_URL`                | `apps/api` | Optional OAuth token endpoint override (default `https://id.twitch.tv/oauth2/token`)                                                                                               |
 | `MOBYGAMES_API_KEY`             | `apps/api` | Optional MobyGames fallback key; blank = fallback disabled, IGDB-only                                                                                                              |
 
-There is no host or web-port variable: the API binds all interfaces on
-`API_PORT`, and the web port is fixed at `3000` in `apps/web/package.json`.
+`WEB_PORT`/`WEB_HOST` are read by `apps/web/scripts/run-next.mjs`, which passes them
+to `next dev`/`next start` as `--port`/`--hostname`; Next's own `PORT`/`HOSTNAME` are
+not used. A variable exported in the shell overrides `.env` (e.g.
+`WEB_PORT=4000 npm run dev`). Next inlines `NEXT_PUBLIC_*` at build time, so run
+`npm run build` again after changing `API_PORT` or `NEXT_PUBLIC_API_URL` for `npm start`.
 
 ## Operational checks
 
 Run these after setup and after any incident. All are read-only and safe while
 the app is up.
+
+The URLs below use the default ports; substitute your `API_PORT` / `WEB_PORT`.
 
 | Check                  | Command                                                                 | Expected                                                              |
 | ---------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------- |
