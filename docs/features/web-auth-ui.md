@@ -168,7 +168,7 @@ reset it first (deleting every user row re-enables setup — see
 [First-run Setup](/first-run-setup.md#one-shot-guarantee)):
 
 ```bash
-docker compose down && rm -rf data/mysql
+docker compose down -v
 docker compose up -d mysql && npm run db:deploy
 ```
 
