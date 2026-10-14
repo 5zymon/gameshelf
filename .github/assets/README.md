@@ -3,14 +3,18 @@
 Images shown by the root [`README.md`](../../README.md). The app never loads
 anything from this directory.
 
-## Demo GIFs to record
+## Demo GIFs
 
-| File               | README placeholder                | Shows                                      | Length  |
-| ------------------ | --------------------------------- | ------------------------------------------ | ------- |
-| `photo-import.gif` | right under the header            | a shelf photo turning into catalog entries | 15–25 s |
-| `catalog-tour.gif` | "See it in action" after Features | browsing, filtering and a game page        | 10–20 s |
+| File               | README placeholder                 | Shows                                                                                                                                                    | Length  |
+| ------------------ | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `photo-import.gif` | right under the header (committed) | signing in, a shelf photo turning into catalog entries with one flagged title resolved by hand, a game page edited and re-enriched, the finished catalog | 22.5 s  |
+| `catalog-tour.gif` | "See it in action" after Features  | browsing, filtering and a game page                                                                                                                      | 10–20 s |
 
-### `photo-import.gif`: the main selling point
+The briefs below are the recording plans. `photo-import.gif` is recorded and
+live in the root README, and the header placeholder is on; `catalog-tour.gif` is
+still to record.
+
+### `photo-import.gif`: the main selling point (recorded; keep for re-recordings)
 
 Before recording: log in, configure the vision model in Settings and the IGDB
 credentials in `.env`, and pick one or two well-lit shelf photos with 8–15
@@ -47,6 +51,9 @@ readable spines.
 
 - Use the seeded `qa@gameshelf.local` account or a throwaway one, never a
   personal email.
+- Watch the browser's password autofill dropdown: it can list a personal email
+  even when you sign in with the QA account. The first recording of
+  `photo-import.gif` had to have its sign-in tail cut off for exactly this.
 - Never show the Settings LLM section with a real base URL or key, or the
   `.env` file.
 - Close other tabs and silence notifications.

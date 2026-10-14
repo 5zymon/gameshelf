@@ -16,12 +16,9 @@ confirm against IGDB — with cover, platform, release year, publisher and genre
 
 </div>
 
-<!-- TODO(demo-gif): record .github/assets/photo-import.gif (see .github/assets/README.md), then remove the comment markers around the block below. -->
-<!--
 <p align="center">
-  <img src=".github/assets/photo-import.gif" width="900" alt="A shelf photo is uploaded to GameShelf; the import view reads each title, confirms it against IGDB and adds the games to the catalog">
+  <img src=".github/assets/photo-import.gif" width="800" alt="A shelf photo is uploaded to GameShelf; the import view reads each title, confirms it against IGDB and adds the games to the catalog; a flagged title is resolved by hand, a game page is re-enriched from IGDB, and the finished catalog and a game page with its videos and gallery appear">
 </p>
--->
 
 ## How it works
 
