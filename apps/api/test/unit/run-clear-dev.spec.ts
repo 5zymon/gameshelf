@@ -13,11 +13,11 @@ const COUNTS: DevDataCounts = {
   importJobs: 4,
   recognizedItems: 5,
   unrecognizedItems: 6,
-  importPlatforms: 7,
+  platforms: 7,
 };
 
 const COUNTS_LINE =
-  'games=1 images=2 videos=3 importJobs=4 recognized=5 unrecognized=6 importPlatforms=7';
+  'games=1 images=2 videos=3 importJobs=4 recognized=5 unrecognized=6 platforms=7';
 
 const TARGET = 'gameshelf@db.internal:3306';
 

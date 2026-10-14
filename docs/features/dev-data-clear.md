@@ -1,7 +1,7 @@
 ---
 type: Feature
 title: Dev Data Clear
-description: Dev-only `db:clear-dev` command that deletes all game and import data while keeping accounts, settings and canonical platforms.
+description: Dev-only `db:clear-dev` command that deletes all game, import and platform data while keeping accounts and settings.
 tags: [cli, operations, dev]
 status: draft
 generated: { by: opencode/home-model, at: 2026-10-11T22:30:00Z }
@@ -10,9 +10,11 @@ generated: { by: opencode/home-model, at: 2026-10-11T22:30:00Z }
 # Overview
 
 Testing the photo-import flow repeatedly leaves the development database full of
-games, import history and import-created platforms. `db:clear-dev` deletes that
-churn in one transaction so a developer can start from a clean catalog without
-re-running migrations, re-syncing platforms, or creating an account again.
+games, import history and platforms. `db:clear-dev` deletes that churn in one
+transaction so a developer can start from a clean catalog without re-running
+migrations or creating an account again. Platforms come back with
+`npm run platforms:sync` (canonical IGDB list) or `npm run db:seed` (the three
+seed platforms).
 
 It is a **development-only** maintenance command, not part of the product.
 
@@ -48,21 +50,21 @@ Check `DATABASE_URL` yourself before running, especially with `--force`.
 
 # What is cleared / kept
 
-| Table                                                   | Action                   | Reason                                                                                            |
-| ------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------- |
-| `recognized_items`, `unrecognized_items`, `import_jobs` | delete                   | Import history points at games and photos; leaving it shows stale progress/attention.             |
-| `game_videos`, `game_images`, `games`                   | delete                   | The game content itself.                                                                          |
-| `platforms WHERE added_by_import = true`                | delete (aliases cascade) | Artifacts of imports that were never confirmed; they would pollute the next test.                 |
-| other `platforms` + their `platform_aliases`            | **keep**                 | Canonical IGDB list from `platforms:sync` and user-confirmed rows; re-syncing costs API calls.    |
-| `users`, `sessions`                                     | **keep**                 | The operator stays logged in.                                                                     |
-| `llm_settings`                                          | **keep**                 | Holds the encrypted provider key/config; wiping it blocks photo imports.                          |
-| `import_queue_state`                                    | **keep**                 | The durable pause (ADR-005); clearing it would silently resume a queue paused for a config error. |
+| Table                                                   | Action                   | Reason                                                                                                                         |
+| ------------------------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| `recognized_items`, `unrecognized_items`, `import_jobs` | delete                   | Import history points at games and photos; leaving it shows stale progress/attention.                                          |
+| `game_videos`, `game_images`, `games`                   | delete                   | The game content itself.                                                                                                       |
+| `platforms` + their `platform_aliases`                  | delete (aliases cascade) | Any leftover row (canonical, manual or import-created) would pollute the next test; `platforms:sync` / `db:seed` rebuild them. |
+| `users`, `sessions`                                     | **keep**                 | The operator stays logged in.                                                                                                  |
+| `llm_settings`                                          | **keep**                 | Holds the encrypted provider key/config; wiping it blocks photo imports.                                                       |
+| `import_queue_state`                                    | **keep**                 | The durable pause (ADR-005); clearing it would silently resume a queue paused for a config error.                              |
 
 Deletes run in one Prisma `$transaction`, children first:
 `recognizedItem`, `unrecognizedItem`, `importJob`, `gameVideo`, `gameImage`,
-`game`, then `platform({ where: { addedByImport: true } })`. Games go before
-platforms because `Game.platform` has no cascade. Auto-increment ids are not
-reset (`DELETE`, not `TRUNCATE`).
+`game`, then `platform`. Games go before platforms because `Game.platform` has
+no cascade; `platform_aliases` go with their platform via the DB-level
+cascade. Row ids are not reset
+(`DELETE`, not `TRUNCATE`).
 
 Files on disk (covers, gallery images, import photos) are not deleted; they
 become unreferenced.

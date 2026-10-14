@@ -9,7 +9,7 @@ import {
   type TestApp,
 } from '../helpers/test-app';
 import { resetDatabase } from '../helpers/reset';
-import { seedGame, seedPlatform } from '../helpers/seed';
+import { seedGame, seedPlatform, seedPlatformAlias } from '../helpers/seed';
 
 const CANONICAL_NAME = 'PC (Microsoft Windows)';
 
@@ -42,12 +42,16 @@ describe('db:clear-dev CLI (e2e, subprocess)', () => {
     });
   }
 
-  /** One game with media and import history, plus an import-created platform. */
+  /** One game with media and import history, plus two platforms and an alias. */
   async function seedDevData(): Promise<void> {
     const canonical = await seedPlatform(test.prisma, {
       name: CANONICAL_NAME,
       slug: 'pc-microsoft-windows',
       igdbId: 6,
+    });
+    await seedPlatformAlias(test.prisma, {
+      platformId: canonical.id,
+      name: 'Windows',
     });
     await seedPlatform(test.prisma, {
       name: 'Weird Box',
@@ -119,7 +123,7 @@ describe('db:clear-dev CLI (e2e, subprocess)', () => {
     await expect(test.prisma.platform.count()).resolves.toBe(2);
   });
 
-  it('clears game and import data with --force and keeps accounts', async () => {
+  it('clears game, import and platform data with --force and keeps accounts', async () => {
     await seedDevData();
 
     const result = spawnClearDev('development', ['--force']);
@@ -132,10 +136,8 @@ describe('db:clear-dev CLI (e2e, subprocess)', () => {
     await expect(test.prisma.importJob.count()).resolves.toBe(0);
     await expect(test.prisma.recognizedItem.count()).resolves.toBe(0);
     await expect(test.prisma.unrecognizedItem.count()).resolves.toBe(0);
-    await expect(
-      test.prisma.platform.count({ where: { addedByImport: true } }),
-    ).resolves.toBe(0);
-    await expect(test.prisma.platform.count()).resolves.toBe(1);
+    await expect(test.prisma.platform.count()).resolves.toBe(0);
+    await expect(test.prisma.platformAlias.count()).resolves.toBe(0);
     await expect(test.prisma.user.count()).resolves.toBe(1);
     await expect(test.prisma.session.count()).resolves.toBe(1);
     await expect(test.prisma.llmSetting.count()).resolves.toBe(1);

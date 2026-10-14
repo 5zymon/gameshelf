@@ -7,7 +7,7 @@ export interface DevDataCounts {
   importJobs: number;
   recognizedItems: number;
   unrecognizedItems: number;
-  importPlatforms: number;
+  platforms: number;
 }
 
 /**
@@ -24,7 +24,7 @@ export async function countDevData(
     importJobs,
     recognizedItems,
     unrecognizedItems,
-    importPlatforms,
+    platforms,
   ] = await Promise.all([
     prisma.game.count(),
     prisma.gameImage.count(),
@@ -32,7 +32,7 @@ export async function countDevData(
     prisma.importJob.count(),
     prisma.recognizedItem.count(),
     prisma.unrecognizedItem.count(),
-    prisma.platform.count({ where: { addedByImport: true } }),
+    prisma.platform.count(),
   ]);
   return {
     games,
@@ -41,7 +41,7 @@ export async function countDevData(
     importJobs,
     recognizedItems,
     unrecognizedItems,
-    importPlatforms,
+    platforms,
   };
 }
 
@@ -49,15 +49,15 @@ export async function countDevData(
  * Deletes all game data and import data in one transaction.
  *
  * Deleted: recognized/unrecognized items, import jobs, game videos/images, all
- * games, and platforms created by an import (`addedByImport`, their aliases go
- * via the DB-level `onDelete: Cascade`). Games go before platforms because
- * `Game.platform` has no cascade.
+ * games, and all platforms (their aliases go via the DB-level
+ * `onDelete: Cascade`). Games go before platforms because `Game.platform` has
+ * no cascade.
  *
  * Kept: `users` and `sessions` (the operator stays logged in), `llm_settings`
- * (the encrypted provider key/config; wiping it blocks photo imports), the
+ * (the encrypted provider key/config; wiping it blocks photo imports), and the
  * `import_queue_state` row (the durable pause, ADR-005; clearing jobs must not
- * silently resume a queue paused for a config error), and canonical /
- * user-confirmed platforms (re-syncing the IGDB list costs API calls).
+ * silently resume a queue paused for a config error). Platforms are not kept:
+ * `npm run platforms:sync` and `npm run db:seed` rebuild them.
  *
  * Children are deleted first, following `test/helpers/reset.ts`.
  */
@@ -71,7 +71,7 @@ export async function clearDevData(
     gameVideos,
     gameImages,
     games,
-    importPlatforms,
+    platforms,
   ] = await prisma.$transaction([
     prisma.recognizedItem.deleteMany(),
     prisma.unrecognizedItem.deleteMany(),
@@ -79,7 +79,7 @@ export async function clearDevData(
     prisma.gameVideo.deleteMany(),
     prisma.gameImage.deleteMany(),
     prisma.game.deleteMany(),
-    prisma.platform.deleteMany({ where: { addedByImport: true } }),
+    prisma.platform.deleteMany(),
   ]);
   return {
     games: games.count,
@@ -88,6 +88,6 @@ export async function clearDevData(
     importJobs: importJobs.count,
     recognizedItems: recognizedItems.count,
     unrecognizedItems: unrecognizedItems.count,
-    importPlatforms: importPlatforms.count,
+    platforms: platforms.count,
   };
 }

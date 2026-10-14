@@ -107,7 +107,7 @@ Other useful scripts (all run from the root):
 | `npm run db:migrate`        | Local migration (Prisma, shadow DB)                                            |
 | `npm run platforms:sync`    | Fetch and reconcile the canonical IGDB platform list locally                   |
 | `npm run covers:redownload` | Re-download every missing game cover from its stored link                      |
-| `npm run db:clear-dev`      | Dev only: delete all games and import data, keep accounts                      |
+| `npm run db:clear-dev`      | Dev only: delete all games, import data and platforms, keep accounts           |
 | `npm run db:seed`           | Dev only: create the QA account and sample platforms/games (idempotent)        |
 | `npm run db:deploy`         | Apply committed migrations                                                     |
 | `npm run db:migrate:check`  | Fail if schema and deployed DB diverge                                         |

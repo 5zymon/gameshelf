@@ -47,7 +47,7 @@ function formatCounts(counts: DevDataCounts): string {
     `videos=${String(counts.gameVideos)} importJobs=${String(counts.importJobs)} ` +
     `recognized=${String(counts.recognizedItems)} ` +
     `unrecognized=${String(counts.unrecognizedItems)} ` +
-    `importPlatforms=${String(counts.importPlatforms)}`
+    `platforms=${String(counts.platforms)}`
   );
 }
 
