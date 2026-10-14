@@ -111,7 +111,8 @@ browser <img src="/api/covers/<file>"> ──rewrite /api──▶ API GET /cove
   API's `/covers/<file>` into the browser's same-origin `/api/covers/<file>`, so
   the cover never touches an external host and satisfies `img-src 'self'`.
 - **Configuration.** `COVERS_DIR` overrides the cache directory; blank/absent
-  falls back to `~/.gameshelf/covers`. See
+  falls back to `covers/` in the repository root (git-ignored), and a relative
+  value is resolved against that same root. See
   [Environment variables](references/configuration.md#environment-variables)
   and `.env.example`.
 
