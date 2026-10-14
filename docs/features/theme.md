@@ -11,7 +11,7 @@ generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T22:16:06Z }
 
 The GameShelf UI supports three themes — **light**, **dark**, and **system**
 (ticket 7.3). The theme is a **per-user preference persisted server-side**
-(`users.theme`), mirroring the per-user [language](/i18n.md) preference
+(`users.theme`), mirroring the per-user [language](i18n.md) preference
 end to end: it follows the account across sessions and devices, and an
 unauthenticated visitor (login/setup screens) follows the OS preference.
 
@@ -112,7 +112,7 @@ change is visible immediately, before the PUT round-trip.
   per-theme branches.
 - Fonts: `--font-sans` (Manrope, body) and `--font-display` (Sora, headings
   and wordmark) are `@theme` tokens fed by the `next/font` CSS variables (see
-  [Single-Origin Frontend & API with Strict CSP](/single-origin-frontend-api.md)).
+  [Single-Origin Frontend & API with Strict CSP](single-origin-frontend-api.md)).
 - `color-scheme: light|dark` makes native `<select>` popups and scrollbars
   match the theme.
 
@@ -229,15 +229,15 @@ state changes.
 
 # Related
 
-- [Internationalization (EN default, PL)](/i18n.md) — the mirrored
+- [Internationalization (EN default, PL)](i18n.md) — the mirrored
   per-user-language feature; same Preferences view, same cookie pattern.
-- [Auth API](/auth-api.md) — login/logout set/clear the theme cookie, and the
+- [Auth API](auth-api.md) — login/logout set/clear the theme cookie, and the
   user model carries `theme`.
-- [First-run Setup](/first-run-setup.md) — setup sets the theme cookie for
+- [First-run Setup](first-run-setup.md) — setup sets the theme cookie for
   the first account.
-- [LLM Settings UI](/llm-settings-ui.md) — the `/settings` screen that hosts
+- [LLM Settings UI](llm-settings-ui.md) — the `/settings` screen that hosts
   the Preferences section.
-- [Single-Origin Frontend & API with Strict CSP](/single-origin-frontend-api.md)
+- [Single-Origin Frontend & API with Strict CSP](single-origin-frontend-api.md)
   — the nonce'd CSP the bootstrap script passes.
 
 # Out of scope

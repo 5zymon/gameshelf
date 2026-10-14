@@ -10,9 +10,9 @@ generated: { by: opencode/home-model, at: 2026-10-10T19:55:01Z }
 # Overview
 
 This is the ADR-005 unit of work: what actually happens to one uploaded photo
-after [Import Photo Upload API](/import-upload-api.md) queues it. The in-process
+after [Import Photo Upload API](import-upload-api.md) queues it. The in-process
 `PhotoImportWorker` claims an `import_jobs` row
-([ADR-005 — MySQL Photo-import Queue](/adr-005-mysql-photo-import-queue.md)) and
+([ADR-005 — MySQL Photo-import Queue](adr-005-mysql-photo-import-queue.md)) and
 `PhotoImportHandler` delegates to `PhotoImportPipelineService`, which:
 
 1. calls the vision provider **once** for the photo;
@@ -25,8 +25,8 @@ after [Import Photo Upload API](/import-upload-api.md) queues it. The in-process
 6. maintains the job counters and persists the result;
 7. deletes the photo only after the job reaches completion.
 
-The persisted read side is the [Import Jobs API](/import-jobs-api.md); the
-vision contract is [Vision Provider Abstraction](/vision-provider-abstraction.md).
+The persisted read side is the [Import Jobs API](import-jobs-api.md); the
+vision contract is [Vision Provider Abstraction](vision-provider-abstraction.md).
 
 # Data model
 
@@ -92,7 +92,7 @@ Key properties:
   **outside** the DB transaction (so a slow download never holds a MySQL
   transaction open) and the saved `coverUrl` is a same-origin
   `/api/covers/<file>` path. A failed download leaves `coverUrl` null without
-  failing the item. See [Game Metadata Enrichment](/game-metadata-enrichment.md).
+  failing the item. See [Game Metadata Enrichment](game-metadata-enrichment.md).
 - **Per-job timeout + cancellation.** The whole unit of work (`processJob`)
   runs under `withJobTimeout` (`IMPORT_JOB_TIMEOUT_MS = 420 s`). A job that
   exceeds it rejects with `RetryableImportError`, so it fails cleanly and is
@@ -109,7 +109,7 @@ Key properties:
 - **Timeout headroom (title ceiling).** The 420 s budget is sized for a shelf
   of up to ~50 titles: one vision call (`VISION_REQUEST_TIMEOUT_MS = 120 s`)
   plus ~50 sequential IGDB lookups paced by the central rate limiter
-  ([IGDB Client & Rate Limiter](/igdb-client.md), 4 req/s, 8 concurrent, so a
+  ([IGDB Client & Rate Limiter](igdb-client.md), 4 req/s, 8 concurrent, so a
   single sequential path waits ~250 ms per request) with up to
   `IGDB_REQUEST_TIMEOUT_MS = 5 s` each, worst-casing at
   ≈ 120 s + 50 × 5.25 s ≈ 383 s. (Upstream `429`s are retried inside the client,
@@ -146,12 +146,12 @@ Key properties:
   `QueueControlService.pauseForConfig(source, reason)`, and throws
   `PermanentImportError`. The single queue is left paused so no further photo
   starts, and `configErrorSource()` makes the error non-retryable. See
-  [Queue Pause on Configuration Error](/queue-pause-on-config-error.md).
+  [Queue Pause on Configuration Error](queue-pause-on-config-error.md).
 - **Photo lifecycle.** The photo is deleted after the job reaches a terminal
   _completed_ state — both `done` and `needs_attention`, including zero-item
   recognition. A `failed` job keeps its photo while it is retryable. The
   standalone backstop sweep is implemented in
-  [Photo Lifecycle & Retention](/photo-lifecycle.md): it removes a leftover
+  [Photo Lifecycle & Retention](photo-lifecycle.md): it removes a leftover
   file when the pipeline's delete failed, cleans up `dismissed` jobs (which
   never delete), and removes `failed`/abandoned photos once their retention
   window passes.
@@ -172,20 +172,20 @@ whose production binding is the ordered anti-hallucination chain,
 registration order (array order = validation order) and returns the first
 `matched` candidate. A title no source confirms is never returned as a candidate
 and therefore never saved as a `Game`; see
-[Anti-hallucination Validation](/anti-hallucination-validation.md) for the
+[Anti-hallucination Validation](anti-hallucination-validation.md) for the
 invariant, the `transient` short-circuit, and the `UnrecognizedItem` trace.
 The chain registers `IgdbGameCatalogResolver` (`label = 'IGDB'`) first and, when
 `MOBYGAMES_API_KEY` is set, `MobygamesGameCatalogResolver`
 (`label = 'MobyGames'`) second; with no key the fallback source is not registered
 and validation is IGDB-only. Either way the pipeline is unchanged; see
-[MobyGames Fallback](/mobygames-fallback.md).
+[MobyGames Fallback](mobygames-fallback.md).
 
 The IGDB source:
 
 - `IgdbClient` obtains an OAuth client-credentials token (cached until
   `expiry − 60 s`, token URL defaulting to the Twitch endpoint) and issues one
   `POST /v4/games` search per title; every call goes through the central
-  [IGDB Client & Rate Limiter](/igdb-client.md) (4 req/s, 8 concurrent), and an
+  [IGDB Client & Rate Limiter](igdb-client.md) (4 req/s, 8 concurrent), and an
   upstream `429` is retried inside the client with bounded exponential backoff
   before it ever reaches the pipeline;
 - results are normalized (lowercase, diacritics/punctuation stripped,
@@ -208,7 +208,7 @@ The IGDB source:
   exhausted — becomes `transient` and is retried by the job; a 401/403 (or
   missing `IGDB_CLIENT_ID`/`IGDB_CLIENT_SECRET`, both raised as
   `IgdbConfigError`) becomes `config_error` and pauses the queue (ticket 3.10,
-  [Queue Pause on Configuration Error](/queue-pause-on-config-error.md)); a
+  [Queue Pause on Configuration Error](queue-pause-on-config-error.md)); a
   malformed query becomes `unrecognized`, and a no-match becomes `unrecognized`
   with one of three reasons that name the case:
   - `No IGDB game matched the title` — IGDB returned no candidates at all;
@@ -225,7 +225,7 @@ its own 1 req/s / 720 req/h limiter, which **waits** at a window boundary rather
 than rejecting or firing-then-`429`-retrying; a `401`/`403` becomes
 `config_error` (pausing the queue), `429`/`5xx`/network becomes `transient`, and
 no confident match becomes `unrecognized`. The source is present only when
-`MOBYGAMES_API_KEY` is set. See [MobyGames Fallback](/mobygames-fallback.md).
+`MOBYGAMES_API_KEY` is set. See [MobyGames Fallback](mobygames-fallback.md).
 
 Because `transient` means "unknown", the chain **stops** at the first
 `transient` instead of falling through (a real title must not be permanently
@@ -256,7 +256,7 @@ is over the platform's name/abbreviation/alternative name **and aliases**
 `PlayStation 5` resolve to the same row; aliases carry old/merged-away names;
 near-misses never match). Matching makes **no** IGDB platform-list call — the
 list is refreshed out of band with `npm run platforms:sync`
-([Platforms API](/platforms-api.md)). When the photo names a platform the local
+([Platforms API](platforms-api.md)). When the photo names a platform the local
 list does not know, the import **creates** one from the raw photo string (then
 the first candidate name, then the candidate abbreviation), flagged
 `addedByImport` for review (spec §4.2.3/§4.6.6), rather than silently falling
@@ -270,7 +270,7 @@ all. Residual limitation: if the canonical PC row is absent, different banner
 spellings (`PC DVD ROM` vs `PC CD ROM`) are not collapsed against each other and
 can each create a flagged `addedByImport` row, reconciled later by review/merge.
 
-`resolvePlatformId` now returns `{ platformId, provenance }` instead of a bare id, where `provenance` is `'photo'` when the platform was read off the physical item (matched, or created from the photo string) and `'catalog'` when it was inferred from the candidate's own platform list because the photo gave no usable platform. The commit path writes `Game.platformUnverified = true` exactly for the `'catalog'` case and `false` for `'photo'`, so a platform that was a silent guess from the external catalog (e.g. a game whose `raw_platform` was NULL and whose first IGDB platform is PlayStation 4) is surfaced by the existing danger chip on the game detail page rather than appearing confirmed. The `platform_not_in_catalog` unrecognized path (no usable name at all) still creates no `Game`, and the flag is still cleared by a `PATCH` that sets `platformId` and by a successful re-enrichment (see [Game Re-enrichment](/game-reenrichment.md)).
+`resolvePlatformId` now returns `{ platformId, provenance }` instead of a bare id, where `provenance` is `'photo'` when the platform was read off the physical item (matched, or created from the photo string) and `'catalog'` when it was inferred from the candidate's own platform list because the photo gave no usable platform. The commit path writes `Game.platformUnverified = true` exactly for the `'catalog'` case and `false` for `'photo'`, so a platform that was a silent guess from the external catalog (e.g. a game whose `raw_platform` was NULL and whose first IGDB platform is PlayStation 4) is surfaced by the existing danger chip on the game detail page rather than appearing confirmed. The `platform_not_in_catalog` unrecognized path (no usable name at all) still creates no `Game`, and the flag is still cleared by a `PATCH` that sets `platformId` and by a successful re-enrichment (see [Game Re-enrichment](game-reenrichment.md)).
 
 Trade-off: an import-created platform is committed immediately during
 resolution, outside the batch transaction, so a batch that later fails can
@@ -352,7 +352,7 @@ to 0, `next_run_at` to now — and then wakes the worker, so it re-enters exactl
 this pipeline. It reuses the retry-only-unresolved path unchanged: the
 `vision_completed_at` marker skips a second vision call and only `pending` titles
 are re-resolved, which is why a retry never duplicates an already-saved game. See
-[Import Jobs API](/import-jobs-api.md) for the endpoint contract.
+[Import Jobs API](import-jobs-api.md) for the endpoint contract.
 
 # Queue health
 
@@ -380,8 +380,8 @@ worker's readiness and the durable job counts from one `GROUP BY status` over
 `workerReady` is `true` once the worker has started polling. A failure while
 reading the counts returns `503` with a fixed message (the cause is logged
 server-side), so the endpoint never leaks internals. See the
-[Operator Runbook](/references/runbook.md) and
-[Operational checks](/references/operations.md#operational-checks).
+[Operator Runbook](references/runbook.md) and
+[Operational checks](references/operations.md#operational-checks).
 
 # Structured logging
 
@@ -421,4 +421,4 @@ one `warn` line per failed attempt and how it settled it (`retry in N ms`, or
 - Pipeline integration of batched resolution (`resolveBatch`) is deferred (not
   part of 4.4).
 - Frontend progress/flagged-item views (implemented; see
-  [Import Progress UI](/import-progress-ui.md)).
+  [Import Progress UI](import-progress-ui.md)).

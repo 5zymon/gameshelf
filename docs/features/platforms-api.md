@@ -172,7 +172,7 @@ import reading "PlayStaton 5" resolves to "PlayStation 5".
 
 An import that reads a platform name matching no existing platform creates the
 platform, flagged `addedByImport: true` (spec §4.2.3/§4.6.6; see
-[Import Jobs API](/import-jobs-api.md)). The normalized name is matched against
+[Import Jobs API](import-jobs-api.md)). The normalized name is matched against
 reference, custom, and previously import-created platforms **and their
 aliases** before creating, so the same unknown name never produces two rows
 (the `platforms.name` unique and `platform_aliases.normalized_name` unique are
@@ -228,7 +228,7 @@ npm run platforms:sync
 
 The command (`apps/api/src/cli/platforms.ts` → `PlatformsSyncService`) fetches
 the whole list in **one** `POST https://api.igdb.com/v4/platforms` call through
-the shared [IGDB Client & Rate Limiter](/igdb-client.md) (fields `name`,
+the shared [IGDB Client & Rate Limiter](igdb-client.md) (fields `name`,
 `abbreviation`, `alternative_name`, `platform_family`, `slug`; `limit 500`),
 reconciles it against the local `platforms` table, and prints one summary line:
 
@@ -249,7 +249,7 @@ Platforms synced: fetched=<n> created=<n> updated=<n> unchanged=<n>
 ## Refresh endpoint
 
 `POST /platforms/refresh` exposes the same reconcile over HTTP for the
-[LLM Settings UI](/llm-settings-ui.md) ("refresh platforms" button), backed by
+[LLM Settings UI](llm-settings-ui.md) ("refresh platforms" button), backed by
 the same `PlatformsSyncService` the command uses.
 
 - Success → `200` with `PlatformSyncResult`:
@@ -339,7 +339,7 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
 # Out of scope
 
 - **Reassigning games between platforms** — done via the games API
-  ([Catalog API](/catalog-api.md)); this API only refuses deletes that would
+  ([Catalog API](catalog-api.md)); this API only refuses deletes that would
   orphan games.
 - **The platforms view** (default = non-hidden platforms with games +
   non-hidden custom platforms + unreviewed imports; toggle for the full list)
@@ -347,7 +347,7 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
 - **Per-import "platforms added by this import" listing** — a later import
   concern; the row flag `addedByImport` is the durable record.
 - **Bulk platform-scoped reassignment** — per-game `PATCH /games/:id`
-  ([Catalog API](/catalog-api.md)) already implements reassignment.
+  ([Catalog API](catalog-api.md)) already implements reassignment.
 - **The full platforms management view** (default = non-hidden platforms with
   games + non-hidden custom platforms + unreviewed imports; toggle for the full
   list) — frontend; `POST /platforms/refresh`

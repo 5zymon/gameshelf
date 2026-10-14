@@ -64,7 +64,7 @@ identically. Crucially, an **absent** `MOBYGAMES_API_KEY` is _not_ a config
 error: the fallback source is not registered at all, the chain stays `[igdb]`,
 and a title IGDB misses is simply `unrecognized` — no pause. Only a _configured
 but rejected_ key pauses the queue, which is why `.env.example` keeps the key
-commented. See [MobyGames Fallback](/mobygames-fallback.md).
+commented. See [MobyGames Fallback](mobygames-fallback.md).
 
 # Pipeline behaviour
 
@@ -119,11 +119,11 @@ paused but records no reason.
 `POST /import-jobs/resume` returns `ImportQueueStateModel`
 (`{ paused, reason, source, pausedAt }`) and is idempotent: resuming a running
 queue is a `200` no-op that clears the stored reason. It requires the normal
-session auth (401 otherwise). See [Import Jobs API](/import-jobs-api.md).
+session auth (401 otherwise). See [Import Jobs API](import-jobs-api.md).
 
 `PUT /settings/llm` resumes a queue paused by an `llm` config error **only when
 the saved settings now report `keyPresent`**. A resume failure is logged and
-never fails the settings write. See [LLM Settings API](/llm-settings-api.md).
+never fails the settings write. See [LLM Settings API](llm-settings-api.md).
 
 # Restart and idempotency
 

@@ -9,7 +9,7 @@ generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-05T00:00:00Z }
 
 # Overview
 
-The Auth API turns the [Auth Foundation](/auth-foundation.md) services into an
+The Auth API turns the [Auth Foundation](auth-foundation.md) services into an
 HTTP surface. `POST /auth/login` exchanges credentials for a server-side
 session and an opaque, `httpOnly` cookie; `POST /auth/logout` revokes it; and
 `GET /auth/me` returns the authenticated user. A single global
@@ -30,7 +30,7 @@ There is exactly **one permission level** — no roles, no permission checks
 `language` is the user's stored UI language (`'pl' | 'en'`, default `en`,
 coerced by `toLanguage()` so a corrupt row can never reach the body). Login
 and setup also (re)write the `NEXT_LOCALE` cookie and logout clears it — see
-[Internationalization (EN default, PL)](/i18n.md).
+[Internationalization (EN default, PL)](i18n.md).
 
 `POST /auth/login` accepts `{ email, password }` (both strings, `email` ≤ 255,
 `password` ≤ 1024). It intentionally does **not** apply `@IsEmail()`: the
@@ -48,7 +48,7 @@ valid session returns `401`.
 
 The cookie is named `gameshelf_session` and carries the raw session token
 (the database stores only its HMAC-SHA256 digest — see
-[Auth Foundation](/auth-foundation.md)). Flags set on every issue and clear:
+[Auth Foundation](auth-foundation.md)). Flags set on every issue and clear:
 
 | Flag       | Value          | Rationale                                                   |
 | ---------- | -------------- | ----------------------------------------------------------- |
@@ -111,10 +111,10 @@ to equalize response time and avoid a user-enumeration timing oracle.
   exists, and the e2e regression test
   (`apps/api/test/e2e/no-registration.e2e-spec.ts`) asserts that
   `POST /auth/register` and similar paths return `404`. The one-time bootstrap
-  endpoint is documented in [First-run Setup](/first-run-setup.md).
+  endpoint is documented in [First-run Setup](first-run-setup.md).
 - Rate limiting.
 - CSRF tokens (relying on `SameSite=Lax`) and account lockout.
 - CORS is intentionally absent: the browser only ever calls the web origin, and
   the `/api` rewrite is server-to-server (see
-  [Single-Origin Frontend & API with Strict CSP](/single-origin-frontend-api.md)).
+  [Single-Origin Frontend & API with Strict CSP](single-origin-frontend-api.md)).
 - Web client wiring and multi-level roles/permissions.

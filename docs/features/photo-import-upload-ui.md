@@ -14,7 +14,7 @@ rows. One screen collects many photos (drag & drop, browse, or paste), previews 
 locally before anything leaves the browser, lets the user optionally declare how
 many games a photo contains, converts iPhone HEIC files to JPEG in the browser,
 enforces the same limits the API enforces, and submits the batch to
-[`POST /import/upload`](/import-upload-api.md) with live upload progress. A
+[`POST /import/upload`](import-upload-api.md) with live upload progress. A
 successful submit navigates to the batch progress view.
 
 The screen is gated on LLM readiness: photo recognition needs a model, so when
@@ -23,10 +23,10 @@ explanation, and manual entry stays reachable.
 
 # Routes
 
-| Route                        | Renders                                                                                                                                                                                                                                                 |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/import`                    | `(app)/import/page.tsx` (server) → `PhotoImportForm` (client). `force-dynamic`, `requireUser`, reads `GET /settings/llm` for the gate.                                                                                                                  |
-| `/import/progress/[batchId]` | `(app)/import/progress/[batchId]/page.tsx` (server) → `ImportProgressView` (client). `requireUser`, `GET /import-jobs/batches/:batchId` + `GET /import-jobs?batchId=…`, then live per-photo progress. See [Import Progress UI](/import-progress-ui.md). |
+| Route                        | Renders                                                                                                                                                                                                                                                |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `/import`                    | `(app)/import/page.tsx` (server) → `PhotoImportForm` (client). `force-dynamic`, `requireUser`, reads `GET /settings/llm` for the gate.                                                                                                                 |
+| `/import/progress/[batchId]` | `(app)/import/progress/[batchId]/page.tsx` (server) → `ImportProgressView` (client). `requireUser`, `GET /import-jobs/batches/:batchId` + `GET /import-jobs?batchId=…`, then live per-photo progress. See [Import Progress UI](import-progress-ui.md). |
 
 Manual entry (`/games/new`) is always reachable from the disabled state, so a
 missing LLM key never blocks adding games by hand.
@@ -222,7 +222,7 @@ npm run dev               # API :3001, web :3000
 
 # Out of scope
 
-- The LLM settings screen itself — see [LLM Settings UI](/llm-settings-ui.md);
+- The LLM settings screen itself — see [LLM Settings UI](llm-settings-ui.md);
   the disabled gate links to the real `/settings` screen.
 - A game-database (IGDB) readiness gate — the gate is LLM-only, mirroring the
   upload endpoint.

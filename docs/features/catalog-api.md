@@ -67,7 +67,7 @@ Response shape (additive — `items`/`meta` unchanged from the base listing):
 `coverThumbUrl` is the locally generated thumbnail (`/api/covers/thumbs/<file>`)
 and is `null` whenever `coverUrl` is. Both are served from the app's own origin;
 the internal external-cover link is never serialized. See
-[Local Cover Cache](/local-cover-cache.md).
+[Local Cover Cache](local-cover-cache.md).
 
 # AND semantics
 
@@ -118,7 +118,7 @@ the current filter combination (no faceting):
 - `platforms` — platforms that have at least one game, sorted by name.
 - `editions` — distinct non-null edition values, sorted.
 
-The web filter bar (see [Catalog Filters & Search](/catalog-filters.md))
+The web filter bar (see [Catalog Filters & Search](catalog-filters.md))
 renders `platforms` and `editions` as its two select options and surfaces the
 remaining query params (`year`, `publisher`, `genre`, `playerCount`, `q`) as
 free-text inputs — the contract exposes no facet lists for those, so they are
@@ -164,7 +164,7 @@ returns no candidates) against a game's current title and can apply fresh
 metadata **in place** without duplicating the row or changing
 `title`/`platformId`/`edition`. Search with no body returns the ranked candidate
 list; a `candidate` body picks any listed one. See
-[Game Re-enrichment](/game-reenrichment.md) for the full contract and merge
+[Game Re-enrichment](game-reenrichment.md) for the full contract and merge
 policy.
 
 The game-detail payload (`GET /games/:id`, and the `game` block of the enrich
@@ -189,4 +189,4 @@ identity remains one row).
   `409` with `code: "GAME_ALREADY_IN_CATALOG"` and the existing `game`.
 - `POST /games/:id/copies` increments `copyCount` without creating a row.
 
-See [Manual Add with DB Search and Copy Count](/manual-add-and-copy-count.md).
+See [Manual Add with DB Search and Copy Count](manual-add-and-copy-count.md).

@@ -93,13 +93,13 @@ Prisma is the data-access layer (ADR-003). The schema lives at `apps/api/prisma/
 
 The generated Prisma client is a **build artifact**: it is written to `apps/api/src/generated/` (gitignored) and regenerated automatically by `npm run build` — never commit it.
 
-The **shadow database** (`gameshelf_shadow`) is created by `docker/mysql-init/01-prisma-shadow.sql` on **first initialization only**, and is required by `prisma migrate dev` (local work). The **test database** (`gameshelf_test`, used by the e2e tier — see [Testing](/references/development.md#testing)) is created the same way by `docker/mysql-init/02-test-database.sql`. To change either you must reset the volume: `docker compose down -v`.
+The **shadow database** (`gameshelf_shadow`) is created by `docker/mysql-init/01-prisma-shadow.sql` on **first initialization only**, and is required by `prisma migrate dev` (local work). The **test database** (`gameshelf_test`, used by the e2e tier — see [Testing](development.md#testing)) is created the same way by `docker/mysql-init/02-test-database.sql`. To change either you must reset the volume: `docker compose down -v`.
 
 **Character set:** the `?charset=utf8mb4` suffix in `DATABASE_URL` is declarative — Prisma's MySQL connector does not parse it. The real enforcement is threefold: the migration engine connects with `utf8mb4` (MySQL ≥ 5.5.3), every generated table declares `DEFAULT CHARACTER SET utf8mb4`, and the server runs with `--character-set-server=utf8mb4` (see [Confirming the character set](#confirming-the-character-set)).
 
 # Upgrading from Redis
 
-Only for installs created before [ADR-005](/adr-005-mysql-photo-import-queue.md) (2026-10-12) that still run the retired Redis service.
+Only for installs created before [ADR-005](../adr-005-mysql-photo-import-queue.md) (2026-10-12) that still run the retired Redis service.
 
 An existing install no longer needs Redis. Apply the migration, then remove the
 retired service and its data directory:
@@ -185,7 +185,7 @@ Expected: `users`/`games` counts match the source, you can log in, and the
 library is intact. On a **brand-new host** the same steps work — `docker compose
 up -d mysql` creates an empty `gameshelf` database, then run steps 3–6. The
 committed migrations are not needed for a restore (the dump already contains the
-schema); they are only needed for a from-scratch setup (see [Setup](/references/installation.md#setup)).
+schema); they are only needed for a from-scratch setup (see [Setup](installation.md#setup)).
 
 ## Alternative: physical data-directory snapshot
 
@@ -228,7 +228,7 @@ The URLs below use the default ports; substitute your `API_PORT` / `WEB_PORT`.
 | MySQL charset          | see "Confirming the character set"                                                           | `character_set_server=utf8mb4`, `collation_server=utf8mb4_0900_ai_ci` |
 | Migration drift        | `npm run db:migrate:check`                                                                   | exit 0 (no drift)                                                     |
 | Durable data dir       | **human check** — confirm the `gameshelf-mysql-data` volume is on durable, backed-up storage | you confirm it                                                        |
-| Zero external requests | see [Single-Origin Frontend & API](/single-origin-frontend-api.md)                           | no non-GameShelf hosts                                                |
+| Zero external requests | see [Single-Origin Frontend & API](../single-origin-frontend-api.md)                         | no non-GameShelf hosts                                                |
 
 The **durable data dir** row is the ADR-001 check the application cannot perform
 for you — it is always a human decision.

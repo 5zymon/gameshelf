@@ -9,16 +9,16 @@ generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T21:54:58Z }
 
 # Overview
 
-Ticket 5.6 hardens the catalog surfaces delivered by [Catalog Grid](/catalog-grid.md),
-[Catalog Filters & Search](/catalog-filters.md) and
-[Game Detail View with Edit, Delete & Re-enrich](/game-detail.md): the pages
+Ticket 5.6 hardens the catalog surfaces delivered by [Catalog Grid](catalog-grid.md),
+[Catalog Filters & Search](catalog-filters.md) and
+[Game Detail View with Edit, Delete & Re-enrich](game-detail.md): the pages
 stream a route-level skeleton instead of blocking on an empty frame, a failed
 fetch offers a real retry, slow covers no longer resize their grid slot, the
 edit/delete controls manage focus, and every cover carries alt text. It also
 removes the remaining templated-looking styling from the catalog screens
 (ALL-CAPS accented eyebrows, middle-dot metadata joins and dashed "empty"
 cards), while a game without cover art shows the designed gradient-initial
-placeholder described in [Catalog Grid](/catalog-grid.md).
+placeholder described in [Catalog Grid](catalog-grid.md).
 
 # Loading skeletons (no layout shift)
 
@@ -120,7 +120,7 @@ once.
 - Filter chips have a 24 px remove hit area with a visible focus outline (the
   shared `:focus-visible` outline).
 - The grid stays `grid-cols-2` at 375 px with no horizontal scroll.
-- The platform chip strip scrolls horizontally inside itself (mouse drag anywhere with momentum, vertical wheel, native touch — see [Catalog Filters & Search](/catalog-filters.md)); the page never scrolls horizontally.
+- The platform chip strip scrolls horizontally inside itself (mouse drag anywhere with momentum, vertical wheel, native touch — see [Catalog Filters & Search](catalog-filters.md)); the page never scrolls horizontally.
 
 # De-templating
 

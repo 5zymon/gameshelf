@@ -9,7 +9,7 @@ generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-07T12:00:00Z }
 
 # Overview
 
-The [Photo Import Pipeline](/photo-import-pipeline.md) resolves a recognized
+The [Photo Import Pipeline](photo-import-pipeline.md) resolves a recognized
 title to an external `CatalogCandidate` and then persists it as a `Game`. This
 feature introduces the single, reusable **candidate→`Game` mapping** used by that
 commit path, and the minimum **local cover cache** that makes a saved game's
@@ -20,7 +20,7 @@ It exists so that:
 - the mapping lives in one place
   (`GameEnrichmentService.enrichCandidate` over the pure
   `mapCandidateToGameData`) and is reused by re-enrichment
-  ([Game Re-enrichment](/game-reenrichment.md)) without re-implementing field
+  ([Game Re-enrichment](game-reenrichment.md)) without re-implementing field
   rules;
 - a saved `Game` is describable from the confirmed source candidate — title,
   canonical platform, release year, publisher, genre, player count — with
@@ -28,7 +28,7 @@ It exists so that:
 - the browser never loads a cover from an external host: the cover is downloaded
   once into the local cache and served from the application's own origin
   (`/api/covers/<file>`), which the `img-src 'self'`
-  [CSP](/single-origin-frontend-api.md) permits.
+  [CSP](single-origin-frontend-api.md) permits.
 
 No schema migration is involved: `Game.playerCount`, `Game.coverUrl`,
 `Game.rawMetadata`, `Game.enrichedAt`, and `Game.source` already exist.
@@ -64,10 +64,10 @@ value.
   `.onlinecoopmax`. `IgdbGameCatalogResolver` takes the **maximum** of the four
   values across every `multiplayer_modes` entry, counting only positive
   integers, and yields `null` when none is present. See
-  [IGDB Client & Rate Limiter](/igdb-client.md).
+  [IGDB Client & Rate Limiter](igdb-client.md).
 - **MobyGames.** The v2 search `include` exposes no player-count field, so a
   MobyGames candidate always has `playerCount: null`. Inventing one is
-  forbidden. See [MobyGames Fallback](/mobygames-fallback.md).
+  forbidden. See [MobyGames Fallback](mobygames-fallback.md).
 
 # Raw archival (never used in queries)
 
@@ -75,7 +75,7 @@ The raw upstream payload is written verbatim to `Game.rawMetadata`
 (`JSON.stringify(candidate.raw)`). The column is **archival**: it is never used
 in a query predicate — no `filter`, `sort`, `where`, `orderBy`, or any derived
 value is computed from it. It exists so re-enrichment
-([Game Re-enrichment](/game-reenrichment.md)) can re-read the exact upstream
+([Game Re-enrichment](game-reenrichment.md)) can re-read the exact upstream
 row, and it is surfaced read-only as part of the game-detail payload (`GameDetailModel.rawMetadata` on `GET /games/:id`, from
 `GamesService.findOne`); that serialization is not a query use.
 
@@ -107,18 +107,18 @@ browser <img src="/api/covers/<file>"> ──rewrite /api──▶ API GET /cove
   `SessionGuard` (no `@Public()`), so a browser `<img>` on an authenticated page
   sends the first-party `gameshelf_session` cookie automatically.
 - **Same-origin.** The web app's `/api/:path*` rewrite
-  ([Single-Origin Frontend & API](/single-origin-frontend-api.md)) turns the
+  ([Single-Origin Frontend & API](single-origin-frontend-api.md)) turns the
   API's `/covers/<file>` into the browser's same-origin `/api/covers/<file>`, so
   the cover never touches an external host and satisfies `img-src 'self'`.
 - **Configuration.** `COVERS_DIR` overrides the cache directory; blank/absent
   falls back to `~/.gameshelf/covers`. See
-  [Environment variables](/references/configuration.md#environment-variables)
+  [Environment variables](references/configuration.md#environment-variables)
   and `.env.example`.
 
 Locally generated thumbnails, the signed same-origin preview for unsaved
 candidates, background retry, ref-counted deletion/replacement, and the
 `covers:redownload` command are specified in
-[Local Cover Cache](/local-cover-cache.md).
+[Local Cover Cache](local-cover-cache.md).
 
 # Where it runs
 
@@ -132,9 +132,9 @@ downloads and again inside the transaction.
 
 Rows created before this feature landed may still hold an **external**
 `coverUrl` — there is no backfill. The browser's `img-src 'self'`
-[CSP](/single-origin-frontend-api.md) blocks those external images, so once the
+[CSP](single-origin-frontend-api.md) blocks those external images, so once the
 UI renders covers an old game shows no cover until it is re-enriched (ticket 4.7)
-or repaired from a stored link by [Local Cover Cache](/local-cover-cache.md)
+or repaired from a stored link by [Local Cover Cache](local-cover-cache.md)
 (ticket 4.10). New and re-enriched games store the same-origin
 `/api/covers/<file>` path.
 
@@ -143,7 +143,7 @@ or repaired from a stored link by [Local Cover Cache](/local-cover-cache.md)
 The catalog grid UI that renders covers (ticket 5.2) and backfilling covers for
 rows created before the cache existed. The cache's thumbnail generation,
 same-origin preview passthrough, background retry, deletion/replacement, and
-re-download command are specified in [Local Cover Cache](/local-cover-cache.md).
+re-download command are specified in [Local Cover Cache](local-cover-cache.md).
 
 # Tests
 

@@ -19,7 +19,7 @@ it.
 
 The endpoint owns the _creation_ half of the import lifecycle; the durable
 records it produces are read back through the
-[Import Jobs API](/import-jobs-api.md).
+[Import Jobs API](import-jobs-api.md).
 
 # Endpoint contract
 
@@ -76,7 +76,7 @@ entry (ADR-005); `status` is always
 `queued` on this path. `batchId` groups every photo from this request: poll
 `GET /import-jobs/batches/:batchId` for aggregate progress (X of Y) or filter
 the list with `GET /import-jobs?batchId=` — see
-[Import Jobs API](/import-jobs-api.md).
+[Import Jobs API](import-jobs-api.md).
 
 # What the request does, in order
 
@@ -85,7 +85,7 @@ the list with `GET /import-jobs?batchId=` — see
    URL (stored in Settings) are available. If not, the API responds `503`
    _before storing or enqueuing anything_ — the pipeline cannot run without a
    model, so the upload is refused up front. See
-   [LLM Settings API](/llm-settings-api.md) for the precedence rules.
+   [LLM Settings API](llm-settings-api.md) for the precedence rules.
 2. **Validation.** File type/size/count and `declaredCounts` are checked
    (`400` on violation).
 3. **Ephemeral storage.** Each photo is written to `IMPORT_PHOTOS_DIR` under a
@@ -96,7 +96,7 @@ the list with `GET /import-jobs?batchId=` — see
    `attempts = 0`) and the in-process worker is woken, so it starts without
    waiting for the next poll. There is no separate queue write and no
    `bull_job_id`: the row itself is the queue entry (ADR-005). See
-   [Photo Import Pipeline](/photo-import-pipeline.md).
+   [Photo Import Pipeline](photo-import-pipeline.md).
 6. **Return** the batch id and created ids immediately (`202`).
 
 # Ephemeral storage
@@ -107,8 +107,8 @@ the list with `GET /import-jobs?batchId=` — see
   mount and no gallery route — the directory is a hand-off buffer between the
   upload request and the worker, not user-facing storage.
 - The import pipeline deletes each photo after processing completes
-  ([Photo Import Pipeline](/photo-import-pipeline.md)); a backstop sweep
-  ([Photo Lifecycle & Retention](/photo-lifecycle.md)) removes what is left
+  ([Photo Import Pipeline](photo-import-pipeline.md)); a backstop sweep
+  ([Photo Lifecycle & Retention](photo-lifecycle.md)) removes what is left
   behind. A photo from a failed enqueue is covered because its row is `failed`
   and the sweep applies the failed-retention window; a crash between storing a
   photo and creating its row is covered by the sweep's orphan grace period.
@@ -119,11 +119,11 @@ not a URL and must not be served.
 
 # Errors
 
-| Status | When                                                                                                                                                                                   |
-| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `400`  | No files; unsupported type; oversized file (the API remaps multer's `413` to `400`); misaligned or invalid `declaredCounts`.                                                           |
-| `401`  | No valid session.                                                                                                                                                                      |
-| `503`  | Game recognition is not configured (no API key or no base URL; see [LLM Settings API](/llm-settings-api.md)), or enqueueing failed. Nothing is stored/queued in the unconfigured case. |
+| Status | When                                                                                                                                                                                  |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400`  | No files; unsupported type; oversized file (the API remaps multer's `413` to `400`); misaligned or invalid `declaredCounts`.                                                          |
+| `401`  | No valid session.                                                                                                                                                                     |
+| `503`  | Game recognition is not configured (no API key or no base URL; see [LLM Settings API](llm-settings-api.md)), or enqueueing failed. Nothing is stored/queued in the unconfigured case. |
 
 An enqueue failure marks the just-created row `failed` and returns `503`;
 photos already enqueued earlier in the same request stay queued.
@@ -131,14 +131,14 @@ photos already enqueued earlier in the same request stay queued.
 # Out of scope
 
 - **Recognition / IGDB / MobyGames matching** (ticket 3.5) — the worker does
-  it; see [Photo Import Pipeline](/photo-import-pipeline.md). This endpoint only
+  it; see [Photo Import Pipeline](photo-import-pipeline.md). This endpoint only
   queues.
 - **Retry** (`POST /import-jobs/:id/retry`) and **item resolution** — see
-  [Import Jobs API](/import-jobs-api.md). Retry is implemented; item
+  [Import Jobs API](import-jobs-api.md). Retry is implemented; item
   resolution is not.
 - **Thumbnails / a photo gallery** — deliberately not built; storage is
   ephemeral only.
 - **HEIC and other formats** — only JPEG/PNG/WebP are accepted by this
   endpoint; the web client converts HEIC to JPEG in the browser before upload,
   so HEIC never reaches the API (see
-  [Photo Import Upload UI](/photo-import-upload-ui.md)).
+  [Photo Import Upload UI](photo-import-upload-ui.md)).

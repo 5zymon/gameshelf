@@ -16,7 +16,7 @@ database, so revocation is immediate and no token payload can be forged.
 
 This ticket ships services and configuration only. The HTTP
 login/logout/me endpoints, cookie handling, and the global guard are
-provided by the [Auth API](/auth-api.md) on top of these services. There is
+provided by the [Auth API](auth-api.md) on top of these services. There is
 **no signup/registration endpoint** — self-registration is deliberately
 disabled and user creation is only possible via the one-time `POST /setup`
 or the operator CLI.
@@ -40,10 +40,10 @@ to `409`. The returned `CreatedUser` carries `id`, `email`, and `createdAt`
 `UsersService.createFirstUser` shares the same `prepareUser()` normalization,
 validation, and hashing path and additionally inserts only while `users` is
 empty (atomic `INSERT … SELECT … WHERE NOT EXISTS`), backing the one-time
-bootstrap documented in [First-run Setup](/first-run-setup.md). `hasAnyUser()`
+bootstrap documented in [First-run Setup](first-run-setup.md). `hasAnyUser()`
 reports whether any account exists. `setPassword({ email, password })` reuses
 the same path to replace an existing account's hash, backing the operator
-`user:passwd` command in [User CLI](/user-cli.md).
+`user:passwd` command in [User CLI](user-cli.md).
 
 # Session model
 
@@ -109,7 +109,7 @@ internally (scheduled). `AppModule` imports `ScheduleModule.forRoot()` and
 
 # Out of scope
 
-- HTTP surface: implemented by the [Auth API](/auth-api.md) (`POST /auth/login`,
+- HTTP surface: implemented by the [Auth API](auth-api.md) (`POST /auth/login`,
   `POST /auth/logout`, `GET /auth/me`, cookies, and the global guard).
 - Password policy and strength rules.
 - Roles and permissions (single permission level — decision #14).

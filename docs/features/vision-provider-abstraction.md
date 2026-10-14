@@ -13,7 +13,7 @@ Photo recognition must not hard-code a model vendor. This feature defines one
 `VisionProvider` interface, one registry, and one `VisionService` facade. The
 import pipeline (ticket 3.5 and later) will depend only on `VisionService`, so
 the concrete backend and its model/key can change at runtime (through the
-[LLM Settings API](/llm-settings-api.md)) or be swapped in code without touching
+[LLM Settings API](llm-settings-api.md)) or be swapped in code without touching
 the pipeline.
 
 One backend ships: **Custom** (OpenAI-compatible, user-supplied base URL and
@@ -151,7 +151,7 @@ Malformed output is a boundary concern: the parsers throw only
   unregistered id.
 - `VisionService` is the only surface the pipeline touches:
   - `recognize(input)` resolves the active config from
-    [LLM Settings API](/llm-settings-api.md) and throws
+    [LLM Settings API](llm-settings-api.md) and throws
     `VisionUnavailableError` when no key is available.
   - `test()` makes one real call with a 1x1 PNG and maps any failure to a
     stable code.
@@ -184,6 +184,6 @@ No pipeline file changes.
 # Out of scope
 
 - The recognition pipeline itself is ticket 3.5 and now lives in
-  [Photo Import Pipeline](/photo-import-pipeline.md).
+  [Photo Import Pipeline](photo-import-pipeline.md).
 - Non-OpenAI-compatible protocols (e.g. Anthropic-native), retry/backoff,
   rate limiting, caching, and real recognition accuracy.

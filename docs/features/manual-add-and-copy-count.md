@@ -21,7 +21,7 @@ The duplicate rule is **one pure function** (`isSameGameIdentity`) reused by bot
 manual add and the photo-import commit, so a re-uploaded shelf or an overlapping
 photo resolves to the existing row instead of forking a new one. Manual add is
 LLM-free by construction; it goes straight to the same external catalog chain the
-import pipeline uses ([Anti-hallucination Validation](/anti-hallucination-validation.md)).
+import pipeline uses ([Anti-hallucination Validation](anti-hallucination-validation.md)).
 
 # Search endpoint
 
@@ -32,7 +32,7 @@ import pipeline uses ([Anti-hallucination Validation](/anti-hallucination-valida
 Response (`GameSearchResponseModel`): a ranked `candidates` array reusing the
 re-enrichment `EnrichCandidateModel` shape (metadata, platforms, `source`, and a
 same-origin signed preview `coverUrl` — the external host and the archival `raw`
-payload are never exposed). See [Game Re-enrichment](/game-reenrichment.md) for
+payload are never exposed). See [Game Re-enrichment](game-reenrichment.md) for
 that candidate model.
 
 Search is server-side debounce-protected; the query it forwards is trimmed and
@@ -146,10 +146,10 @@ row; unknown `id` → `404`. The frontend ticket calls this with `game.id` from 
   items in one batch that resolve to the same game create exactly one row.
 - A freshly downloaded cover for a duplicate is not adopted; after the transaction
   commits, `CoverMaintenanceService.removeIfUnreferenced` (ref-counted) deletes it
-  only when no other game references it ([Local Cover Cache](/local-cover-cache.md)).
+  only when no other game references it ([Local Cover Cache](local-cover-cache.md)).
 
 Re-enrichment is unchanged: it still links a previously unlinked game in place
-([Game Re-enrichment](/game-reenrichment.md)).
+([Game Re-enrichment](game-reenrichment.md)).
 
 # Data model
 
@@ -213,7 +213,7 @@ responses, and the `game` block of the enrich response (it is spread by
 # Out of scope
 
 - The manual-add frontend form (ticket 5.5) and the copy-count UI (ticket 5.4);
-  see [Manual Add Form](/manual-add-form.md).
+  see [Manual Add Form](manual-add-form.md).
 - A DB unique constraint (multiple copies must remain legal).
 - Real-time search against the **local** catalog, and a by-external-id fetch
   endpoint (create re-verifies by re-running the ranked search, matching the

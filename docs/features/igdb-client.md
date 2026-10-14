@@ -24,10 +24,10 @@ The photo import pipeline resolves every recognized title against IGDB (ticket
   sub-queries per request) followed by a batched `/v4/games` hydration (at most
   500 ids per request);
 - fetches the full canonical platform list in one `POST /v4/platforms` page for
-  the [Platforms API](/platforms-api.md) sync command;
+  the [Platforms API](platforms-api.md) sync command;
 - exposes a non-throwing `GET /health/igdb` connectivity/token probe.
 
-The client is consumed by [Photo Import Pipeline](/photo-import-pipeline.md)
+The client is consumed by [Photo Import Pipeline](photo-import-pipeline.md)
 through the `GameCatalogResolver` port; the per-title `resolve()` contract is
 unchanged. The IGDB source retains its batched `resolveBatch()` capability, but
 the production binding — `ChainedGameCatalogResolver` — does not override it, so
@@ -142,7 +142,7 @@ and never fails the HTTP request:
   secret.
 
 The endpoint returns HTTP `200` for both `ok` and `error`, unlike
-[`GET /health/queue`](/photo-import-pipeline.md), which is `503` on failure:
+[`GET /health/queue`](photo-import-pipeline.md), which is `503` on failure:
 IGDB being unreachable is a reportable state, not a reason to fail the probe.
 
 # Platform list fetch
@@ -153,7 +153,7 @@ IGDB being unreachable is a reportable state, not a reason to fail the probe.
 It reuses the cached token and the central limiter and retries a `429` exactly
 like `searchGames`; a non-array body is a permanent `IgdbError`. Rows without a
 numeric `id` and string `name` are filtered out. The result is consumed by the
-[Platforms API](/platforms-api.md) sync command to populate/refresh the local
+[Platforms API](platforms-api.md) sync command to populate/refresh the local
 `platforms` table (matching PS5/PlayStation 5 and storing `platform_family`);
 it is deliberately **not** called on a per-game import.
 
@@ -215,7 +215,7 @@ where id = (1,2,…); limit 500;
 `CatalogCandidate.slug`, which is persisted as `Game.igdbSlug` on create (manual
 add and photo import, via the shared create-data mapping) and on re-enrich apply,
 and is never returned by the API as a field of its own (the API derives `igdbUrl`
-from it; see [Game Detail View](/game-detail.md)).
+from it; see [Game Detail View](game-detail.md)).
 
 The response rows are indexed `id → game`, and each title's candidates are
 rebuilt from its phase-1 id order, so `multiqueryGames` still returns one
@@ -227,7 +227,7 @@ Hydration asks for exactly the catalog fields (no `*`, no `alternative_names`);
 `multiplayer_modes.*` maxima feed `CatalogCandidate.playerCount` (the maximum of
 `offlinemax`/`onlinemax`/`offlinecoopmax`/`onlinecoopmax` across modes, or `null`
 when none is present — see
-[Game Metadata Enrichment](/game-metadata-enrichment.md)). `summary`/
+[Game Metadata Enrichment](game-metadata-enrichment.md)). `summary`/
 `version_parent`/`multiplayer_modes` are archived through
 `CatalogCandidate.raw`.
 
@@ -269,7 +269,7 @@ markers, so a title whose only difference is the _system_ scores 0 and is
 reported `unrecognized`: `GTA 5` vs `GTA V`, `Final Fantasy 7` vs
 `Final Fantasy VII`. This is an intentional false negative in the safe
 direction — it never force-matches a different edition — and applies equally to
-the [MobyGames fallback](/mobygames-fallback.md) (ticket 4.5).
+the [MobyGames fallback](mobygames-fallback.md) (ticket 4.5).
 
 The guard operates on whitespace-separated tokens, so a digit glued to a word —
 a candidate literally named `Halo2` or `FIFA23` — is **not** treated as a
@@ -316,7 +316,7 @@ queue, `activeCount`), `igdb-health.service.spec.ts`,
 # Out of scope
 
 - The MobyGames fallback is a **separate** source in the same chain and its own
-  client/limiter — see [MobyGames Fallback](/mobygames-fallback.md). Wiring
+  client/limiter — see [MobyGames Fallback](mobygames-fallback.md). Wiring
   `resolveBatch()` into the pipeline is deferred (not part of 4.4).
 - Multi-instance sharing: the limiter and token cache are per process, so the
   app assumes a single API instance (or accepts that each instance enforces its

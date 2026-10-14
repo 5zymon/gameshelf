@@ -10,7 +10,7 @@ generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T22:16:06Z }
 # Overview
 
 The Web Auth UI is the Next.js (`apps/web`) client wiring for the auth surfaces
-exposed by the [Auth API](/auth-api.md) and [First-run Setup](/first-run-setup.md).
+exposed by the [Auth API](auth-api.md) and [First-run Setup](first-run-setup.md).
 It adds three things the API alone cannot provide in a browser:
 
 - a first-run **setup** form that creates the very first account;
@@ -18,7 +18,7 @@ It adds three things the API alone cannot provide in a browser:
 - **route protection** so the catalog shell is unreachable without a session.
 
 It deliberately contains **no signup/register page or link** — self-registration
-is disabled server-side (see [Auth API](/auth-api.md#out-of-scope)).
+is disabled server-side (see [Auth API](auth-api.md#out-of-scope)).
 
 # Routes and protection
 
@@ -110,13 +110,13 @@ Consequences:
 The strict `'self'`-only Content Security Policy, the build-time self-hosted
 fonts, and the zero-external-request guarantee that complete this single-origin
 setup are documented in
-[Single-Origin Frontend & API with Strict CSP](/single-origin-frontend-api.md).
+[Single-Origin Frontend & API with Strict CSP](single-origin-frontend-api.md).
 
 # Cookie-only guarantee (no token storage)
 
 Authentication is **cookie-only**. The session token lives in the
 `gameshelf_session` cookie, which is `httpOnly` and `SameSite=Lax` (see
-[Auth API](/auth-api.md#session-cookie)), so JavaScript cannot read it. The web
+[Auth API](auth-api.md#session-cookie)), so JavaScript cannot read it. The web
 client never writes a token to `localStorage` or `sessionStorage`, and there is
 no client-side token to leak: after login the browser is redirected and the
 session is resolved on the server from the cookie.
@@ -127,7 +127,7 @@ on login and first-run setup (healing a stale or missing value from the
 stored preference) and cleared on logout and passive session expiry, so a
 shared device never renders the login screen in the previous user's language.
 The web app reads it in `getRequestConfig` and falls back to the English
-default — see [Internationalization (EN default, PL)](/i18n.md).
+default — see [Internationalization (EN default, PL)](i18n.md).
 
 A repository check confirms the absence:
 
@@ -165,7 +165,7 @@ npm run dev              # API on :3001, web on :3000
 
 **Fresh install** requires an empty `users` table. On an existing dev database
 reset it first (deleting every user row re-enables setup — see
-[First-run Setup](/first-run-setup.md#one-shot-guarantee)):
+[First-run Setup](first-run-setup.md#one-shot-guarantee)):
 
 ```bash
 docker compose down -v
@@ -254,5 +254,5 @@ curl -s -o /dev/null -w 'api/setup/status -> %{http_code}\n' http://localhost:30
 - Any change to the rewrite/env design or the SSR cookie-forwarding behavior.
   (The Content Security Policy, font self-hosting, and the zero-external-request
   guarantee are owned by
-  [Single-Origin Frontend & API with Strict CSP](/single-origin-frontend-api.md),
+  [Single-Origin Frontend & API with Strict CSP](single-origin-frontend-api.md),
   which supersedes this exclusion for those concerns.)

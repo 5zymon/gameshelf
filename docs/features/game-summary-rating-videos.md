@@ -10,25 +10,25 @@ generated: { by: opencode/home-model, at: 2026-10-11T10:00:00Z }
 # Overview
 
 Card 9.1 enriches a saved game with three more IGDB fields beyond the
-[metadata](/game-metadata-enrichment.md) already mapped:
+[metadata](game-metadata-enrichment.md) already mapped:
 
 1. **`summary`** — IGDB's English description (never translated), shown as the
    detail page's "Description" section and **hand-editable** like
    publisher/genre.
 2. **`rating`** (and its `ratingCount`) — IGDB's 0–100 **user-rating average**
    (not the critic `aggregated_rating`), shown as a `78/100` label on the
-   [catalog grid](/catalog-grid.md) tiles and as a "Rating" row on the detail
+   [catalog grid](catalog-grid.md) tiles and as a "Rating" row on the detail
    page. Source-derived only; never hand-edited.
 3. **`videos`** — IGDB's YouTube videos, in IGDB order, embedded on the detail
    page by a **click-to-play** player.
 
 It reuses the one candidate→`Game` mapping
-([Game Metadata Enrichment](/game-metadata-enrichment.md)) and the
-[re-enrichment merge policy](/game-reenrichment.md); the only new surface is the
+([Game Metadata Enrichment](game-metadata-enrichment.md)) and the
+[re-enrichment merge policy](game-reenrichment.md); the only new surface is the
 `game_videos` table, the three `games` columns, and the web presentation.
 
 The videos player is the **single sanctioned exception** to the
-[strict single-origin CSP](/single-origin-frontend-api.md): the detail page
+[strict single-origin CSP](single-origin-frontend-api.md): the detail page
 embeds `https://www.youtube.com/embed/<id>`, so the policy gains the YouTube
 hosts and a `frame-src` directive, plus the `https://i.ytimg.com` thumbnail host
 in `img-src`. The player's facade fetches the video thumbnail from YouTube at
@@ -61,12 +61,12 @@ ALTER TABLE `game_videos` ADD CONSTRAINT `game_videos_game_id_fkey`
     ON DELETE CASCADE ON UPDATE CASCADE;
 ```
 
-`id` and `game_id` are UUIDv7 `CHAR(36)` today: [ADR-006](/adr-006-uuidv7-primary-keys.md)
+`id` and `game_id` are UUIDv7 `CHAR(36)` today: [ADR-006](adr-006-uuidv7-primary-keys.md)
 later replaced every non-singleton auto-increment key (and its foreign keys)
 with an app-generated UUIDv7, so the excerpt above shows the current shape, not
 the migration's original `INTEGER` DDL.
 
-`GameVideo` mirrors [GameImage](/game-image-gallery.md): one row per video, FK
+`GameVideo` mirrors [GameImage](game-image-gallery.md): one row per video, FK
 cascade, `position` = display order (IGDB order), `@@unique([gameId, position])`,
 index on `gameId`. `videoId` is the validated YouTube id; `name` is nullable
 (IGDB sometimes omits it). Existing rows get `summary`/`rating`/`rating_count`
@@ -74,7 +74,7 @@ index on `gameId`. `videoId` is the validated YouTube id; `name` is nullable
 
 # IGDB mapping
 
-`IGDB_GAME_FIELDS` (see [IGDB Client & Rate Limiter](/igdb-client.md)) already
+`IGDB_GAME_FIELDS` (see [IGDB Client & Rate Limiter](igdb-client.md)) already
 requested `summary`; it now also requests
 `rating,rating_count,videos.id,videos.name,videos.video_id`. It deliberately does
 **not** request `aggregated_rating` (the critic aggregate) — GameShelf uses the
@@ -115,7 +115,7 @@ created game stores the candidate's summary, rating, ratingCount and videos.
 
 ## Re-enrichment merge
 
-`buildReenrichmentUpdate` (see [Game Re-enrichment](/game-reenrichment.md))
+`buildReenrichmentUpdate` (see [Game Re-enrichment](game-reenrichment.md))
 extends the never-wipe policy:
 
 - `summary`: written only when the candidate provides a **non-null** value, it
@@ -197,7 +197,7 @@ relaxes its old "only while a video is playing" wording; every other fetch
 directive stays `'self'`. Under `'strict-dynamic'`, CSP3 browsers ignore the host
 entries in `script-src` — the player's scripts run inside the iframe's own
 document, which our policy does not govern — but the card asks for them. See
-[Single-Origin Frontend & API with Strict CSP](/single-origin-frontend-api.md)
+[Single-Origin Frontend & API with Strict CSP](single-origin-frontend-api.md)
 for the full directive table and the external-request caveat.
 
 # Tests

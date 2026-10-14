@@ -9,7 +9,7 @@ generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-14T11:52:50.449Z }
 
 # Overview
 
-How to get GameShelf from a clean clone to a running app and a first account. This text was the root README's operator guide until 2026-10-14; the README now links here. Configuration is in [Configuration & External Services](/references/configuration.md), and backups and health checks are in [Database, Backups & Operational Checks](/references/operations.md).
+How to get GameShelf from a clean clone to a running app and a first account. This text was the root README's operator guide until 2026-10-14; the README now links here. Configuration is in [Configuration & External Services](configuration.md), and backups and health checks are in [Database, Backups & Operational Checks](operations.md).
 
 # Scope
 
@@ -98,7 +98,7 @@ npm run dev
 - **API** — NestJS on `API_HOST:API_PORT`, default <http://localhost:3001> (health check at `/health`)
 - **Web** — Next.js on `WEB_HOST:WEB_PORT`, default <http://localhost:3000>
 
-Every root script is listed in the [Development Guide](/references/development.md#scripts).
+Every root script is listed in the [Development Guide](development.md#scripts).
 
 ## Reaching the app from another device (LAN)
 
@@ -111,7 +111,7 @@ so a phone or another computer on the same network can use the app:
 3. On the other device open `http://<LAN IP>:<WEB_PORT>` and sign in.
 
 Only the web port has to be reachable: the browser talks to the web app alone,
-which forwards `/api` to the API server-side (see [Single-Origin Frontend & API with Strict CSP](/single-origin-frontend-api.md)),
+which forwards `/api` to the API server-side (see [Single-Origin Frontend & API with Strict CSP](../single-origin-frontend-api.md)),
 so no CORS, cookie or CSP setting changes. Keep `SESSION_COOKIE_SECURE=false` on
 plain HTTP. Set `API_HOST=127.0.0.1` (with
 `NEXT_PUBLIC_API_URL=http://127.0.0.1:<API_PORT>`) to keep the API off the network,
@@ -133,7 +133,7 @@ Accounts are provisioned only by:
 
 - **First-run setup** — `POST /setup` creates the very first account and is
   permanently disabled (`409 Setup has already been completed`) once a user
-  exists. See [First-run Setup](/first-run-setup.md).
+  exists. See [First-run Setup](../first-run-setup.md).
 - **The CLI** — operator-run commands that reuse `UsersService`, for when the
   first account already exists (or the only account is locked out):
   - `npm run user:create` — create an account. It prompts for `Email: ` (unless
@@ -155,14 +155,14 @@ Accounts are provisioned only by:
   readable message to stderr and exit non-zero. Validation and hashing use the
   same code path as first-run setup (`UsersService.prepareUser`); the CLI adds
   no separate rules. See
-  [User CLI](/user-cli.md).
+  [User CLI](../user-cli.md).
 
 - **Dev seed** — `npm run db:seed` (development only) creates
   `qa@gameshelf.local` / `gameshelf-qa-password` for QA, plus a small sample
   catalog. It is idempotent: re-running resets the password and never
   duplicates games. It needs `NODE_ENV=development` (set in `.env.example`)
   or it refuses to run. See
-  [Dev Seed](/dev-seed.md).
+  [Dev Seed](../dev-seed.md).
 
 Additional users therefore require operator action. The web client exposes no
 signup page or link either; that is enforced by the frontend ticket.

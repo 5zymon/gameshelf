@@ -15,10 +15,10 @@ after an external game database confirms it.** A title no external source
 confirms is traced as an `UnrecognizedItem` (with its raw string preserved) and
 never enters the catalog.
 
-This is the validation step of the [Photo Import Pipeline](/photo-import-pipeline.md)
+This is the validation step of the [Photo Import Pipeline](photo-import-pipeline.md)
 (step 3 of its algorithm) and it composes the external clients described in
-[IGDB Client & Rate Limiter](/igdb-client.md). The saved rows are read back
-through the [Catalog API](/catalog-api.md).
+[IGDB Client & Rate Limiter](igdb-client.md). The saved rows are read back
+through the [Catalog API](catalog-api.md).
 
 # The ordered chain
 
@@ -38,7 +38,7 @@ registers `IgdbGameCatalogResolver` (`label = 'IGDB'`) first and, when
 `MOBYGAMES_API_KEY` is set, `MobygamesGameCatalogResolver`
 (`label = 'MobyGames'`) second; with no key the fallback source is not registered
 at all, so validation is IGDB-only. The chain and the pipeline are unchanged
-either way; see [MobyGames Fallback](/mobygames-fallback.md).
+either way; see [MobyGames Fallback](mobygames-fallback.md).
 
 ## Why `transient` short-circuits
 
@@ -79,12 +79,12 @@ An unrecognized title is never silently dropped. The pipeline records it as an
 and flips its `RecognizedItem.status` to `unrecognized`; the job ends
 `needs_attention`. Re-processing an already-flagged item rolls back instead of
 writing a second trace row, so the trailing records are idempotent under retry
-(see [Photo Import Pipeline](/photo-import-pipeline.md)).
+(see [Photo Import Pipeline](photo-import-pipeline.md)).
 
 # Persisting a confirmed candidate
 
 A `matched` candidate is mapped onto a `Game` by
-[Game Metadata Enrichment](/game-metadata-enrichment.md): the confirmed source
+[Game Metadata Enrichment](game-metadata-enrichment.md): the confirmed source
 supplies title/year/publisher/genre/playerCount and provenance
 (`source`/`enrichedAt`), the raw payload is archived (never queried), and the
 cover is cached locally so `coverUrl` is same-origin. A field the source does not
@@ -97,8 +97,8 @@ who adds a game by hand through `POST /games` writes a `Game` directly, with the
 `Game.source` enum defaulting to `MANUAL` (`GameSource = IGDB | MobyGames |
 MANUAL`). Manual entry is the **only** path that bypasses the chain; an imported
 row is tagged with the source that matched it — `IGDB` or `MobyGames`
-([MobyGames Fallback](/mobygames-fallback.md)). See the
-[Catalog API](/catalog-api.md).
+([MobyGames Fallback](mobygames-fallback.md)). See the
+[Catalog API](catalog-api.md).
 
 # Tests
 

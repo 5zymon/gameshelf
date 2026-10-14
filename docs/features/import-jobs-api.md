@@ -23,9 +23,9 @@ service methods on `ImportJobsService` (`createJob`, `markProcessing`,
 `saveRecognition`, `commitImportBatch`, `markCompleted`, `markFailed`,
 `addUnrecognizedItem`), and the user's only write path is dismissal. The
 per-photo worker that drives those methods is documented in
-[Photo Import Pipeline](/photo-import-pipeline.md). Job _creation_ over HTTP —
+[Photo Import Pipeline](photo-import-pipeline.md). Job _creation_ over HTTP —
 the multi-photo upload that calls `createJob` — is documented separately in the
-[Import Photo Upload API](/import-upload-api.md).
+[Import Photo Upload API](import-upload-api.md).
 
 # Endpoint contract
 
@@ -81,7 +81,7 @@ otherwise the pick is a `400`.
 
 `declaredCount` is `null` when the user did not declare an item count;
 `photoRef` is the opaque ephemeral filename set by
-[Import Photo Upload API](/import-upload-api.md) (`null` for rows created
+[Import Photo Upload API](import-upload-api.md) (`null` for rows created
 without a photo); `errorMessage` is set only for `failed` jobs (the reason
 shown to the UI, spec §4.2.7); `completedAt` is stamped when the job leaves
 `processing`.
@@ -106,14 +106,14 @@ unrecognized)`; for a running job it is the live count of `pending`
   differs from `recognizedCount` (the ticket 4.8 comparison; `needsAttention`
   is the status-derived flag the UI acts on).
 - `batchId` — the upload batch this run belongs to
-  ([Import Photo Upload API](/import-upload-api.md)); `null` for rows created
+  ([Import Photo Upload API](import-upload-api.md)); `null` for rows created
   without one.
 
 `GET /import-jobs` returns `{ items, meta }` with `meta = { page, limit,
 total, totalPages }` (`page` default 1, `limit` default 20, max 100,
 `?status=` filter, `?batchId=` filter). Ordering is newest first: `createdAt
 DESC` with an `id DESC` tiebreaker so bulk-created rows sharing a timestamp
-stay deterministic (same pattern as the [Catalog API](/catalog-api.md)
+stay deterministic (same pattern as the [Catalog API](catalog-api.md)
 sorting).
 
 # Status lifecycle
@@ -217,7 +217,7 @@ validation status is `unrecognized` (a title no catalog source confirmed, or an
 item with no usable platform name). A named platform that matches no existing
 platform does **not** flag the item: the platform is created by the import and
 the game is imported (spec §4.2.3/§4.6.6; see
-[Platforms API](/platforms-api.md#import-created-platforms)). The
+[Platforms API](platforms-api.md#import-created-platforms)). The
 `platform_not_in_catalog` reason now means only "the item has no usable
 platform name", not "the platform was not synced". There is **no** separate
 `unreadable` status, enum, or column, and no placeholder row is ever written.
@@ -303,7 +303,7 @@ batch). `batchId` is at most 64 chars (`400` otherwise).
 Ticket 3.10 adds the queue pause fields: `paused` comes from the durable
 `import_queue_state.paused` flag (ADR-005), and `pauseReason`/`pauseSource`
 (`'llm' | 'igdb'`) come from the same row. See
-[Queue Pause on Configuration Error](/queue-pause-on-config-error.md).
+[Queue Pause on Configuration Error](queue-pause-on-config-error.md).
 
 # Queue pause (ticket 3.10)
 
@@ -324,7 +324,7 @@ requires the normal session auth (`401` otherwise). Saving an LLM key
 (`PUT /settings/llm`) also auto-resumes a queue paused by an `llm` config error
 when `keyPresent` is true. A restart never auto-resumes, so a still-broken
 configuration is not re-failed. Full behaviour in
-[Queue Pause on Configuration Error](/queue-pause-on-config-error.md).
+[Queue Pause on Configuration Error](queue-pause-on-config-error.md).
 
 # Dismissal semantics
 
@@ -366,7 +366,7 @@ configuration is not re-failed. Full behaviour in
   raw platform, reason) are what the user reviews later, so they cannot be
   tied to the photo's lifetime.
 - **The rows are kept; the photos are not.** The
-  [Photo Lifecycle & Retention](/photo-lifecycle.md) sweep removes the files
+  [Photo Lifecycle & Retention](photo-lifecycle.md) sweep removes the files
   behind terminal (`done`/`needs_attention`), `dismissed`,
   `failed`-past-retention, and abandoned `queued`/`processing` jobs (and any
   file with no owning row); when the sweep deletes a file it clears that job's
@@ -397,10 +397,10 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
 # Out of scope
 
 - **Photo upload / job creation via HTTP** (ticket 3.2) — documented in the
-  [Import Photo Upload API](/import-upload-api.md); `createJob` is the service
+  [Import Photo Upload API](import-upload-api.md); `createJob` is the service
   method it calls.
 - **The processor itself** (ticket 3.5) — documented in
-  [Photo Import Pipeline](/photo-import-pipeline.md); it calls
+  [Photo Import Pipeline](photo-import-pipeline.md); it calls
   `markProcessing` / `saveRecognition` / `commitImportBatch` /
   `markCompleted` / `markFailed`.
 - **Item resolution** — pick a tied or re-searched candidate (`POST …/pick`,
@@ -409,5 +409,5 @@ The global `ValidationPipe` runs with `whitelist` + `forbidNonWhitelisted` +
   (User retry and batch progress are implemented; see _Status lifecycle_,
   _Status is durable_, and _Batch progress_.)
 - **Auth guards** (2.x) and the **frontend views** — the API serves the
-  data. The progress view is implemented ([Import Progress UI](/import-progress-ui.md));
+  data. The progress view is implemented ([Import Progress UI](import-progress-ui.md));
   flagged-item review is implemented too (the same view's Photos list).

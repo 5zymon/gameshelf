@@ -16,8 +16,8 @@ re-enriched** games only:
    `t_thumb` size; the `t_thumb` segment of the `cover.url` is rewritten to
    `t_1080p` by one central helper.
 2. **Per-game gallery.** IGDB `screenshots` and `artworks` are downloaded into
-   the [Local Cover Cache](/local-cover-cache.md) and persisted as an ordered
-   gallery on the game. The [Game Detail View](/game-detail.md) renders the
+   the [Local Cover Cache](local-cover-cache.md) and persisted as an ordered
+   gallery on the game. The [Game Detail View](game-detail.md) renders the
    gallery as a thumbnail strip that opens an accessible lightbox.
 
 Both are source-derived only: the gallery is never hand-edited and no bulk
@@ -86,7 +86,7 @@ Writes:
 - **Create paths** (manual linked add, import commit) use
   `toGameCreateData(enriched)`, which nests the ordered `images.create`.
 - **Manual re-enrichment** merges through
-  [Game Re-enrichment](/game-reenrichment.md): the gallery is replaced
+  [Game Re-enrichment](game-reenrichment.md): the gallery is replaced
   (`deleteMany` + ordered `create`) only when the candidate supplies a
   **non-empty** gallery whose ordered URLs differ. An empty candidate gallery
   never wipes the stored one, and an identical order writes nothing (so the

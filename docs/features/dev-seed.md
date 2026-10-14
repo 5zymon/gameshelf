@@ -16,7 +16,7 @@ command, so a developer (or an agent) can log in and exercise the catalog
 filters immediately.
 
 It is a **development-only** maintenance command, not part of the product. It
-pairs with [Dev Data Clear](/dev-data-clear.md): `db:clear-dev` empties the
+pairs with [Dev Data Clear](dev-data-clear.md): `db:clear-dev` empties the
 catalog, `db:seed` fills it with a known baseline.
 
 # Command
@@ -90,7 +90,7 @@ npm run db:clear-dev -- --force && npm run db:seed
 # Interaction with first-run setup and `platforms:sync`
 
 - **First-run setup closes.** Seeding creates a user, and [first-run
-  setup](/first-run-setup.md) is permanently disabled once any user exists.
+  setup](first-run-setup.md) is permanently disabled once any user exists.
   Do not seed a database you still need to test `/setup` on.
 - **`platforms:sync` reconciles.** The seeded platforms carry IGDB-canonical
   names and ids, so the sync matches them by name and updates their canonical

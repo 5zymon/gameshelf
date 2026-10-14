@@ -34,7 +34,7 @@ otherwise uploads are refused with `503`.
 
 Verify a key with the live test `POST /settings/llm/test`
 (`ok` / `unauthorized` / `not_configured` / …). See
-[LLM Settings API](/llm-settings-api.md).
+[LLM Settings API](../llm-settings-api.md).
 
 ## IGDB — required for title validation
 
@@ -49,7 +49,7 @@ ID + Secret:
 | `IGDB_TOKEN_URL`     | no       | Token endpoint override (default Twitch)   |
 
 The secret is never logged or surfaced in errors. Check with `GET /health/igdb`
-(`{"status":"ok","token":"cached"}` or `acquired`). See [IGDB Client & Rate Limiter](/igdb-client.md).
+(`{"status":"ok","token":"cached"}` or `acquired`). See [IGDB Client & Rate Limiter](../igdb-client.md).
 
 ## MobyGames — optional fallback
 
@@ -68,7 +68,7 @@ IGDB-only and never fails a job.
 | ------------------- | -------- | ------------------------------------------- |
 | `MOBYGAMES_API_KEY` | no       | MobyGames v2 key; blank disables the source |
 
-See [MobyGames Fallback](/mobygames-fallback.md).
+See [MobyGames Fallback](../mobygames-fallback.md).
 
 # Environment variables
 

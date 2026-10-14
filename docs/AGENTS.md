@@ -51,7 +51,7 @@ What the feature does and why it exists.
 
 - Actor values: `<producer>/<version>` for agents (e.g. `opencode/<model-id>`), `human:<id>` for people, `process:<id>` for automated processes.
 - Timestamps are ISO 8601 with an explicit UTC offset (e.g. `2026-10-04T12:00:00Z`). `status` is one of `draft`, `stable`, `deprecated` (absent means `stable`).
-- Cross-link concepts with bundle-relative links from the bundle root: `[Other Feature](/other-feature.md)`.
-- Keep `docs/features/index.md` in sync: one entry per feature, `* [Title](/<slug>.md) - short description`.
+- Cross-link concepts with standard relative markdown links, so they work in a local editor and on GitHub: `[Other Feature](other-feature.md)` from a bundle-root document, `[Configuration](references/configuration.md)` into a subdirectory, `[Other Feature](../other-feature.md)` from `references/`. Never write bundle-absolute links (`(/slug.md)`): GitHub resolves them against `github.com`, not the bundle root.
+- Keep `docs/features/index.md` in sync: one entry per feature, `* [Title](<slug>.md) - short description`.
 - Append an entry to `docs/features/log.md` when adding, updating, or deprecating docs (`## YYYY-MM-DD`, newest first).
 - Conformance: every non-reserved `.md` file under `docs/features/` must have parseable YAML frontmatter with a non-empty `type`.

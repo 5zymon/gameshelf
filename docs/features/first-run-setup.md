@@ -9,7 +9,7 @@ generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-05T00:00:00Z }
 
 # Overview
 
-A fresh GameShelf install has no accounts, and the [Auth API](/auth-api.md)
+A fresh GameShelf install has no accounts, and the [Auth API](auth-api.md)
 only logs existing users in. The first-run setup surface closes that gap: it
 reports whether the system still needs its first account and creates exactly
 one. The window is derived from the `users` table itself, so once an account
@@ -69,7 +69,7 @@ normalization (trim + lowercase), max-length bounds, blank/empty checks, and
 Argon2id hashing. `createFirstUser()` adds the atomic emptiness guard;
 `createUser()` performs a plain insert whose duplicate-email violation
 (`P2002`) maps to `409`. The database unique index `users.email` enforces
-uniqueness on both paths. See [User CLI](/user-cli.md) for the operator
+uniqueness on both paths. See [User CLI](user-cli.md) for the operator
 commands that use this same path.
 
 # Logging
@@ -86,7 +86,7 @@ The password is never logged, and rejected attempts are not logged.
 
 - Rate limiting on the unauthenticated setup routes.
 - Web client wiring.
-- CLI account provisioning — shipped as [User CLI](/user-cli.md)
+- CLI account provisioning — shipped as [User CLI](user-cli.md)
   (`user:create` / `user:passwd`); it reuses the same service methods.
 - Password policy/strength rules and multi-user roles (single permission
   level — decision #14).

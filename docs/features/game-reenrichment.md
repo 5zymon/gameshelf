@@ -15,16 +15,16 @@ through the **search seam** (`GameCatalogResolver.search`, the same ranked list
 `GET /games/search` uses) against the game's **current** (corrected) title and
 returns the **ranked candidate list** (best match first, up to
 `CATALOG_SEARCH_MAX_RESULTS` = 10). The seam is **IGDB-first**: IGDB's candidates
-are returned first and [MobyGames](/mobygames-fallback.md) is consulted **only
+are returned first and [MobyGames](mobygames-fallback.md) is consulted **only
 when IGDB returns no candidates at all**. On a second call with a picked
 candidate it applies that candidate's fresh metadata to the **existing** row.
 
-Unlike re-enrichment, the [import pipeline](/anti-hallucination-validation.md)
+Unlike re-enrichment, the [import pipeline](anti-hallucination-validation.md)
 keeps its stricter single-candidate `resolve()` rule (`selectConfidentMatch`,
 score ≥ 0.8): it never offers a list and rejects a weak match.
 
 It reuses the one candidate→`Game` mapping introduced by
-[Game Metadata Enrichment](/game-metadata-enrichment.md)
+[Game Metadata Enrichment](game-metadata-enrichment.md)
 (`GameEnrichmentService.enrichCandidate`) and adds only a **merge policy** on
 top — it never creates a duplicate and never wipes data.
 
@@ -81,7 +81,7 @@ Response (`EnrichGameResponseModel`):
 The archival `raw` upstream payload is never exposed; the candidate model drops
 it (`toEnrichCandidateModel`). The candidate's external cover URL is also
 replaced by a signed same-origin preview URL
-([Local Cover Cache](/local-cover-cache.md)), so the external host never reaches
+([Local Cover Cache](local-cover-cache.md)), so the external host never reaches
 the browser.
 
 # Status / error matrix
@@ -116,7 +116,7 @@ candidate into a `Prisma.GameUpdateInput`, or `null` when nothing changes:
    when the candidate provides a **non-null** value, the value differs, and the
    field is not hand-edited. A null candidate field leaves the existing value
    intact. (`summary` is the new hand-editable, provenance-tracked description;
-   see [Game Summary, Rating & YouTube Videos](/game-summary-rating-videos.md).)
+   see [Game Summary, Rating & YouTube Videos](game-summary-rating-videos.md).)
 3. `rating` and `ratingCount`: written when the candidate provides a non-null
    value that differs. They are **source-derived only** (not hand-editable), so
    they are refreshed even for a hand-edited summary, and an unrated candidate
@@ -129,7 +129,7 @@ candidate into a `Prisma.GameUpdateInput`, or `null` when nothing changes:
    cache). A candidate without a cover never clears an existing one.
    `sourceCoverUrl` (the external link, internal) is written when it differs too
    — even when the download failed — so the background sweep /
-   `covers:redownload` can retry it ([Local Cover Cache](/local-cover-cache.md)).
+   `covers:redownload` can retry it ([Local Cover Cache](local-cover-cache.md)).
 6. `source` and `externalId` are written when they differ — this is what turns
    an unlinked `MANUAL` game into a linked one.
 7. `platformUnverified` is set to `false` when it was `true`.
@@ -226,7 +226,7 @@ import create-path now writes it too (additive). `rawMetadata` remains archival.
 
 - Clearing provenance (`userEditedFields` is only ever unioned).
 - Frontend presentation of the search/pick flow lives in the
-  [Game Detail View](/game-detail.md) doc (`ReEnrichControl`).
+  [Game Detail View](game-detail.md) doc (`ReEnrichControl`).
 
 Cover thumbnails, background retry, the re-download CLI, and ref-counted orphan
-cleanup are specified in [Local Cover Cache](/local-cover-cache.md).
+cleanup are specified in [Local Cover Cache](local-cover-cache.md).

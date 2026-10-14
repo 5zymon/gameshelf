@@ -13,12 +13,12 @@ The LLM provider and model must be configurable after first run without editing
 env files or restarting. This feature adds a singleton settings row
 (`llm_settings.id = 1`), an authenticated read/write API, a live connectivity
 test, and the gate the
-[Import Photo Upload API](/import-upload-api.md) uses to decide whether photo
+[Import Photo Upload API](import-upload-api.md) uses to decide whether photo
 recognition is available.
 
 The API key is write-only: it is encrypted at rest and **never** returned by any
 endpoint or written to a log. The selected backend is consumed through the
-[Vision Provider Abstraction](/vision-provider-abstraction.md).
+[Vision Provider Abstraction](vision-provider-abstraction.md).
 
 # Endpoints
 
@@ -141,7 +141,7 @@ rotated secret) is logged **without any secret material** and treated as
 
 # Import gate
 
-`POST /import/upload` (see [Import Photo Upload API](/import-upload-api.md))
+`POST /import/upload` (see [Import Photo Upload API](import-upload-api.md))
 calls `LlmSettingsService.isConfigured()`, which is true only when both an API
 key and a base URL are available. When it is `false`, the upload is refused
 with `503` **before storing or enqueuing anything**. When `true`, the upload
@@ -150,7 +150,7 @@ proceeds unchanged.
 # Out of scope
 
 - The recognition pipeline (ticket 3.5). The frontend screen is
-  [LLM Settings UI](/llm-settings-ui.md).
+  [LLM Settings UI](llm-settings-ui.md).
 - Other protocols (Anthropic-native, Gemini-native); several providers at once
   (the registry makes adding one cheap).
 - Key rotation tooling, audit history, retry/backoff, and rate limiting.

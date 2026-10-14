@@ -14,13 +14,13 @@ import pipeline depends on. It replaces the placeholder that was rendered since
 ticket 0.x and wires three concerns into one page:
 
 1. **LLM provider, model and API key** — read and written through
-   [`GET`/`PUT /settings/llm`](/llm-settings-api.md). The key is write-only: the
+   [`GET`/`PUT /settings/llm`](llm-settings-api.md). The key is write-only: the
    browser never receives it, and the form never seeds its input from the server.
 2. **Game-database status** — a read of the new
-   [`GET /settings/game-databases`](/platforms-api.md) endpoint showing whether
+   [`GET /settings/game-databases`](platforms-api.md) endpoint showing whether
    IGDB and MobyGames are configured.
 3. **Reference-platform refresh** — a button that calls the new
-   [`POST /platforms/refresh`](/platforms-api.md), which re-runs the IGDB
+   [`POST /platforms/refresh`](platforms-api.md), which re-runs the IGDB
    platform reconcile and restores hidden reference platforms.
 
 Game recognition uses a single provider — **Custom (OpenAI-compatible)** —
@@ -123,7 +123,7 @@ The status is derived **without a network call**:
 - `missing` when the provider's env key(s) are absent
   (`IGDB_CLIENT_ID` + `IGDB_CLIENT_SECRET`, or `MOBYGAMES_API_KEY`).
 - `rejected` when the singleton `import_queue_state` row is paused with
-  `source === id` — the exact place the [photo-import pipeline](/queue-pause-on-config-error.md)
+  `source === id` — the exact place the [photo-import pipeline](queue-pause-on-config-error.md)
   records "the provider rejected the credentials", with its reason.
 - otherwise `configured`.
 
@@ -138,7 +138,7 @@ requests a test button only for the LLM.
 
 `RefreshPlatformsControl` calls `POST /platforms/refresh`, which re-runs the
 same `PlatformsSyncService` reconcile as the operator command (see
-[Platforms API](/platforms-api.md)). On success it reports
+[Platforms API](platforms-api.md)). On success it reports
 `fetched / created / updated / unchanged` and calls `router.refresh()`. On a
 `503` it shows the API's message (IGDB not configured/rejected, or unreachable).
 
@@ -173,10 +173,10 @@ refresh.
 
 # Related
 
-- [LLM Settings API](/llm-settings-api.md) — the backing endpoints.
-- [Platforms API](/platforms-api.md) — `POST /platforms/refresh` and the delete/hide rules.
-- [Photo Import Upload UI](/photo-import-upload-ui.md) — the import gate this screen enables.
-- [Web API Client](/web-api-client.md) — `settings.llm.*`, `settings.gameDatabases.status`, `platforms.refresh`.
+- [LLM Settings API](llm-settings-api.md) — the backing endpoints.
+- [Platforms API](platforms-api.md) — `POST /platforms/refresh` and the delete/hide rules.
+- [Photo Import Upload UI](photo-import-upload-ui.md) — the import gate this screen enables.
+- [Web API Client](web-api-client.md) — `settings.llm.*`, `settings.gameDatabases.status`, `platforms.refresh`.
 
 # Out of scope
 
@@ -184,7 +184,7 @@ refresh.
   from config plus the durable import pause (see above).
 - Theme settings (ticket 7.3). The language preference is no longer out of
   scope: it lives in the Preferences section of this screen (see
-  [Internationalization (EN default, PL)](/i18n.md)).
+  [Internationalization (EN default, PL)](i18n.md)).
 - Non-OpenAI-compatible protocols (e.g. Anthropic-native, Gemini-native);
   several providers at once; key rotation/audit tooling.
 - The full `/platforms` management view (still a placeholder).

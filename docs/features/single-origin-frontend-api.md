@@ -9,11 +9,11 @@ generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T21:54:58Z }
 
 # Overview
 
-GameShelf serves the browser from a single origin. The [web app](/web-auth-ui.md)
+GameShelf serves the browser from a single origin. The [web app](web-auth-ui.md)
 is the only host the browser talks to; every API call goes to a same-origin
 `/api/:path*` URL that Next.js rewrites server-side to the NestJS API. Because
 the browser never contacts the API host directly, the `gameshelf_session` cookie
-issued by the [Auth API](/auth-api.md) is a plain host-only first-party cookie on
+issued by the [Auth API](auth-api.md) is a plain host-only first-party cookie on
 the app's own origin — no cross-origin CORS, no cookie `Domain`, no external
 reverse proxy, and no assumption that TLS terminates anywhere else.
 
@@ -77,12 +77,12 @@ Key properties:
   `img-src` addition is a deliberate extension of that exception: the player
   fetches each video's thumbnail from YouTube at render, before the user presses
   play, so the old "only while a video is playing" wording no longer holds
-  ([Game Summary, Rating & YouTube Videos](/game-summary-rating-videos.md)).
+  ([Game Summary, Rating & YouTube Videos](game-summary-rating-videos.md)).
 - **Covers are same-origin.** A saved `Game.coverUrl` is a first-party
   `/api/covers/<file>` path, not an external URL: the import downloads the
   external cover once into the local cache and the API serves it through
   `GET /covers/:file`, which the `/api` rewrite puts on the app origin (see
-  [Game Metadata Enrichment](/game-metadata-enrichment.md)). `img-src 'self'`
+  [Game Metadata Enrichment](game-metadata-enrichment.md)). `img-src 'self'`
   (the YouTube thumbnail host aside) therefore permits it, while a direct
   external image URL would be blocked.
 
@@ -114,7 +114,7 @@ const sora = Sora({
 ```
 
 `latin-ext` is required because the UI supports Polish (see
-[Internationalization (EN default, PL)](/i18n.md)): the base `latin` subset
+[Internationalization (EN default, PL)](i18n.md)): the base `latin` subset
 does not contain the accented characters, and without the extra subset the
 browser would fall back to a different font for every ą/ę/ł/ó/ś/ź/ż.
 
@@ -181,7 +181,7 @@ nothing external. Verify it two ways:
 > **Covers.** A saved `Game.coverUrl` is a same-origin `/api/covers/<file>` path,
 > never an external host: the import downloads the external cover into the local
 > cache and the API serves it (see
-> [Game Metadata Enrichment](/game-metadata-enrichment.md)). A direct external
+> [Game Metadata Enrichment](game-metadata-enrichment.md)). A direct external
 > image URL would be blocked by `img-src 'self'` (the one YouTube thumbnail host
 > aside); the cache is what makes cover rendering CSP-safe without loosening the
 > policy.
@@ -226,4 +226,4 @@ it to `true`). No config assumes TLS terminates elsewhere.
   Network-panel and curl checks above. The CSP directive set is unit-tested
   (`apps/web/test/csp.test.mjs`).
 - CDN or multi-origin deployment topologies.
-- CSRF tokens (the app relies on `SameSite=Lax`; see [Auth API](/auth-api.md)).
+- CSRF tokens (the app relies on `SameSite=Lax`; see [Auth API](auth-api.md)).

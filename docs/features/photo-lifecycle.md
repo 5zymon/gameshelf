@@ -13,9 +13,9 @@ Decision #4 (photos are ephemeral) plus ADR-005 ordering (superseding ADR-002):
 a retry may still need the image, so a photo is never deleted at first save,
 only once the job is no longer going to run. This document is the single
 lifecycle reference; the upload side is
-[Import Photo Upload API](/import-upload-api.md), the worker is
-[Photo Import Pipeline](/photo-import-pipeline.md), and the durable records are
-[Import Jobs API](/import-jobs-api.md).
+[Import Photo Upload API](import-upload-api.md), the worker is
+[Photo Import Pipeline](photo-import-pipeline.md), and the durable records are
+[Import Jobs API](import-jobs-api.md).
 
 The happy path is handled by the pipeline itself: `processJob` calls
 `markCompleted` and then deletes the photo, so a `done` or `needs_attention`
@@ -45,7 +45,7 @@ a hand-off buffer between the upload request and the worker.
 | The **7-day failed window defines retryability**: while a photo exists, a   |
 | `failed` job can be retried (`POST /import-jobs/:id/retry`); once the sweep |
 | clears `photoRef`, retry returns `409` ("This import has no photo to        |
-| re-process"). See [Import Jobs API](/import-jobs-api.md).                   |
+| re-process"). See [Import Jobs API](import-jobs-api.md).                    |
 
 A `queued`/`processing` run is abandoned only after
 `PHOTO_SWEEP_STUCK_JOB_MAX_AGE_MS` (48 h) with **no queue or worker activity**.
@@ -124,11 +124,11 @@ fails an abandoned job.
 # Out of scope
 
 - Pruning `import_jobs` / `unrecognized_items` rows — import history has
-  indefinite retention (see [Import Jobs API](/import-jobs-api.md)).
+  indefinite retention (see [Import Jobs API](import-jobs-api.md)).
 - Thumbnails or a photo gallery — deliberately not built.
 - HEIC and other formats — only JPEG/PNG/WebP reach the API; the web client
   converts HEIC to JPEG before upload (see
-  [Photo Import Upload UI](/photo-import-upload-ui.md)).
+  [Photo Import Upload UI](photo-import-upload-ui.md)).
 - A manual admin sweep endpoint.
 - Clearing a dangling `photoRef` on a terminal row whose file is already gone
   (retry is unaffected; only `failed` can retry and the sweep is the only

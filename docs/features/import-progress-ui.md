@@ -246,22 +246,22 @@ stays false and the page keeps polling at the throttled heartbeat.
 
 # Backend contract
 
-- Batch progress and the job list: [Import Jobs API](/import-jobs-api.md)
+- Batch progress and the job list: [Import Jobs API](import-jobs-api.md)
   (`GET /import-jobs/batches/:batchId`, `GET /import-jobs?batchId=…`).
 - The per-photo state needs `openFlaggedCount` on every job payload (flagged
   items with `dismissed_at IS NULL`, counted live for every status) alongside
   the historical `unrecognizedCount` — see [Import Jobs
-  API](/import-jobs-api.md).
+  API](import-jobs-api.md).
 - Review reuses existing endpoints: `GET /import-jobs/:id/unrecognized`,
   `PATCH /import-jobs/:id` (`{ status: 'dismissed' }`),
   `PATCH /import-jobs/:id/unrecognized/:itemId` (`{ dismissed: true }`), and
-  `POST /import-jobs/:id/retry` — see [Import Jobs API](/import-jobs-api.md).
+  `POST /import-jobs/:id/retry` — see [Import Jobs API](import-jobs-api.md).
 - Flagged-item re-search and pick are the two newer endpoints:
   `GET /import-jobs/:id/unrecognized/:itemId/search?q=&platformId=` returns the
   ranked candidates (platform first), and
   `POST /import-jobs/:id/unrecognized/:itemId/pick` accepts the optional
   re-search `query` and user-confirmed `platformId` — see
-  [Import Jobs API](/import-jobs-api.md).
+  [Import Jobs API](import-jobs-api.md).
 - **Settling:** dismissing an item, picking a candidate and adding a game by
   hand each make the API re-check the job after the write commits; when the
   last open flagged item is reviewed and no other trigger holds
@@ -269,7 +269,7 @@ stays false and the page keeps polling at the throttled heartbeat.
   `needs_attention → done` (`settleReviewedJob`). This is why the page's
   "Titles to review" cell and the chip can reach **Done** without a reload.
 - `paused` / `pauseReason` / `pauseSource` and `POST /import-jobs/resume`:
-  [Queue Pause on Configuration Error](/queue-pause-on-config-error.md).
+  [Queue Pause on Configuration Error](queue-pause-on-config-error.md).
 
 # Manual acceptance script
 

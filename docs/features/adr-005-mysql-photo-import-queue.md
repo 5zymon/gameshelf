@@ -33,7 +33,7 @@ and the project is a **single-user, single-instance** app:
 
 The queue's own history lives nowhere else: ADR-002 states the queue is a
 mechanism, not the record ("Do not treat Redis contents as an audit log"), and
-[Import Jobs API](/import-jobs-api.md) documents the durable record.
+[Import Jobs API](import-jobs-api.md) documents the durable record.
 
 # Decision
 
@@ -103,8 +103,8 @@ BullMQ, no Redis, no ioredis.
   status is unchanged.
 - **The read API no longer reports queue internals.** `GET /import-jobs*` drops
   `queueState` and `bullJobId`; the upload response's `jobId` is now `id` (a
-  UUIDv7 — ADR-006). See [Import Jobs API](/import-jobs-api.md) and
-  [Import Photo Upload API](/import-upload-api.md).
+  UUIDv7 — ADR-006). See [Import Jobs API](import-jobs-api.md) and
+  [Import Photo Upload API](import-upload-api.md).
 
 # Alternatives
 

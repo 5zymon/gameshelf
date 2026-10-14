@@ -9,7 +9,7 @@ generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-07T18:00:00Z }
 
 # Overview
 
-`apps/web` talks to the [Auth API](/auth-api.md), [First-run Setup](/first-run-setup.md),
+`apps/web` talks to the [Auth API](auth-api.md), [First-run Setup](first-run-setup.md),
 the catalog, platforms and import endpoints through **one typed client module**
 at `apps/web/src/lib/api/`. Components no longer call the backend with a raw,
 untyped `fetch`; every request goes through `createApiClient(transport)` and
@@ -68,12 +68,12 @@ forms and the settings/refresh controls.
 
 # Related
 
-- [Web Auth UI](/web-auth-ui.md) — the login/setup/logout call sites migrated to
+- [Web Auth UI](web-auth-ui.md) — the login/setup/logout call sites migrated to
   this client.
-- [Single-Origin Frontend & API with Strict CSP](/single-origin-frontend-api.md)
+- [Single-Origin Frontend & API with Strict CSP](single-origin-frontend-api.md)
   — the `/api` rewrite and same-origin cookie this client relies on.
-- [Catalog API](/catalog-api.md), [Platforms API](/platforms-api.md),
-  [Import Jobs API](/import-jobs-api.md) — the wire shapes in `contracts`.
+- [Catalog API](catalog-api.md), [Platforms API](platforms-api.md),
+  [Import Jobs API](import-jobs-api.md) — the wire shapes in `contracts`.
 
 # Out of scope
 

@@ -9,7 +9,7 @@ generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-07T13:30:00Z }
 
 # Overview
 
-The [Game Metadata Enrichment](/game-metadata-enrichment.md) feature downloads a
+The [Game Metadata Enrichment](game-metadata-enrichment.md) feature downloads a
 candidate's external cover into a local cache and serves it same-origin. This
 feature extends that cache into a complete local cover store:
 
@@ -29,7 +29,7 @@ feature extends that cache into a complete local cover store:
   for example after the cover directory is wiped.
 
 It is the backend half of the catalog cover experience; the catalog grid UI
-(ticket 5.2) is out of scope. The [Game Image Gallery](/game-image-gallery.md)
+(ticket 5.2) is out of scope. The [Game Image Gallery](game-image-gallery.md)
 builds on the same cache for per-game IGDB screenshots/artworks and rewrites
 IGDB covers to `t_1080p`.
 
@@ -76,7 +76,7 @@ on a cache hit, and by the recovery paths.
 | `GET /covers/preview?u=<b64url>&s=<hmac>&e=<epoch>` | a server-side fetched, in-memory thumbnail of an **unsaved** candidate                                                    |
 
 No route ever issues a redirect to an external host. The web app's `/api/:path*`
-rewrite ([Single-Origin Frontend & API](/single-origin-frontend-api.md)) makes
+rewrite ([Single-Origin Frontend & API](single-origin-frontend-api.md)) makes
 these first-party `/api/covers/...` URLs to the browser.
 
 ## Preview passthrough
@@ -107,7 +107,7 @@ Per ADR-005 (one photo-import queue) there is **no** second queue. A
 `coverUrl: null` and a `sourceCoverUrl`. The sweep is bounded
 (`COVER_RETRY_SWEEP_MAX_PAGES` pages per run) and its cursor **rotates** across
 runs, so a permanently-failing low-id row cannot starve later ones. This mirrors
-the [Photo Lifecycle](/photo-lifecycle.md) sweep. A failed cover download
+the [Photo Lifecycle](photo-lifecycle.md) sweep. A failed cover download
 therefore never fails an import item: the game is saved with a placeholder and
 healed later.
 
@@ -135,7 +135,7 @@ a stored cover (and its thumbnail) only when neither a `Game.coverUrl` nor a
 `GameImage.url` still references the same path — ref-counted, so a sibling
 imported from the same candidate is never broken. It is invoked when a game's
 cover changes on `PATCH`/re-enrichment and when a game is deleted; the
-[Game Image Gallery](/game-image-gallery.md) additionally removes replaced
+[Game Image Gallery](game-image-gallery.md) additionally removes replaced
 gallery files on re-enrichment and all gallery files on delete/duplicate import.
 On `PATCH`, re-submitting the game's **current** local path preserves its stored
 `sourceCoverUrl` (only an explicit `null` clears it), and re-enrichment removes a
@@ -151,7 +151,7 @@ orphans a file.
 | `COVER_PREVIEW_SECRET`          | `SESSION_SECRET`                                  | HMAC key for preview URLs                                             |
 | `COVER_RETRY_SWEEP_INTERVAL_MS` | `900000` (15 min)                                 | background retry interval                                             |
 
-See [Environment variables](/references/configuration.md#environment-variables) and `.env.example`.
+See [Environment variables](references/configuration.md#environment-variables) and `.env.example`.
 
 # Tests
 

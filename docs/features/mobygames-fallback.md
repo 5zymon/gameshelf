@@ -9,7 +9,7 @@ generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-09T20:32:19Z }
 
 # Overview
 
-Ticket 4.4 made the [Anti-hallucination Validation](/anti-hallucination-validation.md)
+Ticket 4.4 made the [Anti-hallucination Validation](anti-hallucination-validation.md)
 chain source-pluggable but registered only IGDB. Ticket 4.5 appends a second
 source — **MobyGames v2** — so a title IGDB cannot confirm is given one more
 chance before it is flagged `unrecognized`. The fallback is:
@@ -20,7 +20,7 @@ chance before it is flagged `unrecognized`. The fallback is:
   rolling hour**, which **waits** at the window boundary instead of firing past
   the budget;
 - mapped onto the same `CatalogCandidate` shape as IGDB, so the
-  [Photo Import Pipeline](/photo-import-pipeline.md) is unaware which source
+  [Photo Import Pipeline](photo-import-pipeline.md) is unaware which source
   matched;
 - **absent from the chain entirely when `MOBYGAMES_API_KEY` is unset**, so an
   unconfigured fallback degrades to IGDB-only and never fails a job.
@@ -194,7 +194,7 @@ until then the fallback stays disabled and imports validate against IGDB alone.
 
 - The MobyGames health endpoint and recorded-fixture integration tests (4.9).
 - Cover local caching is implemented by
-  [Game Metadata Enrichment](/game-metadata-enrichment.md) (ticket 4.6); a
+  [Game Metadata Enrichment](game-metadata-enrichment.md) (ticket 4.6); a
   MobyGames cover is cached from its external URL like an IGDB one. Re-enrichment
   (4.7) is still out of scope.
 - Platform alias creation; multi-instance budget sharing (the limiter is per

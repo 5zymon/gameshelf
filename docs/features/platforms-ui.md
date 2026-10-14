@@ -12,7 +12,7 @@ generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-08T06:04:33Z }
 The `/platforms` route replaces the placeholder that rendered since ticket 0.x
 and becomes the owner's screen for the catalog's platform reference list: the
 visible half of the duplicate-prevention design (spec §4.6; workflow 4.6,
-decision #7). It reads the existing [Platforms API](/platforms-api.md) and lets
+decision #7). It reads the existing [Platforms API](platforms-api.md) and lets
 the owner keep that list canonical without touching the database:
 
 - list every platform with its `gameCount`;
@@ -25,7 +25,7 @@ the owner keep that list canonical without touching the database:
   rename, or merge them.
 
 This is a frontend-plus-docs ticket: every endpoint it calls already exists and
-is tested (see [Platforms API](/platforms-api.md)). No backend or
+is tested (see [Platforms API](platforms-api.md)). No backend or
 `@gameshelf/contracts` change.
 
 # Platform shapes
@@ -125,7 +125,7 @@ the row's **Merge into…** trigger on close.
 Reassigning a **game** between platforms is not done here — it already lives in
 the game detail editor: `GameEditForm`'s Platform `<select>` sends
 `delta.platformId` to `PATCH /games/:id`
-([Game Detail View](/game-detail.md), `game-edit-form.tsx:312-331`,
+([Game Detail View](game-detail.md), `game-edit-form.tsx:312-331`,
 `buildDelta` at `:105-113`). This view surfaces the block and points at merge;
 the per-game edit remains the fine-grained path.
 
@@ -162,12 +162,12 @@ the per-game edit remains the fine-grained path.
 
 # Related
 
-- [Platforms API](/platforms-api.md) — every endpoint this view calls, the
+- [Platforms API](platforms-api.md) — every endpoint this view calls, the
   delete-or-hide rules, and the alias/merge mechanics.
-- [Game Detail View with Edit, Delete & Re-enrich](/game-detail.md) — the
+- [Game Detail View with Edit, Delete & Re-enrich](game-detail.md) — the
   per-game platform reassignment this view defers to.
-- [Web API Client](/web-api-client.md) — `api.platforms.*` and `api.games.list`.
-- [LLM Settings UI](/llm-settings-ui.md) — hosts "Refresh platforms"
+- [Web API Client](web-api-client.md) — `api.platforms.*` and `api.games.list`.
+- [LLM Settings UI](llm-settings-ui.md) — hosts "Refresh platforms"
   (`POST /platforms/refresh`), which restores hidden reference platforms.
 
 # Out of scope
