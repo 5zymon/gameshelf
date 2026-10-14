@@ -4,7 +4,7 @@ title: Import Progress UI
 description: The authenticated /import/progress/[batchId] view — aggregate X-of-Y progress, one Photos list with a per-photo state (chip, summary, why line, actions), inline flagged-title review with a compact add form, live polling with a throttled heartbeat while the queue is paused, and a queue-paused banner with resume.
 tags: [web, import, ui]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-14T17:39:07Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-14T18:22:41Z }
 ---
 
 # Overview
@@ -211,9 +211,9 @@ stays false and the page keeps polling at the throttled heartbeat.
   (`apps/web/src/components/progress-bar.tsx`): `role="progressbar"` with
   `aria-valuenow/min/max` and an accessible label naming X and Y. While the
   batch runs (`!allCompleted && !paused`), the determinate fill is drawn muted
-  (`bg-accent/40`) and a full-strength accent segment slides over it, so the
-  sweep stays visible across the whole track; nothing moves when the queue is
-  paused or the batch has finished.
+  (`bg-accent/40`) and a full-strength accent segment bounces between the
+  track's edges over it, so the sweep stays visible across the whole track;
+  nothing moves when the queue is paused or the batch has finished.
 - The aggregate "X of Y photos processed" line is the **only** polled
   `aria-live` region (`role="status"`, `aria-live="polite"`); the footer
   "Reconnecting…" line and the photo rows are not live, so a noisy list never

@@ -1,7 +1,7 @@
 /**
  * Thin accent progress bar for the import screens. `value` is a 0–100
  * percentage, or `null` while the amount is unknown (indeterminate: no
- * `aria-valuenow`, a sliding segment). `busy` keeps a segment sliding over a
+ * `aria-valuenow`, a bouncing segment). `busy` keeps a segment bouncing over a
  * determinate bar so work between steps still reads as running: the fill drops
  * to a muted accent, leaving the full-strength segment visible all the way.
  */

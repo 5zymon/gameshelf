@@ -4,7 +4,7 @@ title: Photo Import Upload UI
 description: The authenticated /import screen — a drag-and-drop, browse, or paste multi-photo picker with thumbnails, optional per-photo game counts, client-side validation, in-browser HEIC→JPEG conversion, an LLM-readiness gate, and an upload that navigates to the batch progress view.
 tags: [web, import, ui, heic]
 status: draft
-generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-14T17:43:17Z }
+generated: { by: opencode/deepseek-v4.1-flash, at: 2026-10-14T18:22:41Z }
 ---
 
 # Overview
@@ -108,9 +108,10 @@ While `submitting`, the shared `ProgressBar`
 through three phases, derived by `lib/import/upload-status.ts`:
 
 1. **Before the first progress event** — and whenever the browser reports a
-   non-computable size: indeterminate. A `w-1/3` accent segment slides across
-   the `bg-edge` track and the bar carries no `aria-valuenow`. It shows from the
-   click itself, so the form never looks frozen while the request starts.
+   non-computable size: indeterminate. A `w-1/3` accent segment bounces between
+   the `bg-edge` track's edges and the bar carries no `aria-valuenow`. It shows
+   from the click itself, so the form never looks frozen while the request
+   starts.
 2. **Bytes in flight:** a determinate fill at `floor(loaded / total × 100)`% and
    the line "Uploading… N%". The percentage is floored, so 100% never shows
    while a byte is still in flight.
@@ -197,7 +198,7 @@ npm run dev               # API :3001, web :3000
    the progress API.
 8. **Submit + progress.** Throttle the network (DevTools → Network → Slow 3G)
    and upload several photos. Expect the bar to appear immediately with a
-   sliding segment and "Uploading…", then an increasing percentage, then
+   bouncing segment and "Uploading…", then an increasing percentage, then
    "Starting the import…" once the bytes are sent, with the button disabled the
    whole time — the screen must not look frozen. Expect the request body field
    name `files` and one `declaredCounts` per photo.
