@@ -21,8 +21,8 @@ depends on them**:
   operator.
 - **No requirement depends on a container.** `docker-compose.yml` is a
   _convenience_ that starts a local MySQL. The application has no
-  dependency on Docker or on that file: it needs only a MySQL 8.4 server at
-  `MYSQL_HOST:MYSQL_PORT`.
+  dependency on Docker or on that file: it needs only a MySQL 8.4 server
+  reachable at the host and port in `DATABASE_URL`.
   System-installed servers work identically.
 
 ## Prerequisites
@@ -30,7 +30,7 @@ depends on them**:
 - **Node.js 24 LTS** (`>=24 <25`) — pinned in `.nvmrc` and `package.json` (`engines.node`).
 - **npm 11+** (ships with Node 24).
 - [nvm](https://github.com/nvm-sh/nvm) (optional but recommended) to select the pinned Node version.
-- **Docker** (optional) — only for the convenience `docker-compose.yml` that starts the dev MySQL. The app itself needs just a MySQL 8.4 server reachable at `MYSQL_HOST:MYSQL_PORT`; system-installed servers work identically.
+- **Docker** (optional) — only for the convenience `docker-compose.yml` that starts the dev MySQL. The app itself needs just a MySQL 8.4 server reachable at the host and port in `DATABASE_URL`; system-installed servers work identically.
 
 The root scripts call `concurrently` and the workspace CLIs, so everything runs from the repository root.
 
@@ -80,8 +80,8 @@ npm run db:generate             # generate the Prisma client
 npm run dev
 ```
 
-`.env` is gitignored; `.env.example` lists every variable the app reads with
-placeholder values only.
+`.env` is gitignored; `.env.example` lists every variable the app, its tests, and
+`docker-compose.yml` read, with placeholder values only.
 
 ## Running
 
@@ -242,7 +242,7 @@ The e2e tier boots the full `AppModule`, which starts the in-process MySQL-backe
 
 The Jest scripts set `NODE_OPTIONS=--experimental-vm-modules` because `@nestjs/schedule` is ESM-only while ts-jest runs in CommonJS mode. This is test-only and does not affect runtime.
 
-**Test database.** The e2e tier uses a dedicated `gameshelf_test` database (never the dev `gameshelf` one), selected by `DATABASE_TEST_URL` in `.env` (default: `mysql://gameshelf:gameshelf@localhost:3306/gameshelf_test?charset=utf8mb4`).
+**Test database.** The e2e tier uses a dedicated `gameshelf_test` database (never the dev `gameshelf` one), selected by `DATABASE_TEST_URL` in `.env` (`.env.example` sets `mysql://gameshelf:gameshelf@localhost:3306/gameshelf_test?charset=utf8mb4`; when it is unset the tests use the same database on `127.0.0.1`).
 
 - **Fresh data dir:** `docker compose up -d mysql` creates it automatically — `docker/mysql-init/02-test-database.sql` runs on first initialization of an empty data directory.
 - **Existing data dir:** the init scripts only run once, so create it manually one time:
@@ -300,7 +300,7 @@ GameShelf uses **MySQL 8.4** with `utf8mb4` / `utf8mb4_0900_ai_ci` (ADR-001 — 
 
 ### Starting the database
 
-Docker Compose is a **convenience, not a dependency**: the app only needs a MySQL server reachable at `MYSQL_HOST:MYSQL_PORT`. A system-installed MySQL 8.4 configured with the same charset works identically.
+Docker Compose is a **convenience, not a dependency**: the app only needs a MySQL server reachable at the host and port in `DATABASE_URL`. A system-installed MySQL 8.4 configured with the same charset works identically.
 
 ```bash
 docker compose up -d mysql     # starts the pinned mysql:8.4
@@ -592,23 +592,22 @@ All variables live in a single root `.env` file (see `.env.example`):
 | ------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `NODE_ENV`                      | both       | Runtime environment                                                                                                                                                                |
 | `API_PORT`                      | `apps/api` | API listen port (default `3001`)                                                                                                                                                   |
-| `API_HOST`                      | `apps/api` | API bind address                                                                                                                                                                   |
-| `WEB_PORT`                      | `apps/web` | Web dev server port (default `3000`)                                                                                                                                               |
 | `NEXT_PUBLIC_API_URL`           | `apps/web` | Internal API origin for the `/api` rewrite and SSR (never called by the browser)                                                                                                   |
-| `MYSQL_HOST`                    | `apps/api` | MySQL host (default `localhost`)                                                                                                                                                   |
-| `MYSQL_PORT`                    | `apps/api` | MySQL port (default `3306`)                                                                                                                                                        |
-| `MYSQL_DATABASE`                | `apps/api` | Database name (default `gameshelf`)                                                                                                                                                |
-| `MYSQL_USER`                    | `apps/api` | App database user (default `gameshelf`)                                                                                                                                            |
-| `MYSQL_PASSWORD`                | `apps/api` | App database user password                                                                                                                                                         |
+| `MYSQL_PORT`                    | compose    | Host port compose publishes MySQL on (default `3306`); must match `DATABASE_URL`                                                                                                   |
+| `MYSQL_DATABASE`                | compose    | Database compose creates on first init (default `gameshelf`); must match `DATABASE_URL`                                                                                            |
+| `MYSQL_USER`                    | compose    | App user compose creates on first init (default `gameshelf`); must match `DATABASE_URL`                                                                                            |
+| `MYSQL_PASSWORD`                | compose    | Password for that user; must match `DATABASE_URL`                                                                                                                                  |
 | `MYSQL_ROOT_PASSWORD`           | compose    | MySQL root password (compose only)                                                                                                                                                 |
 | `DATABASE_URL`                  | `apps/api` | Prisma connection string (utf8mb4)                                                                                                                                                 |
 | `DATABASE_SHADOW_URL`           | `apps/api` | Prisma shadow DB (migrate dev only)                                                                                                                                                |
+| `DATABASE_TEST_URL`             | `apps/api` | E2E test database, tests only (default `gameshelf_test` on `127.0.0.1:3306`)                                                                                                       |
+| `PRISMA_LOG_QUERIES`            | `apps/api` | `1` logs every SQL statement the API runs (dev aid; default off)                                                                                                                   |
 | `SESSION_SECRET`                | `apps/api` | HMAC-SHA256 key for session tokens (≥32 chars)                                                                                                                                     |
 | `SESSION_TTL_MINUTES`           | `apps/api` | Sliding session lifetime in minutes (default `10080`; no "never")                                                                                                                  |
+| `SESSION_COOKIE_SECURE`         | `apps/api` | Send the session cookie only over HTTPS (`true`/`1` or `false`/`0`, default `false`)                                                                                               |
 | `CUSTOM_API_KEY`                | `apps/api` | API key for the OpenAI-compatible vision endpoint (fallback when no encrypted DB key is stored)                                                                                    |
 | `LLM_MODEL`                     | `apps/api` | Vision model override when none is stored                                                                                                                                          |
 | `LLM_SETTINGS_SECRET`           | `apps/api` | Key-derivation secret for the stored API key's AES-256-GCM key (falls back to `SESSION_SECRET`)                                                                                    |
-| `ANTHROPIC_API_KEY`             | `apps/api` | Reserved for a future provider; **not read** by the current code                                                                                                                   |
 | `IMPORT_PHOTOS_DIR`             | `apps/api` | Ephemeral upload directory (default `<OS temp>/gameshelf-import-photos`); the pipeline deletes a photo after its job completes and a sweep removes leftovers (see Photo Lifecycle) |
 | `COVERS_DIR`                    | `apps/api` | Durable cover-cache directory (default `~/.gameshelf/covers`); saves a same-origin `/api/covers/<file>` and serves generated thumbnails at `/api/covers/thumbs/<file>`             |
 | `COVER_PREVIEW_HOSTS`           | `apps/api` | Comma list of hosts the local cover cache and the signed `/api/covers/preview` passthrough may fetch (default `images.igdb.com,www.mobygames.com,mobygames.com`)                   |
@@ -618,6 +617,9 @@ All variables live in a single root `.env` file (see `.env.example`):
 | `IGDB_CLIENT_SECRET`            | `apps/api` | IGDB credentials                                                                                                                                                                   |
 | `IGDB_TOKEN_URL`                | `apps/api` | Optional OAuth token endpoint override (default `https://id.twitch.tv/oauth2/token`)                                                                                               |
 | `MOBYGAMES_API_KEY`             | `apps/api` | Optional MobyGames fallback key; blank = fallback disabled, IGDB-only                                                                                                              |
+
+There is no host or web-port variable: the API binds all interfaces on
+`API_PORT`, and the web port is fixed at `3000` in `apps/web/package.json`.
 
 ## Operational checks
 

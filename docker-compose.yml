@@ -1,7 +1,7 @@
 # GameShelf — local development database.
 #
 # Convenience only: the application has no dependency on Docker or on this
-# file. It only needs a MySQL 8.4 server reachable at MYSQL_HOST:MYSQL_PORT
+# file. It only needs a MySQL 8.4 server reachable through DATABASE_URL,
 # with character set utf8mb4 (see README, "Database (local dev)").
 #
 # Credentials come from the environment (the .env file next to this file).
