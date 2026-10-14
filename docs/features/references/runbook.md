@@ -18,16 +18,16 @@ this document only points at it.
 
 # What to do when
 
-| Situation                                       | Read (README section)                                                                                     |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| First install, from a clean clone               | [Setup](../../../README.md#setup) — one command (`npm run setup`) or the manual fallback                  |
-| Start / stop the app                            | [Running](../../../README.md#running) — `npm run dev` (API :3001, web :3000)                              |
-| Create or recover an account (CLI)              | [Accounts and registration](../../../README.md#accounts-and-registration) — `user:create` / `user:passwd` |
-| Back up the library                             | [Backup and restore](../../../README.md#backup-and-restore) — logical `mysqldump`                         |
-| Restore after data loss, rebuild, or a new host | [Backup and restore](../../../README.md#backup-and-restore) — the restore procedure                       |
-| Post-setup or post-incident health sweep        | [Operational checks](../../../README.md#operational-checks)                                               |
-| Configure LLM / IGDB / MobyGames credentials    | [External services (LLM, IGDB, MobyGames)](../../../README.md#external-services-llm-igdb-mobygames)       |
-| What is (and is not) supported                  | [Scope](../../../README.md#scope) — deployment is out of scope                                            |
+| Situation                                       | Read (README section)                                                                                               |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| First install, from a clean clone               | [Setup](../../../README.md#setup) — one command (`npm run setup`) or the manual fallback                            |
+| Start / stop the app                            | [Running](../../../README.md#running) — `npm run dev` (API on `API_PORT`, web on `WEB_PORT`; default :3001 / :3000) |
+| Create or recover an account (CLI)              | [Accounts and registration](../../../README.md#accounts-and-registration) — `user:create` / `user:passwd`           |
+| Back up the library                             | [Backup and restore](../../../README.md#backup-and-restore) — logical `mysqldump`                                   |
+| Restore after data loss, rebuild, or a new host | [Backup and restore](../../../README.md#backup-and-restore) — the restore procedure                                 |
+| Post-setup or post-incident health sweep        | [Operational checks](../../../README.md#operational-checks)                                                         |
+| Configure LLM / IGDB / MobyGames credentials    | [External services (LLM, IGDB, MobyGames)](../../../README.md#external-services-llm-igdb-mobygames)                 |
+| What is (and is not) supported                  | [Scope](../../../README.md#scope) — deployment is out of scope                                                      |
 
 # Related feature docs
 

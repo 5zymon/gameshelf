@@ -198,6 +198,23 @@ async rewrites() {
 }
 ```
 
+`.env.example` leaves it blank, and both readers (`next.config.mjs`,
+`apps/web/src/lib/api/server.ts`) derive `http://localhost:<API_PORT>` when it is
+blank — 3001 when `API_PORT` is blank or unset, matching the API's own default —
+so moving the API port moves the rewrite target with it. A non-blank value wins
+and is used as-is: set one (e.g. `http://127.0.0.1:4001`) only when the API is
+not reachable on `localhost`.
+
+## Ports, hosts and LAN access
+
+The listen addresses are env-driven: `API_PORT`/`API_HOST` (read by
+`apps/api/src/listen-address.ts`) and `WEB_PORT`/`WEB_HOST` (read by
+`apps/web/scripts/run-next.mjs` and passed to Next as `--port`/`--hostname`).
+Blank hosts bind every interface. Because the browser only talks to the web
+origin, a LAN device needs just the web port: no CORS configuration, no cookie
+`Domain`, and no CSP change — `'self'` is whatever host and port served the page,
+and the host-only `SameSite=Lax` session cookie follows it.
+
 There is deliberately no `trust proxy` / `X-Forwarded-*` handling in the API,
 no `proxy_set_header` in any config, and `SESSION_COOKIE_SECURE` defaults to
 `false` (`false` is the supported plain-HTTP LAN default; operators on TLS set

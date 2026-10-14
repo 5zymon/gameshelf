@@ -15,8 +15,17 @@ import type {
 import { createApiClient, type Transport } from './client';
 import { isApiError } from './errors';
 
+// A blank API_PORT means 3001, matching apps/api/src/listen-address.ts.
+const rawApiPort = process.env.API_PORT?.trim();
+const apiPort =
+  rawApiPort === undefined || rawApiPort === '' ? '3001' : rawApiPort;
+
+// A blank NEXT_PUBLIC_API_URL derives the origin from the API port.
+const rawApiOrigin = process.env.NEXT_PUBLIC_API_URL?.trim();
 const API_ORIGIN = (
-  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
+  rawApiOrigin === undefined || rawApiOrigin === ''
+    ? `http://localhost:${apiPort}`
+    : rawApiOrigin
 ).replace(/\/+$/, '');
 
 const transport: Transport = {

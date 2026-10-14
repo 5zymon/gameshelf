@@ -93,7 +93,7 @@ async rewrites() {
 }
 ```
 
-`apiOrigin` is `NEXT_PUBLIC_API_URL` (default `http://localhost:3001`) with any
+`apiOrigin` is `NEXT_PUBLIC_API_URL` (default `http://localhost:<API_PORT>`, `3001` when unset) with any
 trailing slashes stripped. The client forms therefore `fetch('/api/auth/login')`
 and friends with a **relative** URL and `credentials: 'same-origin'`.
 

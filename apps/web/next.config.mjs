@@ -16,10 +16,19 @@ nextEnv.loadEnvConfig(
   true,
 );
 
-// Server-side target of the `/api` rewrite (and of SSR in `lib/api.ts`). This
-// is never a browser URL: the browser only ever calls the web origin.
+// A blank API_PORT means 3001, matching apps/api/src/listen-address.ts.
+const rawApiPort = process.env.API_PORT?.trim();
+const apiPort =
+  rawApiPort === undefined || rawApiPort === '' ? '3001' : rawApiPort;
+
+// Server-side target of the `/api` rewrite (and of SSR in `lib/api/server.ts`).
+// A blank NEXT_PUBLIC_API_URL derives the origin from the API port; this is
+// never a browser URL: the browser only ever calls the web origin.
+const rawApiOrigin = process.env.NEXT_PUBLIC_API_URL?.trim();
 const apiOrigin = (
-  process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001'
+  rawApiOrigin === undefined || rawApiOrigin === ''
+    ? `http://localhost:${apiPort}`
+    : rawApiOrigin
 ).replace(/\/+$/, '');
 
 /** @type {import('next').NextConfig} */

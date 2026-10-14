@@ -51,7 +51,7 @@ jobs:
           --health-start-period=30s
     env:
       # Throwaway credentials — the container is discarded with the run.
-      # Same shape as .env.example:35 (explicit ?charset=utf8mb4).
+      # Same shape as DATABASE_URL in .env.example (explicit ?charset=utf8mb4).
       DATABASE_URL: mysql://gameshelf:gameshelf@127.0.0.1:3306/gameshelf?charset=utf8mb4
     steps:
       - name: Checkout

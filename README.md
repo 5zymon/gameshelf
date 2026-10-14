@@ -21,8 +21,8 @@ depends on them**:
   operator.
 - **No requirement depends on a container.** `docker-compose.yml` is a
   _convenience_ that starts a local MySQL. The application has no
-  dependency on Docker or on that file: it needs only a MySQL 8.4 server at
-  `MYSQL_HOST:MYSQL_PORT`.
+  dependency on Docker or on that file: it needs only a MySQL 8.4 server
+  reachable at the host and port in `DATABASE_URL`.
   System-installed servers work identically.
 
 ## Prerequisites
@@ -30,7 +30,7 @@ depends on them**:
 - **Node.js 24 LTS** (`>=24 <25`) — pinned in `.nvmrc` and `package.json` (`engines.node`).
 - **npm 11+** (ships with Node 24).
 - [nvm](https://github.com/nvm-sh/nvm) (optional but recommended) to select the pinned Node version.
-- **Docker** (optional) — only for the convenience `docker-compose.yml` that starts the dev MySQL. The app itself needs just a MySQL 8.4 server reachable at `MYSQL_HOST:MYSQL_PORT`; system-installed servers work identically.
+- **Docker** (optional) — only for the convenience `docker-compose.yml` that starts the dev MySQL. The app itself needs just a MySQL 8.4 server reachable at the host and port in `DATABASE_URL`; system-installed servers work identically.
 
 The root scripts call `concurrently` and the workspace CLIs, so everything runs from the repository root.
 
@@ -60,10 +60,10 @@ It runs, in order (idempotent — safe to re-run):
 Then start the app:
 
 ```bash
-npm run dev          # API on :3001, web on :3000
+npm run dev          # API on :3001, web on :3000 (API_PORT / WEB_PORT)
 ```
 
-Open <http://localhost:3000> — the app redirects to `/setup` when no users exist; create your first account there.
+Open <http://localhost:3000> (or your `WEB_PORT`) — the app redirects to `/setup` when no users exist; create your first account there.
 
 ### Manual fallback
 
@@ -80,8 +80,8 @@ npm run db:generate             # generate the Prisma client
 npm run dev
 ```
 
-`.env` is gitignored; `.env.example` lists every variable the app reads with
-placeholder values only.
+`.env` is gitignored; `.env.example` lists every variable the app, its tests, and
+`docker-compose.yml` read, with placeholder values only.
 
 ## Running
 
@@ -93,8 +93,8 @@ npm run dev
 
 `npm run dev` runs `concurrently` and starts:
 
-- **API** — NestJS on <http://localhost:3001> (health check at `/health`)
-- **Web** — Next.js on <http://localhost:3000>
+- **API** — NestJS on `API_HOST:API_PORT`, default <http://localhost:3001> (health check at `/health`)
+- **Web** — Next.js on `WEB_HOST:WEB_PORT`, default <http://localhost:3000>
 
 Other useful scripts (all run from the root):
 
@@ -121,6 +121,26 @@ Other useful scripts (all run from the root):
 | `npm run lint:fix`          | Lint both workspaces and autofix                                               |
 | `npm run format`            | Format the whole repo with Prettier                                            |
 | `npm run format:check`      | Check formatting without writing                                               |
+
+### Reaching the app from another device (LAN)
+
+Both servers bind every interface by default (`WEB_HOST` and `API_HOST` blank),
+so a phone or another computer on the same network can use the app:
+
+1. Optionally pick a port in `.env` (e.g. `WEB_PORT=4000`) and restart `npm run dev`.
+2. Find this machine's LAN IP — Next prints a `Network:` URL on start, or on
+   macOS run `ipconfig getifaddr en0`.
+3. On the other device open `http://<LAN IP>:<WEB_PORT>` and sign in.
+
+Only the web port has to be reachable: the browser talks to the web app alone,
+which forwards `/api` to the API server-side (see "Single origin, CSP, and fonts"),
+so no CORS, cookie or CSP setting changes. Keep `SESSION_COOKIE_SECURE=false` on
+plain HTTP. Set `API_HOST=127.0.0.1` (with
+`NEXT_PUBLIC_API_URL=http://127.0.0.1:<API_PORT>`) to keep the API off the network,
+or `WEB_HOST=127.0.0.1` to keep the whole app on this machine. Allow incoming
+connections for `node` if the OS firewall asks. In dev, Next may log a
+"Cross origin request detected … allowedDevOrigins" warning for a LAN address; it
+is informational and does not block the page or hot reload.
 
 ### Code quality and git hooks
 
@@ -242,7 +262,7 @@ The e2e tier boots the full `AppModule`, which starts the in-process MySQL-backe
 
 The Jest scripts set `NODE_OPTIONS=--experimental-vm-modules` because `@nestjs/schedule` is ESM-only while ts-jest runs in CommonJS mode. This is test-only and does not affect runtime.
 
-**Test database.** The e2e tier uses a dedicated `gameshelf_test` database (never the dev `gameshelf` one), selected by `DATABASE_TEST_URL` in `.env` (default: `mysql://gameshelf:gameshelf@localhost:3306/gameshelf_test?charset=utf8mb4`).
+**Test database.** The e2e tier uses a dedicated `gameshelf_test` database (never the dev `gameshelf` one), selected by `DATABASE_TEST_URL` in `.env` (`.env.example` sets `mysql://gameshelf:gameshelf@localhost:3306/gameshelf_test?charset=utf8mb4`; when it is unset the tests use the same database on `127.0.0.1`).
 
 - **Fresh data dir:** `docker compose up -d mysql` creates it automatically — `docker/mysql-init/02-test-database.sql` runs on first initialization of an empty data directory.
 - **Existing data dir:** the init scripts only run once, so create it manually one time:
@@ -300,7 +320,7 @@ GameShelf uses **MySQL 8.4** with `utf8mb4` / `utf8mb4_0900_ai_ci` (ADR-001 — 
 
 ### Starting the database
 
-Docker Compose is a **convenience, not a dependency**: the app only needs a MySQL server reachable at `MYSQL_HOST:MYSQL_PORT`. A system-installed MySQL 8.4 configured with the same charset works identically.
+Docker Compose is a **convenience, not a dependency**: the app only needs a MySQL server reachable at the host and port in `DATABASE_URL`. A system-installed MySQL 8.4 configured with the same charset works identically.
 
 ```bash
 docker compose up -d mysql     # starts the pinned mysql:8.4
@@ -592,23 +612,25 @@ All variables live in a single root `.env` file (see `.env.example`):
 | ------------------------------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `NODE_ENV`                      | both       | Runtime environment                                                                                                                                                                |
 | `API_PORT`                      | `apps/api` | API listen port (default `3001`)                                                                                                                                                   |
-| `API_HOST`                      | `apps/api` | API bind address                                                                                                                                                                   |
-| `WEB_PORT`                      | `apps/web` | Web dev server port (default `3000`)                                                                                                                                               |
-| `NEXT_PUBLIC_API_URL`           | `apps/web` | Internal API origin for the `/api` rewrite and SSR (never called by the browser)                                                                                                   |
-| `MYSQL_HOST`                    | `apps/api` | MySQL host (default `localhost`)                                                                                                                                                   |
-| `MYSQL_PORT`                    | `apps/api` | MySQL port (default `3306`)                                                                                                                                                        |
-| `MYSQL_DATABASE`                | `apps/api` | Database name (default `gameshelf`)                                                                                                                                                |
-| `MYSQL_USER`                    | `apps/api` | App database user (default `gameshelf`)                                                                                                                                            |
-| `MYSQL_PASSWORD`                | `apps/api` | App database user password                                                                                                                                                         |
+| `API_HOST`                      | `apps/api` | API bind address (blank = every interface; `127.0.0.1` keeps it off the LAN)                                                                                                       |
+| `WEB_PORT`                      | `apps/web` | Web listen port for `dev`/`start` (default `3000`)                                                                                                                                 |
+| `WEB_HOST`                      | `apps/web` | Web bind address (blank = every interface, reachable from the LAN)                                                                                                                 |
+| `NEXT_PUBLIC_API_URL`           | `apps/web` | Internal API origin for the `/api` rewrite and SSR (never called by the browser); blank derives it from `API_PORT`                                                                 |
+| `MYSQL_PORT`                    | compose    | Host port compose publishes MySQL on (default `3306`); must match `DATABASE_URL`                                                                                                   |
+| `MYSQL_DATABASE`                | compose    | Database compose creates on first init (default `gameshelf`); must match `DATABASE_URL`                                                                                            |
+| `MYSQL_USER`                    | compose    | App user compose creates on first init (default `gameshelf`); must match `DATABASE_URL`                                                                                            |
+| `MYSQL_PASSWORD`                | compose    | Password for that user; must match `DATABASE_URL`                                                                                                                                  |
 | `MYSQL_ROOT_PASSWORD`           | compose    | MySQL root password (compose only)                                                                                                                                                 |
 | `DATABASE_URL`                  | `apps/api` | Prisma connection string (utf8mb4)                                                                                                                                                 |
 | `DATABASE_SHADOW_URL`           | `apps/api` | Prisma shadow DB (migrate dev only)                                                                                                                                                |
+| `DATABASE_TEST_URL`             | `apps/api` | E2E test database, tests only (default `gameshelf_test` on `127.0.0.1:3306`)                                                                                                       |
+| `PRISMA_LOG_QUERIES`            | `apps/api` | `1` logs every SQL statement the API runs (dev aid; default off)                                                                                                                   |
 | `SESSION_SECRET`                | `apps/api` | HMAC-SHA256 key for session tokens (≥32 chars)                                                                                                                                     |
 | `SESSION_TTL_MINUTES`           | `apps/api` | Sliding session lifetime in minutes (default `10080`; no "never")                                                                                                                  |
+| `SESSION_COOKIE_SECURE`         | `apps/api` | Send the session cookie only over HTTPS (`true`/`1` or `false`/`0`, default `false`)                                                                                               |
 | `CUSTOM_API_KEY`                | `apps/api` | API key for the OpenAI-compatible vision endpoint (fallback when no encrypted DB key is stored)                                                                                    |
 | `LLM_MODEL`                     | `apps/api` | Vision model override when none is stored                                                                                                                                          |
 | `LLM_SETTINGS_SECRET`           | `apps/api` | Key-derivation secret for the stored API key's AES-256-GCM key (falls back to `SESSION_SECRET`)                                                                                    |
-| `ANTHROPIC_API_KEY`             | `apps/api` | Reserved for a future provider; **not read** by the current code                                                                                                                   |
 | `IMPORT_PHOTOS_DIR`             | `apps/api` | Ephemeral upload directory (default `<OS temp>/gameshelf-import-photos`); the pipeline deletes a photo after its job completes and a sweep removes leftovers (see Photo Lifecycle) |
 | `COVERS_DIR`                    | `apps/api` | Durable cover-cache directory (default `~/.gameshelf/covers`); saves a same-origin `/api/covers/<file>` and serves generated thumbnails at `/api/covers/thumbs/<file>`             |
 | `COVER_PREVIEW_HOSTS`           | `apps/api` | Comma list of hosts the local cover cache and the signed `/api/covers/preview` passthrough may fetch (default `images.igdb.com,www.mobygames.com,mobygames.com`)                   |
@@ -619,10 +641,18 @@ All variables live in a single root `.env` file (see `.env.example`):
 | `IGDB_TOKEN_URL`                | `apps/api` | Optional OAuth token endpoint override (default `https://id.twitch.tv/oauth2/token`)                                                                                               |
 | `MOBYGAMES_API_KEY`             | `apps/api` | Optional MobyGames fallback key; blank = fallback disabled, IGDB-only                                                                                                              |
 
+`WEB_PORT`/`WEB_HOST` are read by `apps/web/scripts/run-next.mjs`, which passes them
+to `next dev`/`next start` as `--port`/`--hostname`; Next's own `PORT`/`HOSTNAME` are
+not used. A variable exported in the shell overrides `.env` (e.g.
+`WEB_PORT=4000 npm run dev`). Next inlines `NEXT_PUBLIC_*` at build time, so run
+`npm run build` again after changing `API_PORT` or `NEXT_PUBLIC_API_URL` for `npm start`.
+
 ## Operational checks
 
 Run these after setup and after any incident. All are read-only and safe while
 the app is up.
+
+The URLs below use the default ports; substitute your `API_PORT` / `WEB_PORT`.
 
 | Check                  | Command                                                                 | Expected                                                              |
 | ---------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------- |
