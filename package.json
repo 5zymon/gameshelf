@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "GameShelf — track, organize, and discover your video game library.",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "engines": {
     "node": ">=24 <25"
   },
