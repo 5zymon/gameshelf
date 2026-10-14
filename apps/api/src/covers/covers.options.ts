@@ -1,11 +1,38 @@
-import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 
 /** Env var overriding the on-disk cover cache location. */
 export const COVERS_DIR_ENV = 'COVERS_DIR';
 
-/** Default cover cache directory (a durable, user-writable location). */
-export const DEFAULT_COVERS_DIR = join(homedir(), '.gameshelf', 'covers');
+/** Name of the default cover cache directory, inside the repository. */
+export const COVERS_DIR_NAME = 'covers';
+
+/**
+ * The monorepo root: the nearest ancestor of this file whose `package.json`
+ * declares `workspaces`. Relative `COVERS_DIR` values are resolved against it
+ * rather than the per-workspace cwd (`apps/api`), so the API, the CLI commands
+ * and the test run all share one cache directory.
+ */
+export const REPO_ROOT = findRepoRoot(__dirname) ?? process.cwd();
+
+/**
+ * Default cover cache directory: the git-ignored `covers/` in the repository
+ * root, next to `data/` and `backups/`.
+ */
+export const DEFAULT_COVERS_DIR = join(REPO_ROOT, COVERS_DIR_NAME);
+
+/**
+ * Cache directory for a raw `COVERS_DIR` value: blank/absent falls back to the
+ * default, an absolute path is used as-is, and a relative path is resolved
+ * against the repository root.
+ */
+export function resolveCoversDir(raw: string | undefined | null): string {
+  const value = raw?.trim() ?? '';
+  if (value === '') {
+    return DEFAULT_COVERS_DIR;
+  }
+  return isAbsolute(value) ? value : resolve(REPO_ROOT, value);
+}
 
 /** Same-origin prefix the cache is served under (the web app rewrites `/api`). */
 export const COVER_URL_PREFIX = '/api/covers';
@@ -150,4 +177,40 @@ function readPositiveIntEnv(name: string, fallback: number): number {
   const raw = process.env[name];
   const parsed = raw === undefined ? Number.NaN : Number(raw);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+/** Walks up from `from` looking for the workspace root manifest. */
+function findRepoRoot(from: string): string | null {
+  let dir = from;
+  for (;;) {
+    const manifest = join(dir, 'package.json');
+    if (existsSync(manifest) && declaresWorkspaces(manifest)) {
+      return dir;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) {
+      return null;
+    }
+    dir = parent;
+  }
+}
+
+/** True when the manifest at `path` is a workspace root (`workspaces` set). */
+function declaresWorkspaces(path: string): boolean {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'));
+    if (typeof parsed !== 'object' || parsed === null) {
+      return false;
+    }
+    const workspaces = (parsed as { workspaces?: unknown }).workspaces;
+    return (
+      (Array.isArray(workspaces) && workspaces.length > 0) ||
+      (typeof workspaces === 'object' &&
+        workspaces !== null &&
+        Object.keys(workspaces).length > 0)
+    );
+  } catch {
+    // An unreadable or malformed manifest is not the root marker.
+    return false;
+  }
 }
