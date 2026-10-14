@@ -380,8 +380,8 @@ worker's readiness and the durable job counts from one `GROUP BY status` over
 `workerReady` is `true` once the worker has started polling. A failure while
 reading the counts returns `503` with a fixed message (the cause is logged
 server-side), so the endpoint never leaks internals. See the
-[Operator Runbook](/references/runbook.md) and the root `README.md`
-("Operational checks").
+[Operator Runbook](/references/runbook.md) and
+[Operational checks](/references/operations.md#operational-checks).
 
 # Structured logging
 

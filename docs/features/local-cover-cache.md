@@ -151,7 +151,7 @@ orphans a file.
 | `COVER_PREVIEW_SECRET`          | `SESSION_SECRET`                                  | HMAC key for preview URLs                                             |
 | `COVER_RETRY_SWEEP_INTERVAL_MS` | `900000` (15 min)                                 | background retry interval                                             |
 
-See the root `README.md` and `.env.example`.
+See [Environment variables](/references/configuration.md#environment-variables) and `.env.example`.
 
 # Tests
 
