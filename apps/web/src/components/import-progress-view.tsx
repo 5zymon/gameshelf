@@ -12,6 +12,7 @@ import {
 } from '@/lib/api';
 import { api } from '@/lib/api/browser';
 import { ImportPhotoReview } from '@/components/import-photo-review';
+import { ProgressBar } from '@/components/progress-bar';
 import { batchCounts, pauseCopy, sortPhotos } from '@/lib/import/progress';
 
 const POLL_RUNNING_MS = 2000;
@@ -299,22 +300,11 @@ export function ImportProgressView({
       )}
 
       <div className="space-y-3">
-        <div
-          role="progressbar"
-          aria-label={t('progressAria', {
-            done: progress.completedCount,
-            total,
-          })}
-          aria-valuenow={percent}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          className="h-2 w-full overflow-hidden rounded-full bg-edge"
-        >
-          <div
-            className="h-full bg-accent transition-[width] motion-reduce:transition-none"
-            style={{ width: `${String(percent)}%` }}
-          />
-        </div>
+        <ProgressBar
+          label={t('progressAria', { done: progress.completedCount, total })}
+          value={percent}
+          busy={!finished && !progress.paused}
+        />
         <p role="status" aria-live="polite" className="text-sm text-muted">
           {t('processed', { done: progress.completedCount, total })}
         </p>
