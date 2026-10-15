@@ -147,7 +147,7 @@ database, the CI gates and the git hooks.
 
 ## License
 
-[MIT](LICENSE) © 2026 Szymon Nowak.
+[MIT](LICENSE).
 
 Game metadata and covers come from [IGDB](https://www.igdb.com/) and, optionally,
 [MobyGames](https://www.mobygames.com/). Agent skills vendored under
