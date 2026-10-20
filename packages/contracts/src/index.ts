@@ -222,6 +222,18 @@ export interface PlatformSyncResult {
   unchanged: number;
 }
 
+// ── Stats ────────────────────────────────────────────────────────────────
+export interface StatsTotals {
+  /** Count of Game rows (titles). */
+  games: number;
+  /** Sum of Game.copyCount; 0 when there are no games. */
+  copies: number;
+}
+
+export interface StatsResponse {
+  totals: StatsTotals;
+}
+
 // ── Import jobs ──────────────────────────────────────────────────────────
 export const IMPORT_JOB_STATUSES = [
   'queued',

@@ -33,6 +33,7 @@ import type {
   SetupResponse,
   SetupStatus,
   StartImportUploadResponse,
+  StatsResponse,
   UnrecognizedItem,
   UpdateGameRequest,
   UpdatePlatformRequest,
@@ -251,6 +252,9 @@ export interface ApiClient {
     ): Promise<LoginResponse>;
     logout(options?: ApiRequestOptions): Promise<void>;
     me(options?: ApiRequestOptions): Promise<AuthUser>;
+  };
+  stats: {
+    get(options?: ApiRequestOptions): Promise<StatsResponse>;
   };
   setup: {
     status(options?: ApiRequestOptions): Promise<SetupStatus>;
@@ -487,6 +491,10 @@ export function createApiClient(transport: Transport): ApiClient {
         request(transport, '/auth/logout', noBodyInit('POST', options)),
       me: (options) =>
         request<AuthUser>(transport, '/auth/me', getInit(options)),
+    },
+    stats: {
+      get: (options) =>
+        request<StatsResponse>(transport, '/stats', getInit(options)),
     },
     setup: {
       status: (options) =>

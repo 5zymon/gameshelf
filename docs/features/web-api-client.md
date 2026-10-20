@@ -58,7 +58,7 @@ narrows a `409` carrying `code: 'GAME_ALREADY_IN_CATALOG'` and the existing
 
 `createApiClient` exposes `games` (list, search, get, create, addCopy, update,
 remove, enrich), `platforms` (list, get, create, update, confirm, merge,
-remove, refresh), `importJobs` (list, get, getBatch, retry, resume,
+remove, refresh), `stats` (get), `importJobs` (list, get, getBatch, retry, resume,
 listUnrecognized, dismiss, dismissUnrecognizedItem, pickUnrecognizedCandidate,
 searchUnrecognizedItem), `importUpload.upload`,
 `settings.llm` (get, put, test), `settings.gameDatabases.status`, `auth`

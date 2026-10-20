@@ -31,6 +31,7 @@
     "main": "Main",
     "catalog": "Catalog",
     "platforms": "Platforms",
+    "stats": "Statistics",
     "addGame": "Add game",
     "import": "Import",
     "settings": "Settings",
@@ -155,7 +156,8 @@
   "loading": {
     "catalog": "Loading games…",
     "gameDetail": "Loading game…",
-    "importProgress": "Loading import progress…"
+    "importProgress": "Loading import progress…",
+    "stats": "Loading statistics…"
   },
   "catalogFilters": {
     "searchTitles": "Search titles",
@@ -610,6 +612,17 @@
       "button": "Refresh platforms",
       "refreshing": "Refreshing…",
       "summary": "Platform list refreshed — {fetched} fetched, {created} added, {updated} updated, {unchanged} unchanged."
+    }
+  },
+  "stats": {
+    "title": "Statistics",
+    "summary": "{games, plural, one {# game} other {# games}} · {copies, plural, one {# copy} other {# copies}}",
+    "gamesLabel": "Games",
+    "empty": {
+      "title": "No games to count yet",
+      "body": "Import your games or add one by hand, and the statistics will appear here.",
+      "import": "Import games",
+      "addGame": "Add a game"
     }
   }
 }

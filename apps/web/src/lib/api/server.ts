@@ -11,6 +11,7 @@ import type {
   LlmSettingsModel,
   Platform,
   PreferencesModel,
+  StatsResponse,
 } from './contracts';
 import { createApiClient, type Transport } from './client';
 import { isApiError } from './errors';
@@ -60,6 +61,16 @@ export async function getGames(
 ): Promise<ListGamesResponse | null> {
   try {
     return await api.games.list({ limit: 24, ...query });
+  } catch (error) {
+    if (isApiError(error) && error.status === 401) return null;
+    throw error;
+  }
+}
+
+/** Collection totals for the stats page. 401 → null (not signed in). */
+export async function getStats(): Promise<StatsResponse | null> {
+  try {
+    return await api.stats.get();
   } catch (error) {
     if (isApiError(error) && error.status === 401) return null;
     throw error;

@@ -52,3 +52,5 @@ coverage/
 .qa
 
 .claude
+.playwright-cli/
+specifications/

@@ -8,6 +8,7 @@ import { usePathname } from 'next/navigation';
 const NAV_ITEMS = [
   { href: '/', key: 'catalog' },
   { href: '/platforms', key: 'platforms' },
+  { href: '/stats', key: 'stats' },
   { href: '/import', key: 'import' },
   { href: '/settings', key: 'settings' },
 ] as const;
