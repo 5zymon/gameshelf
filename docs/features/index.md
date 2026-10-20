@@ -27,6 +27,7 @@ okf_version: '0.2'
 - [LLM Settings UI](llm-settings-ui.md) - the /settings screen: provider/key config, a saved-config connection test, game-database status, and platform refresh.
 - [Platforms API](platforms-api.md) - platform CRUD with game counts, rename-preserving aliases, merge/confirm, delete-or-hide rules, import-created platforms, and the canonical IGDB platform list synced locally by `npm run platforms:sync`.
 - [Platforms UI](platforms-ui.md) - the /platforms management view: game-count list, add/rename/delete/hide, merge-with-alias, the import-created review block, and canonical-vs-manual badges.
+- [Collection Statistics](stats.md) - the /stats page and `GET /stats`: the number of games (titles) and physical copies, with an import prompt for an empty collection.
 - [Web Auth UI](web-auth-ui.md) - browser login/setup flows, the authenticated navigation shell (catalog/platforms/import/settings), layered server-side route protection, the same-origin `/api` rewrite, and the cookie-only (no token) auth guarantee, with a manual acceptance script.
 - [Web API Client](web-api-client.md) - one typed frontend API client plus shared `@gameshelf/contracts` wire types, centralised base URL/credentials, query builders, and a single typed `ApiError`.
 - [Catalog Grid](catalog-grid.md) - the server-paginated cover-art grid at `/` with title/platform tiles, a gradient initial-tile placeholder for missing covers, same-origin thumbnails, lazy loading, and an empty state pointing at manual add and photo import.

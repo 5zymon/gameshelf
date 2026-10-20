@@ -14,6 +14,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { QueueModule } from './queue/queue.module';
 import { SettingsModule } from './settings/settings.module';
 import { SetupModule } from './setup/setup.module';
+import { StatsModule } from './stats/stats.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { SetupModule } from './setup/setup.module';
     SetupModule,
     SettingsModule,
     QueueModule,
+    StatsModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: SessionGuard }],

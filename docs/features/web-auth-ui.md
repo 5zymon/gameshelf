@@ -28,6 +28,7 @@ is disabled server-side (see [Auth API](auth-api.md#out-of-scope)).
 | `/login`         | `(auth)` | Server component: `getSetupStatus()`; redirects to `/setup` while setup is required              |
 | `/`              | `(app)`  | `middleware.ts` cookie check + `(app)/layout.tsx` `requireUser()`; `null` → `redirect('/login')` |
 | `/platforms`     | `(app)`  | Same shell + `requireUser` guard                                                                 |
+| `/stats`         | `(app)`  | Same shell + `requireUser` guard                                                                 |
 | `/import`        | `(app)`  | Same shell + `requireUser` guard                                                                 |
 | `/settings`      | `(app)`  | Same shell + `requireUser` guard                                                                 |
 | any `(app)` page | `(app)`  | Same layout guard — a new page under `(app)` is protected automatically                          |
@@ -63,14 +64,15 @@ client-side round-trip and therefore no flash of an empty or signed-out shell.
 `LogoutButton` does not fetch on mount.
 
 `components/main-nav.tsx` is a small client component (it needs `usePathname`
-for active state) rendering four links:
+for active state) rendering five links:
 
-| Label     | `href`       |
-| --------- | ------------ |
-| Catalog   | `/`          |
-| Platforms | `/platforms` |
-| Import    | `/import`    |
-| Settings  | `/settings`  |
+| Label      | `href`       |
+| ---------- | ------------ |
+| Catalog    | `/`          |
+| Platforms  | `/platforms` |
+| Statistics | `/stats`     |
+| Import     | `/import`    |
+| Settings   | `/settings`  |
 
 The active link gets `aria-current="page"` and a `bg-accent-soft text-accent-text`
 rounded-full pill style;
@@ -189,11 +191,11 @@ again.` (not the connection message), because the API replies `400`.
 4. **Login lands on the catalog; the shell navigates and guards every route.**
    Sign in with the correct credentials. Expect the catalog page at `/` with the
    account's initials avatar in the header (the email is exposed via the avatar's
-   `aria-label`) and the **Catalog / Platforms / Import / Settings** nav. Click
-   each nav item: expect the matching page (with the same shell) and the active
-   link carrying `aria-current="page"`. Click **Sign out**; expect `/login`. Open
-   `/`, `/platforms`, `/import` and `/settings` again; expect a `307` back to
-   `/login` each time.
+   `aria-label`) and the **Catalog / Platforms / Statistics / Import / Settings**
+   nav. Click each nav item: expect the matching page (with the same shell) and
+   the active link carrying `aria-current="page"`. Click **Sign out**; expect
+   `/login`. Open `/`, `/platforms`, `/stats`, `/import` and `/settings` again;
+   expect a `307` back to `/login` each time.
 5. **No signup link anywhere.** Inspect `/login` and `/setup` (and the catalog
    header). There is no "Sign up", "Register" or "Create account" link. The only
    `Create account` text is the setup form's submit button, which is reachable

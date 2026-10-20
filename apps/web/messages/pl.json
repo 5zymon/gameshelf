@@ -31,6 +31,7 @@
     "main": "Nawigacja główna",
     "catalog": "Katalog",
     "platforms": "Platformy",
+    "stats": "Statystyki",
     "addGame": "Dodaj grę",
     "import": "Import",
     "settings": "Ustawienia",
@@ -155,7 +156,8 @@
   "loading": {
     "catalog": "Ładowanie gier…",
     "gameDetail": "Ładowanie gry…",
-    "importProgress": "Ładowanie postępu importu…"
+    "importProgress": "Ładowanie postępu importu…",
+    "stats": "Ładowanie statystyk…"
   },
   "catalogFilters": {
     "searchTitles": "Szukaj tytułów",
@@ -610,6 +612,17 @@
       "button": "Odśwież platformy",
       "refreshing": "Odświeżanie…",
       "summary": "Lista platform odświeżona — pobrano {fetched}, dodano {created}, zaktualizowano {updated}, bez zmian {unchanged}."
+    }
+  },
+  "stats": {
+    "title": "Statystyki",
+    "summary": "{games, plural, one {# gra} few {# gry} many {# gier} other {# gry}} · {copies, plural, one {# egzemplarz} few {# egzemplarze} many {# egzemplarzy} other {# egzemplarza}}",
+    "gamesLabel": "Gry",
+    "empty": {
+      "title": "Nie ma jeszcze czego policzyć",
+      "body": "Zaimportuj swoje gry albo dodaj jedną ręcznie, a statystyki pojawią się tutaj.",
+      "import": "Importuj gry",
+      "addGame": "Dodaj grę"
     }
   }
 }
