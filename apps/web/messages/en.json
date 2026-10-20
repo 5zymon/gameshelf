@@ -618,6 +618,17 @@
     "title": "Statistics",
     "summary": "{games, plural, one {# game} other {# games}} · {copies, plural, one {# copy} other {# copies}}",
     "gamesLabel": "Games",
+    "platforms": {
+      "title": "Games per platform",
+      "platform": "Platform",
+      "share": "Share of the largest platform",
+      "games": "Games"
+    },
+    "dataQuality": {
+      "title": "Data quality",
+      "unverifiedPlatform": "{count, plural, one {# game is} other {# games are}} waiting for platform recognition",
+      "unverifiedNote": "{count, plural, one {It is still counted under its assigned platform.} other {They are still counted under their assigned platforms.}}"
+    },
     "empty": {
       "title": "No games to count yet",
       "body": "Import your games or add one by hand, and the statistics will appear here.",

@@ -230,8 +230,20 @@ export interface StatsTotals {
   copies: number;
 }
 
+export interface StatsPlatform {
+  id: string; // Platform.id
+  name: string; // Platform.name
+  games: number; // games assigned to this platform, platformUnverified included (0001)
+}
+
+export interface StatsDataQuality {
+  unverifiedPlatform: number; // games with platformUnverified = true
+}
+
 export interface StatsResponse {
   totals: StatsTotals;
+  platforms: StatsPlatform[]; // only platforms with ≥ 1 game; games desc, then name asc
+  dataQuality: StatsDataQuality;
 }
 
 // ── Import jobs ──────────────────────────────────────────────────────────

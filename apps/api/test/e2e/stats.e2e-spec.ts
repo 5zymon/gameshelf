@@ -6,6 +6,8 @@ import { seedGame, seedPlatform } from '../helpers/seed';
 
 interface StatsBody {
   totals: { games: number; copies: number };
+  platforms: { id: string; name: string; games: number }[];
+  dataQuality: { unverifiedPlatform: number };
 }
 
 describe('Stats API (e2e)', () => {
@@ -39,6 +41,8 @@ describe('Stats API (e2e)', () => {
       expect(res.status).toBe(200);
       expect(res.body as StatsBody).toEqual({
         totals: { games: 0, copies: 0 },
+        platforms: [],
+        dataQuality: { unverifiedPlatform: 0 },
       });
     });
 
@@ -64,6 +68,37 @@ describe('Stats API (e2e)', () => {
       expect(body.totals.games).toBe(
         (list.body as { meta: { total: number } }).meta.total,
       );
+    });
+
+    it('splits games per platform and counts unverified platforms', async () => {
+      const a = await seedPlatform(test.prisma, { name: 'A', slug: 'a' });
+      const b = await seedPlatform(test.prisma, { name: 'B', slug: 'b' });
+      await seedPlatform(test.prisma, { name: 'C', slug: 'c' });
+      await seedGame(test.prisma, { title: 'A1', platformId: a.id });
+      await seedGame(test.prisma, { title: 'A2', platformId: a.id });
+      await seedGame(test.prisma, {
+        title: 'A3',
+        platformId: a.id,
+        platformUnverified: true,
+      });
+      await seedGame(test.prisma, { title: 'B1', platformId: b.id });
+
+      const res = await test.request.get('/stats');
+      const list = await test.request.get(`/games?platformId=${a.id}`);
+
+      expect(res.status).toBe(200);
+      const body = res.body as StatsBody;
+      expect(body.platforms).toEqual([
+        { id: a.id, name: 'A', games: 3 },
+        { id: b.id, name: 'B', games: 1 },
+      ]);
+      expect(body.platforms.reduce((sum, p) => sum + p.games, 0)).toBe(
+        body.totals.games,
+      );
+      expect(body.platforms[0]?.games).toBe(
+        (list.body as { meta: { total: number } }).meta.total,
+      );
+      expect(body.dataQuality.unverifiedPlatform).toBe(1);
     });
 
     it('rejects an unknown query param with 400', async () => {
