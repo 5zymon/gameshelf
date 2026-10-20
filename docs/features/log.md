@@ -2,6 +2,8 @@
 
 ## 2026-10-20
 
+- **Updated**: [Collection Statistics](stats.md) - ticket T-02 adds `platforms` (games per platform, games descending then name ascending, platforms with at least one game) and `dataQuality.unverifiedPlatform` to `GET /stats`, per decision 0001 (unverified-platform games count under their platform and separately under data quality); the `/stats` page gains a "Games per platform" table with SVG bars and a "Data quality" section shown only while the count is above zero. Out of scope narrowed to T-03, the T-04 zero state and extra counts, and T-05. (generated: { by: claude-code/claude-opus-5-5, at: 2026-10-20T13:00:06Z })
+
 - **Added**: [Collection Statistics](stats.md) - the `/stats` page and `GET /stats` (`totals.games`, `totals.copies`) for ticket T-01. **Updated**: [Web API Client](web-api-client.md) (`stats` namespace), [Internationalization (EN default, PL)](i18n.md) (`stats` namespace) and [Web Auth UI](web-auth-ui.md) (Statistics navigation link). (generated: { by: claude-code/claude-opus-5-5, at: 2026-10-20T09:32:30Z })
 
 ## 2026-10-14

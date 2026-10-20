@@ -618,6 +618,17 @@
     "title": "Statystyki",
     "summary": "{games, plural, one {# gra} few {# gry} many {# gier} other {# gry}} · {copies, plural, one {# egzemplarz} few {# egzemplarze} many {# egzemplarzy} other {# egzemplarza}}",
     "gamesLabel": "Gry",
+    "platforms": {
+      "title": "Gry według platformy",
+      "platform": "Platforma",
+      "share": "Udział względem największej platformy",
+      "games": "Gry"
+    },
+    "dataQuality": {
+      "title": "Jakość danych",
+      "unverifiedPlatform": "{count, plural, one {# gra czeka} few {# gry czekają} many {# gier czeka} other {# gry czeka}} na rozpoznanie platformy",
+      "unverifiedNote": "{count, plural, one {Nadal jest liczona przy przypisanej jej platformie.} few {Nadal są liczone przy przypisanych im platformach.} many {Nadal są liczone przy przypisanych im platformach.} other {Nadal są liczone przy przypisanych im platformach.}}"
+    },
     "empty": {
       "title": "Nie ma jeszcze czego policzyć",
       "body": "Zaimportuj swoje gry albo dodaj jedną ręcznie, a statystyki pojawią się tutaj.",
