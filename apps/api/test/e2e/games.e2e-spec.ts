@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto';
+import { rmSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { CoverCacheService } from '../../src/covers/cover-cache.service';
 import {
   CoverHttpClient,
   type CoverHttpResponse,
@@ -7,6 +10,15 @@ import { MISSING_ID, UUID_V7_PATTERN, testId } from '../helpers/ids';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 import { resetDatabase } from '../helpers/reset';
 import { seedGame, seedPlatform } from '../helpers/seed';
+
+const E2E_COVERS_DIR_SUFFIX = 'gameshelf-covers-e2e';
+
+function clearCoversDir(dir: string): void {
+  if (!resolve(dir).endsWith(E2E_COVERS_DIR_SUFFIX)) {
+    throw new Error(`Refusing to delete covers directory "${dir}"`);
+  }
+  rmSync(dir, { recursive: true, force: true });
+}
 
 /** A same-origin cover path the API would store for an external URL. */
 function servedCover(url: string): string {
@@ -56,22 +68,26 @@ interface GamesListBody {
 describe('Games API (e2e)', () => {
   let test: TestApp;
   let coverHttp: { get: jest.Mock<Promise<CoverHttpResponse>, [string]> };
+  let coversDir: string;
 
   beforeAll(async () => {
     coverHttp = { get: jest.fn<Promise<CoverHttpResponse>, [string]>() };
     test = await createTestApp([
       { provide: CoverHttpClient, useValue: coverHttp },
     ]);
+    coversDir = test.app.get(CoverCacheService).directory;
   });
 
   beforeEach(async () => {
     await resetDatabase(test.prisma);
+    clearCoversDir(coversDir);
     coverHttp.get.mockReset();
     await test.login();
   });
 
   afterAll(async () => {
     await test.app.close();
+    clearCoversDir(coversDir);
   });
 
   describe('GET /games', () => {
