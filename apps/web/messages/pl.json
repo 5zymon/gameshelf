@@ -624,6 +624,14 @@
       "share": "Udział względem największej platformy",
       "games": "Gry"
     },
+    "decades": {
+      "title": "Gry według dekady wydania",
+      "period": "Dekada wydania",
+      "share": "Udział względem największej dekady",
+      "games": "Gry",
+      "decade": "lata {decade}",
+      "noYear": "Brak roku"
+    },
     "dataQuality": {
       "title": "Jakość danych",
       "unverifiedPlatform": "{count, plural, one {# gra czeka} few {# gry czekają} many {# gier czeka} other {# gry czeka}} na rozpoznanie platformy",

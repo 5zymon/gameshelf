@@ -25,6 +25,12 @@ export default async function Loading(): Promise<React.ReactElement> {
         <SkeletonBlock className="mt-4 h-2 w-3/4" />
         <SkeletonBlock className="mt-4 h-2 w-1/2" />
       </div>
+      <div className="rounded-card border border-edge bg-surface p-6 sm:p-8">
+        <SkeletonBlock className="h-5 w-48" />
+        <SkeletonBlock className="mt-4 h-2 w-full" />
+        <SkeletonBlock className="mt-4 h-2 w-3/4" />
+        <SkeletonBlock className="mt-4 h-2 w-1/2" />
+      </div>
     </section>
   );
 }

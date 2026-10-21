@@ -8,6 +8,8 @@ interface StatsBody {
   totals: { games: number; copies: number };
   platforms: { id: string; name: string; games: number }[];
   dataQuality: { unverifiedPlatform: number };
+  decades: { decade: number; games: number }[];
+  noReleaseYear: number;
 }
 
 describe('Stats API (e2e)', () => {
@@ -43,6 +45,8 @@ describe('Stats API (e2e)', () => {
         totals: { games: 0, copies: 0 },
         platforms: [],
         dataQuality: { unverifiedPlatform: 0 },
+        decades: [],
+        noReleaseYear: 0,
       });
     });
 
@@ -99,6 +103,34 @@ describe('Stats API (e2e)', () => {
         (list.body as { meta: { total: number } }).meta.total,
       );
       expect(body.dataQuality.unverifiedPlatform).toBe(1);
+    });
+
+    it('groups games by release decade and counts games without a year', async () => {
+      const p = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+      for (const [title, releaseYear] of [
+        ['Y1985', 1985],
+        ['Y1991', 1991],
+        ['Y1999', 1999],
+        ['Y2004', 2004],
+        ['No year 1', null],
+        ['No year 2', null],
+      ] as const) {
+        await seedGame(test.prisma, { title, platformId: p.id, releaseYear });
+      }
+
+      const res = await test.request.get('/stats');
+
+      expect(res.status).toBe(200);
+      const body = res.body as StatsBody;
+      expect(body.decades).toEqual([
+        { decade: 1980, games: 1 },
+        { decade: 1990, games: 2 },
+        { decade: 2000, games: 1 },
+      ]);
+      expect(body.noReleaseYear).toBe(2);
+      expect(
+        body.decades.reduce((sum, d) => sum + d.games, 0) + body.noReleaseYear,
+      ).toBe(body.totals.games);
     });
 
     it('rejects an unknown query param with 400', async () => {
