@@ -263,3 +263,75 @@ test('every sort option survives a catalogHref → parse → sortOptionOf round 
     assert.equal(sortOptionOf(parsed), option);
   }
 });
+
+test('parseCatalogFilters: yearFrom/yearTo accept 1000–2100 and drop the rest', () => {
+  assert.deepEqual(parseCatalogFilters({ yearFrom: '1990', yearTo: '1999' }), {
+    yearFrom: 1990,
+    yearTo: 1999,
+  });
+  assert.deepEqual(parseCatalogFilters({ yearFrom: '1000', yearTo: '2100' }), {
+    yearFrom: 1000,
+    yearTo: 2100,
+  });
+  assert.deepEqual(
+    parseCatalogFilters({
+      yearFrom: '999',
+      yearTo: '2101',
+    }),
+    {},
+  );
+  assert.deepEqual(parseCatalogFilters({ yearFrom: 'abc', yearTo: '' }), {});
+  assert.deepEqual(parseCatalogFilters({ yearFrom: ['1990', '2000'] }), {
+    yearFrom: 1990,
+  });
+});
+
+test('parseCatalogFilters: noYear/platformUnverified are kept only as the literal true', () => {
+  assert.deepEqual(parseCatalogFilters({ noYear: 'true' }), { noYear: true });
+  assert.deepEqual(parseCatalogFilters({ platformUnverified: 'true' }), {
+    platformUnverified: true,
+  });
+  for (const raw of ['false', '1', '', 'TRUE', 'yes']) {
+    assert.deepEqual(
+      parseCatalogFilters({ noYear: raw, platformUnverified: raw }),
+      {},
+    );
+  }
+  assert.deepEqual(parseCatalogFilters({ noYear: ['false', 'true'] }), {});
+});
+
+test('hasActiveFilters: each new key activates', () => {
+  assert.equal(hasActiveFilters({ yearFrom: 1990 }), true);
+  assert.equal(hasActiveFilters({ yearTo: 1999 }), true);
+  assert.equal(hasActiveFilters({ noYear: true }), true);
+  assert.equal(hasActiveFilters({ platformUnverified: true }), true);
+});
+
+test('catalogHref: the stats link shapes', () => {
+  assert.equal(catalogHref({ platformId: [ID_A] }), `/?platformId=${ID_A}`);
+  assert.equal(
+    catalogHref({ yearFrom: 1990, yearTo: 1999 }),
+    '/?yearFrom=1990&yearTo=1999',
+  );
+  assert.equal(catalogHref({ noYear: true }), '/?noYear=true');
+  assert.equal(
+    catalogHref({ platformUnverified: true }),
+    '/?platformUnverified=true',
+  );
+  assert.equal(catalogHref({ noYear: undefined, yearFrom: undefined }), '/');
+});
+
+test('catalogHref: the new filters survive a build → parse round trip', () => {
+  const values = {
+    year: 1995,
+    yearFrom: 1990,
+    yearTo: 1999,
+    noYear: true,
+    platformUnverified: true,
+  };
+  const qs = catalogHref(values).slice(2);
+  assert.deepEqual(
+    parseCatalogFilters(Object.fromEntries(new URLSearchParams(qs))),
+    values,
+  );
+});

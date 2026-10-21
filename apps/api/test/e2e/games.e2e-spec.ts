@@ -1,4 +1,7 @@
 import { createHash } from 'node:crypto';
+import { rmSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { CoverCacheService } from '../../src/covers/cover-cache.service';
 import {
   CoverHttpClient,
   type CoverHttpResponse,
@@ -7,6 +10,15 @@ import { MISSING_ID, UUID_V7_PATTERN, testId } from '../helpers/ids';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 import { resetDatabase } from '../helpers/reset';
 import { seedGame, seedPlatform } from '../helpers/seed';
+
+const E2E_COVERS_DIR_SUFFIX = 'gameshelf-covers-e2e';
+
+function clearCoversDir(dir: string): void {
+  if (!resolve(dir).endsWith(E2E_COVERS_DIR_SUFFIX)) {
+    throw new Error(`Refusing to delete covers directory "${dir}"`);
+  }
+  rmSync(dir, { recursive: true, force: true });
+}
 
 /** A same-origin cover path the API would store for an external URL. */
 function servedCover(url: string): string {
@@ -56,22 +68,26 @@ interface GamesListBody {
 describe('Games API (e2e)', () => {
   let test: TestApp;
   let coverHttp: { get: jest.Mock<Promise<CoverHttpResponse>, [string]> };
+  let coversDir: string;
 
   beforeAll(async () => {
     coverHttp = { get: jest.fn<Promise<CoverHttpResponse>, [string]>() };
     test = await createTestApp([
       { provide: CoverHttpClient, useValue: coverHttp },
     ]);
+    coversDir = test.app.get(CoverCacheService).directory;
   });
 
   beforeEach(async () => {
     await resetDatabase(test.prisma);
+    clearCoversDir(coversDir);
     coverHttp.get.mockReset();
     await test.login();
   });
 
   afterAll(async () => {
     await test.app.close();
+    clearCoversDir(coversDir);
   });
 
   describe('GET /games', () => {
@@ -183,6 +199,66 @@ describe('Games API (e2e)', () => {
         .body as GamesListBody;
       expect(noMatch.items).toEqual([]);
       expect(noMatch.meta.total).toBe(0);
+    });
+
+    it('filters by year range, missing year and unverified platform', async () => {
+      const pc = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+      await seedGame(test.prisma, {
+        title: 'Y1989',
+        platformId: pc.id,
+        releaseYear: 1989,
+      });
+      await seedGame(test.prisma, {
+        title: 'Y1990',
+        platformId: pc.id,
+        releaseYear: 1990,
+      });
+      await seedGame(test.prisma, {
+        title: 'Y1999',
+        platformId: pc.id,
+        releaseYear: 1999,
+      });
+      await seedGame(test.prisma, {
+        title: 'Y2000',
+        platformId: pc.id,
+        releaseYear: 2000,
+      });
+      await seedGame(test.prisma, {
+        title: 'Undated',
+        platformId: pc.id,
+        platformUnverified: true,
+      });
+
+      const titles = async (
+        query: Record<string, string | number>,
+      ): Promise<string[]> =>
+        (
+          (await test.request.get('/games').query(query)).body as GamesListBody
+        ).items
+          .map((g) => g.title)
+          .sort();
+
+      expect(await titles({ yearFrom: 1990, yearTo: 1999 })).toEqual([
+        'Y1990',
+        'Y1999',
+      ]);
+      expect(await titles({ yearFrom: 1999 })).toEqual(['Y1999', 'Y2000']);
+      expect(await titles({ yearTo: 1989 })).toEqual(['Y1989']);
+      expect(await titles({ noYear: 'true' })).toEqual(['Undated']);
+      expect(await titles({ noYear: 'false', yearFrom: 2000 })).toEqual([
+        'Y2000',
+      ]);
+      expect(await titles({ platformUnverified: 'true' })).toEqual(['Undated']);
+      expect((await titles({ platformUnverified: 'false' })).length).toBe(5);
+
+      const contradictory = (
+        await test.request.get('/games').query({ noYear: 'true', year: 1990 })
+      ).body as GamesListBody;
+      expect(contradictory.meta.total).toBe(0);
+      const inverted = (
+        await test.request.get('/games').query({ yearFrom: 1999, yearTo: 1990 })
+      ).body as GamesListBody;
+      expect(inverted.meta.total).toBe(0);
     });
 
     it('filters by several platform ids as a union (repeated platformId)', async () => {
@@ -407,6 +483,11 @@ describe('Games API (e2e)', () => {
       'year=999',
       'year=2101',
       'year=abc',
+      'yearFrom=999',
+      'yearTo=2101',
+      'yearFrom=abc',
+      'noYear=yes',
+      'platformUnverified=1',
       'playerCount=0',
       'playerCount=101',
       'sort=bogus',

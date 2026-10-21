@@ -1,10 +1,10 @@
 ---
 type: Feature
 title: Collection Statistics
-description: The /stats page and GET /stats endpoint - how many games (titles) and physical copies the collection holds, how many games each platform holds, how many games come from each release decade, and how many games wait for platform recognition, 0 included (T-04); or a prompt to import games when it is empty.
+description: The /stats page and GET /stats endpoint - how many games (titles) and physical copies the collection holds, how many games each platform holds, how many games come from each release decade, and how many games wait for platform recognition, 0 included (T-04); or a prompt to import games when it is empty. Each of these number lines links to the catalog filtered to exactly those games (T-05).
 tags: [web, ui, api, stats]
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-21T10:48:51Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-21T12:00:00Z }
 ---
 
 # Overview
@@ -15,7 +15,7 @@ many games each platform holds and how many games are waiting for platform
 recognition. Ticket T-03 adds how many games come from each release decade, plus
 a separate count of games with no release year. Ticket T-04 makes the "Data
 quality" card always visible, so it states the count of games waiting for platform
-recognition even when that count is 0. Games are global per instance, so the numbers cover the whole
+recognition even when that count is 0. Ticket T-05 turns the platform rows, the decade rows, the "No year" row and the data-quality count into links that open the catalog filtered to exactly the games behind the number. Games are global per instance, so the numbers cover the whole
 collection, not one user. The page reads everything from one endpoint,
 `GET /stats`, which later stories extend with sibling fields.
 
@@ -110,7 +110,9 @@ The sections below appear only in the non-empty branch, each as a card with an
   The column headers (platform, share, games) are visually hidden but present for
   screen readers. The bar is an `aria-hidden` inline `<svg>` with a full-width
   track and a value rectangle whose `width` attribute is the share of the largest
-  platform's count (the largest is 100%). Every platform is shown, including a
+  platform's count (the largest is 100%). The platform name links to
+  `/?platformId=<id>`, so the catalog's "of N" total equals the row's count
+  (decision 0001). Every platform is shown, including a
   collection with a single bar. Platform names are data and are never translated.
 - **Games per release decade** - a `<table>` built like the platform table, with
   one row per entry of `decades`, oldest first: the decade label, a bar and the
@@ -120,13 +122,21 @@ The sections below appear only in the non-empty branch, each as a card with an
   games) are visually hidden. The largest of all shown rows, including the "No
   year" row, is the 100% bar. Only decades with games are listed. While
   `noReleaseYear` is above zero, a last row "No year" shows that count with the
-  same bar style; with zero it is absent. Rows do not link to the catalog (T-05).
+  same bar style; with zero it is absent. Each decade row links to the catalog with `yearFrom=<decade>&yearTo=<decade + 9>` (for example `/?yearFrom=1990&yearTo=1999`) and the "No year" row to `/?noYear=true`.
 - **Data quality** - always shown in the non-empty branch: one plural sentence
   ("3 games are waiting for platform recognition"). With nothing waiting it shows
   0 in the same sentence ("0 games are waiting for platform recognition", PL "0 gier
   czeka na rozpoznanie platformy"). The short note that these games are still
   counted under their assigned platform appears only while
-  `dataQuality.unverifiedPlatform` is above zero.
+  `dataQuality.unverifiedPlatform` is above zero. The sentence links to
+  `/?platformUnverified=true` only while that count is above zero; at 0 it stays
+  plain text, because a link to an empty catalog helps no one.
+
+The "Games" total tile and the header summary stay plain text. A platform link
+shows its usual platform chip. For the decade, "No year" and data-quality links the
+catalog opens its "More filters" panel by itself, with the new filters (`yearFrom`,
+`yearTo`, `noYear`, `platformUnverified`) shown as filled controls and no chips;
+see [Catalog Filters & Search](catalog-filters.md) and [Catalog API](catalog-api.md).
 
 Bar widths use the SVG `width` attribute, never an inline `style`: the production
 `style-src` is `'self' 'nonce-...'`, which blocks `style="..."` attributes. There
@@ -163,6 +173,18 @@ are no `dark:` variants and no chart library; the bars use the `fill-accent` and
     With none, the row is absent.
 12. Switch the language and theme again: the decade section stays translated and
     readable.
+13. Click a platform row: the catalog opens at `/?platformId=<id>` and its "of N"
+    total equals the number on the row.
+14. Click a decade row (for example 1990s): the catalog opens at
+    `/?yearFrom=1990&yearTo=1999`, the "More filters" panel is open with "Year from"
+    and "Year to" filled, and the total equals the decade's number.
+15. Click the "No year" row: the catalog opens at `/?noYear=true` with "No release
+    year" checked, and the total equals the row's number.
+16. With unverified-platform games, click the data-quality sentence: the catalog
+    opens at `/?platformUnverified=true` with "Platform to be recognized" checked,
+    and the total equals the count. With 0 such games the sentence is not a link.
+17. In each of these catalogs no chip appears for the new filters, and "Clear all"
+    clears them.
 
 # Related
 
@@ -178,5 +200,4 @@ are no `dark:` variants and no chart library; the bars use the `fill-accent` and
 Not yet built; later stories add them to the same response and page:
 
 - Further data-quality counts (missing cover, missing `enrichedAt`).
-- T-05: links from the numbers to the catalog and new catalog filters.
 - Any filter UI or filter query param on `/stats`, and any chart library.

@@ -3,11 +3,14 @@ import { getFormatter, getTranslations } from 'next-intl/server';
 import { redirect } from 'next/navigation';
 import type { TranslatorFor } from '@/i18n/translate';
 import { getStats } from '@/lib/api/server';
+import { catalogHref } from '@/lib/catalog-filters';
 
 export const dynamic = 'force-dynamic';
 
 const PRIMARY_BUTTON =
   'inline-flex items-center justify-center rounded-control bg-accent px-4 py-2.5 text-sm leading-none font-semibold text-accent-ink transition-colors duration-[140ms] ease-[ease] hover:bg-accent-strong motion-reduce:transition-none disabled:opacity-60';
+const STATS_LINK =
+  'rounded-control text-ink underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent';
 const SECONDARY_BUTTON =
   'inline-flex items-center justify-center rounded-control border border-edge bg-surface px-4 py-2.5 text-sm leading-none font-medium text-ink transition-colors duration-[140ms] ease-[ease] hover:border-edge-strong motion-reduce:transition-none disabled:opacity-60';
 
@@ -29,6 +32,10 @@ export default async function StatsPage(): Promise<React.ReactElement> {
     noReleaseYear,
     1,
   );
+
+  const unverifiedText = t('dataQuality.unverifiedPlatform', {
+    count: dataQuality.unverifiedPlatform,
+  });
 
   return (
     <section className="space-y-6">
@@ -69,6 +76,7 @@ export default async function StatsPage(): Promise<React.ReactElement> {
               <BarRow
                 key={platform.id}
                 label={platform.name}
+                href={catalogHref({ platformId: [platform.id] })}
                 games={platform.games}
                 max={maxGames}
                 format={format}
@@ -98,6 +106,10 @@ export default async function StatsPage(): Promise<React.ReactElement> {
               <BarRow
                 key={decade.decade}
                 label={t('decades.decade', { decade: String(decade.decade) })}
+                href={catalogHref({
+                  yearFrom: decade.decade,
+                  yearTo: decade.decade + 9,
+                })}
                 games={decade.games}
                 max={maxDecadeGames}
                 format={format}
@@ -106,6 +118,7 @@ export default async function StatsPage(): Promise<React.ReactElement> {
             {noReleaseYear > 0 ? (
               <BarRow
                 label={t('decades.noYear')}
+                href={catalogHref({ noYear: true })}
                 games={noReleaseYear}
                 max={maxDecadeGames}
                 format={format}
@@ -120,9 +133,16 @@ export default async function StatsPage(): Promise<React.ReactElement> {
           {t('dataQuality.title')}
         </h2>
         <p className="mt-2 text-sm text-ink">
-          {t('dataQuality.unverifiedPlatform', {
-            count: dataQuality.unverifiedPlatform,
-          })}
+          {dataQuality.unverifiedPlatform > 0 ? (
+            <Link
+              href={catalogHref({ platformUnverified: true })}
+              className={STATS_LINK}
+            >
+              {unverifiedText}
+            </Link>
+          ) : (
+            unverifiedText
+          )}
         </p>
         {dataQuality.unverifiedPlatform > 0 ? (
           <p className="mt-1 text-sm text-muted">
@@ -138,11 +158,13 @@ export default async function StatsPage(): Promise<React.ReactElement> {
 
 function BarRow({
   label,
+  href,
   games,
   max,
   format,
 }: {
   label: string;
+  href?: string;
   games: number;
   max: number;
   format: Awaited<ReturnType<typeof getFormatter>>;
@@ -153,7 +175,13 @@ function BarRow({
         scope="row"
         className="max-w-40 py-2 pr-4 text-left font-medium whitespace-nowrap text-ink"
       >
-        {label}
+        {href === undefined ? (
+          label
+        ) : (
+          <Link href={href} className={STATS_LINK}>
+            {label}
+          </Link>
+        )}
       </th>
       <td role="presentation" className="w-full py-2 pr-4">
         <svg
