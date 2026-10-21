@@ -34,6 +34,20 @@ export class StatsDataQualityModel {
   unverifiedPlatform!: number;
 }
 
+export class StatsDecadeModel {
+  @ApiProperty({
+    description: 'First year of the decade, e.g. 1990 for 1990-1999',
+    example: 1990,
+  })
+  decade!: number;
+
+  @ApiProperty({
+    description: 'Games whose releaseYear falls in the decade',
+    example: 17,
+  })
+  games!: number;
+}
+
 export class StatsResponseModel {
   @ApiProperty({ type: StatsTotalsModel })
   totals!: StatsTotalsModel;
@@ -47,4 +61,16 @@ export class StatsResponseModel {
 
   @ApiProperty({ type: StatsDataQualityModel })
   dataQuality!: StatsDataQualityModel;
+
+  @ApiProperty({
+    type: [StatsDecadeModel],
+    description: 'Only decades with at least one game; decade ascending',
+  })
+  decades!: StatsDecadeModel[];
+
+  @ApiProperty({
+    description: 'Games with releaseYear = null',
+    example: 4,
+  })
+  noReleaseYear!: number;
 }

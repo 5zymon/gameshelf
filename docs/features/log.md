@@ -1,5 +1,9 @@
 # Directory Update Log
 
+## 2026-10-21
+
+- **Updated**: [Collection Statistics](stats.md) - ticket T-03 adds `decades` (games per release decade; `decade` is the first year, ascending, only decades with at least one game) and `noReleaseYear` (games without a release year) to `GET /stats`; the `/stats` page gains a "Games per release decade" table with SVG bars (EN "1990s", PL "lata 1990") and a "No year" row shown only while the count is above zero. Out of scope narrowed to T-04 and T-05. (generated: { by: claude-code/claude-opus-5-5, at: 2026-10-21T08:24:16Z })
+
 ## 2026-10-20
 
 - **Updated**: [Collection Statistics](stats.md) - ticket T-02 adds `platforms` (games per platform, games descending then name ascending, platforms with at least one game) and `dataQuality.unverifiedPlatform` to `GET /stats`, per decision 0001 (unverified-platform games count under their platform and separately under data quality); the `/stats` page gains a "Games per platform" table with SVG bars and a "Data quality" section shown only while the count is above zero. Out of scope narrowed to T-03, the T-04 zero state and extra counts, and T-05. (generated: { by: claude-code/claude-opus-5-5, at: 2026-10-20T13:00:06Z })

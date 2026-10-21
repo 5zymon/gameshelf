@@ -624,6 +624,14 @@
       "share": "Share of the largest platform",
       "games": "Games"
     },
+    "decades": {
+      "title": "Games per release decade",
+      "period": "Release decade",
+      "share": "Share of the largest decade",
+      "games": "Games",
+      "decade": "{decade}s",
+      "noYear": "No year"
+    },
     "dataQuality": {
       "title": "Data quality",
       "unverifiedPlatform": "{count, plural, one {# game is} other {# games are}} waiting for platform recognition",

@@ -5,10 +5,11 @@ function createService(
   aggregate: unknown,
   platforms: unknown[] = [],
   unverified = 0,
+  years: unknown[] = [],
 ): {
   service: StatsService;
   mock: {
-    game: { aggregate: jest.Mock; count: jest.Mock };
+    game: { aggregate: jest.Mock; count: jest.Mock; groupBy: jest.Mock };
     platform: { findMany: jest.Mock };
     $transaction: jest.Mock;
   };
@@ -17,6 +18,7 @@ function createService(
     game: {
       aggregate: jest.fn().mockResolvedValue(aggregate),
       count: jest.fn().mockResolvedValue(unverified),
+      groupBy: jest.fn().mockResolvedValue(years),
     },
     platform: { findMany: jest.fn().mockResolvedValue(platforms) },
     $transaction: jest.fn((calls: Promise<unknown>[]) => Promise.all(calls)),
@@ -53,6 +55,8 @@ describe('StatsService', () => {
       totals: { games: 0, copies: 0 },
       platforms: [],
       dataQuality: { unverifiedPlatform: 0 },
+      decades: [],
+      noReleaseYear: 0,
     });
   });
 
@@ -83,6 +87,33 @@ describe('StatsService', () => {
     });
     expect(mock.game.count).toHaveBeenCalledWith({
       where: { platformUnverified: true },
+    });
+  });
+
+  it('folds release years into decades, ascending, and counts no-year games', async () => {
+    const { service, mock } = createService(
+      { _count: { _all: 6 }, _sum: { copyCount: 6 } },
+      [],
+      0,
+      [
+        { releaseYear: 2001, _count: { _all: 1 } },
+        { releaseYear: null, _count: { _all: 1 } },
+        { releaseYear: 1999, _count: { _all: 1 } },
+        { releaseYear: 1994, _count: { _all: 1 } },
+      ],
+    );
+
+    await expect(service.getStats()).resolves.toMatchObject({
+      decades: [
+        { decade: 1990, games: 2 },
+        { decade: 2000, games: 1 },
+      ],
+      noReleaseYear: 1,
+    });
+    expect(mock.game.groupBy).toHaveBeenCalledWith({
+      by: ['releaseYear'],
+      orderBy: { releaseYear: 'asc' },
+      _count: { _all: true },
     });
   });
 });

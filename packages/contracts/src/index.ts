@@ -240,10 +240,17 @@ export interface StatsDataQuality {
   unverifiedPlatform: number; // games with platformUnverified = true
 }
 
+export interface StatsDecade {
+  decade: number; // first year of the decade, e.g. 1990 for 1990–1999
+  games: number; // games whose releaseYear falls in the decade
+}
+
 export interface StatsResponse {
   totals: StatsTotals;
   platforms: StatsPlatform[]; // only platforms with ≥ 1 game; games desc, then name asc
   dataQuality: StatsDataQuality;
+  decades: StatsDecade[]; // only decades with ≥ 1 game; decade ascending
+  noReleaseYear: number; // games with releaseYear = null
 }
 
 // ── Import jobs ──────────────────────────────────────────────────────────
