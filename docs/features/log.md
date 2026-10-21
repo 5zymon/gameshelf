@@ -2,6 +2,8 @@
 
 ## 2026-10-21
 
+- **Updated**: [Collection Statistics](stats.md) - ticket T-04 makes the `/stats` "Data quality" card always visible in the non-empty branch: it states how many games wait for platform recognition, showing 0 with the same plural sentence when none do, and the note "still counted under its assigned platform" appears only while the count is above zero. The empty-collection branch is unchanged. No API, contract or message change. Out of scope narrowed to further data-quality counts and T-05. (generated: { by: claude-code/claude-opus-5-5, at: 2026-10-21T10:48:51Z })
+
 - **Updated**: [Collection Statistics](stats.md) - ticket T-03 adds `decades` (games per release decade; `decade` is the first year, ascending, only decades with at least one game) and `noReleaseYear` (games without a release year) to `GET /stats`; the `/stats` page gains a "Games per release decade" table with SVG bars (EN "1990s", PL "lata 1990") and a "No year" row shown only while the count is above zero. Out of scope narrowed to T-04 and T-05. (generated: { by: claude-code/claude-opus-5-5, at: 2026-10-21T08:24:16Z })
 
 ## 2026-10-20

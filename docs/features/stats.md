@@ -1,10 +1,10 @@
 ---
 type: Feature
 title: Collection Statistics
-description: The /stats page and GET /stats endpoint - how many games (titles) and physical copies the collection holds, how many games each platform holds, how many games come from each release decade, and how many games wait for platform recognition; or a prompt to import games when it is empty.
+description: The /stats page and GET /stats endpoint - how many games (titles) and physical copies the collection holds, how many games each platform holds, how many games come from each release decade, and how many games wait for platform recognition, 0 included (T-04); or a prompt to import games when it is empty.
 tags: [web, ui, api, stats]
 status: draft
-generated: { by: claude-code/claude-opus-5-5, at: 2026-10-21T08:24:16Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-10-21T10:48:51Z }
 ---
 
 # Overview
@@ -13,7 +13,9 @@ generated: { by: claude-code/claude-opus-5-5, at: 2026-10-21T08:24:16Z }
 (titles) and how many physical copies the collection holds. Ticket T-02 adds how
 many games each platform holds and how many games are waiting for platform
 recognition. Ticket T-03 adds how many games come from each release decade, plus
-a separate count of games with no release year. Games are global per instance, so the numbers cover the whole
+a separate count of games with no release year. Ticket T-04 makes the "Data
+quality" card always visible, so it states the count of games waiting for platform
+recognition even when that count is 0. Games are global per instance, so the numbers cover the whole
 collection, not one user. The page reads everything from one endpoint,
 `GET /stats`, which later stories extend with sibling fields.
 
@@ -89,12 +91,12 @@ The page is a server component, reached from the **Statistics** link in the main
 navigation ([Web Auth UI](web-auth-ui.md)). Strings live in the `stats` namespace
 ([Internationalization](i18n.md)); numbers are formatted for the active locale.
 
-| State                            | Header                                                                           | Body                                                                                                                                                                        |
-| -------------------------------- | -------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Loading                          | Skeleton blocks shaped like the header                                           | One skeleton tile and one skeleton card each for the platform and decade sections                                                                                           |
-| Games in the collection          | h1 "Statistics" and one summary line with both numbers ("128 games, 143 copies") | A single tile for the number of games (the counted item), then the "Games per platform" card, the "Games per release decade" card and, when needed, the "Data quality" card |
-| Empty collection (`games === 0`) | h1 only, no zero summary                                                         | Empty-state card with a short explanation, a primary link to `/import` and a secondary link to `/games/new`; no tiles, no zero values                                       |
-| Signed out                       | Redirect to `/login`                                                             | -                                                                                                                                                                           |
+| State                            | Header                                                                           | Body                                                                                                                                                                   |
+| -------------------------------- | -------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Loading                          | Skeleton blocks shaped like the header                                           | One skeleton tile and one skeleton card each for the platform and decade sections                                                                                      |
+| Games in the collection          | h1 "Statistics" and one summary line with both numbers ("128 games, 143 copies") | A single tile for the number of games (the counted item), then the "Games per platform" card, the "Games per release decade" card and the "Data quality" card (always) |
+| Empty collection (`games === 0`) | h1 only, no zero summary                                                         | Empty-state card with a short explanation, a primary link to `/import` and a secondary link to `/games/new`; no tiles, no zero values                                  |
+| Signed out                       | Redirect to `/login`                                                             | -                                                                                                                                                                      |
 
 Copies appear only in the header summary line; the body counts games. Styling
 uses theme token utilities only, so it follows light and dark theme
@@ -119,10 +121,12 @@ The sections below appear only in the non-empty branch, each as a card with an
   year" row, is the 100% bar. Only decades with games are listed. While
   `noReleaseYear` is above zero, a last row "No year" shows that count with the
   same bar style; with zero it is absent. Rows do not link to the catalog (T-05).
-- **Data quality** - shown only while `dataQuality.unverifiedPlatform` is above
-  zero: one plural sentence ("3 games are waiting for platform recognition") and a
-  short note that these games are still counted under their assigned platform.
-  Nothing is rendered when the count is zero; the zero state is left to T-04.
+- **Data quality** - always shown in the non-empty branch: one plural sentence
+  ("3 games are waiting for platform recognition"). With nothing waiting it shows
+  0 in the same sentence ("0 games are waiting for platform recognition", PL "0 gier
+  czeka na rozpoznanie platformy"). The short note that these games are still
+  counted under their assigned platform appears only while
+  `dataQuality.unverifiedPlatform` is above zero.
 
 Bar widths use the SVG `width` attribute, never an inline `style`: the production
 `style-src` is `'self' 'nonce-...'`, which blocks `style="..."` attributes. There
@@ -146,8 +150,8 @@ are no `dark:` variants and no chart library; the bars use the `fill-accent` and
    Each count equals `GET /games?platformId=<id>` `meta.total`, and the counts sum
    to the games number in the header.
 8. Mark a game's platform as unverified (`platformUnverified = true`): it stays
-   counted under its platform, and "Data quality" shows the count of such games.
-   With none, the "Data quality" section is absent.
+   counted under its platform, and "Data quality" shows the count of such games
+   with the note. With none, the "Data quality" card shows 0 and no note.
 9. Switch the language between EN and PL and between light and dark theme: both
    sections above stay translated and readable.
 10. With games from several decades, "Games per release decade" lists each decade
@@ -173,7 +177,6 @@ are no `dark:` variants and no chart library; the bars use the `fill-accent` and
 
 Not yet built; later stories add them to the same response and page:
 
-- T-04: the data-quality zero state and further data-quality counts (missing cover,
-  missing `enrichedAt`).
+- Further data-quality counts (missing cover, missing `enrichedAt`).
 - T-05: links from the numbers to the catalog and new catalog filters.
 - Any filter UI or filter query param on `/stats`, and any chart library.

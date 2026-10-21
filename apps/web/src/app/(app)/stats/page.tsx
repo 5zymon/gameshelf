@@ -115,23 +115,23 @@ export default async function StatsPage(): Promise<React.ReactElement> {
         </table>
       </div>
 
-      {dataQuality.unverifiedPlatform > 0 ? (
-        <div className="rounded-card border border-edge bg-surface p-6 sm:p-8">
-          <h2 className="text-lg font-semibold text-ink">
-            {t('dataQuality.title')}
-          </h2>
-          <p className="mt-2 text-sm text-ink">
-            {t('dataQuality.unverifiedPlatform', {
-              count: dataQuality.unverifiedPlatform,
-            })}
-          </p>
+      <div className="rounded-card border border-edge bg-surface p-6 sm:p-8">
+        <h2 className="text-lg font-semibold text-ink">
+          {t('dataQuality.title')}
+        </h2>
+        <p className="mt-2 text-sm text-ink">
+          {t('dataQuality.unverifiedPlatform', {
+            count: dataQuality.unverifiedPlatform,
+          })}
+        </p>
+        {dataQuality.unverifiedPlatform > 0 ? (
           <p className="mt-1 text-sm text-muted">
             {t('dataQuality.unverifiedNote', {
               count: dataQuality.unverifiedPlatform,
             })}
           </p>
-        </div>
-      ) : null}
+        ) : null}
+      </div>
     </section>
   );
 }
