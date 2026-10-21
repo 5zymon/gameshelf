@@ -3,6 +3,7 @@ import { Transform, Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsInt,
   IsOptional,
@@ -21,6 +22,21 @@ export const MAX_PLATFORM_IDS = 100;
 
 export type GameSortField = 'title' | 'year' | 'platform' | 'createdAt';
 export type SortDirection = 'asc' | 'desc';
+
+/**
+ * Query-string `'true'`/`'false'` to a boolean. Anything else is passed through
+ * unchanged so `@IsBoolean()` rejects it (the global pipe does not implicitly
+ * convert, and `Boolean('false')` would be `true`).
+ */
+function queryBoolean({ value }: { value: unknown }): unknown {
+  if (value === 'true') {
+    return true;
+  }
+  if (value === 'false') {
+    return false;
+  }
+  return value;
+}
 
 const SORT_FIELDS: readonly GameSortField[] = [
   'title',
@@ -93,6 +109,56 @@ export class ListGamesQueryDto {
   @Min(1000)
   @Max(2100)
   year?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Release year lower bound (inclusive); games without a year never match. AND-combined with `year`, `yearTo` and `noYear`.',
+    example: 1990,
+    minimum: 1000,
+    maximum: 2100,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1000)
+  @Max(2100)
+  yearFrom?: number;
+
+  @ApiPropertyOptional({
+    description:
+      'Release year upper bound (inclusive). AND-combined with `year`, `yearFrom` and `noYear`.',
+    example: 1999,
+    minimum: 1000,
+    maximum: 2100,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1000)
+  @Max(2100)
+  yearTo?: number;
+
+  @ApiPropertyOptional({
+    description:
+      '`true` matches only games without a release year; `false` applies no filter. AND-combined with the other year filters.',
+    type: Boolean,
+    example: true,
+  })
+  @IsOptional()
+  @Transform(queryBoolean)
+  @IsBoolean()
+  noYear?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      '`true` matches only games whose platform is still unverified; `false` applies no filter.',
+    type: Boolean,
+    example: true,
+  })
+  @IsOptional()
+  @Transform(queryBoolean)
+  @IsBoolean()
+  platformUnverified?: boolean;
 
   @ApiPropertyOptional({
     description: 'Exact publisher match (whitespace-trimmed)',

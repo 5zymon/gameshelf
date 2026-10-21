@@ -100,6 +100,14 @@ export interface ListGamesQuery {
   platformId?: string[];
   edition?: string;
   year?: number;
+  /** Inclusive lower bound on the release year; games without a year never match. */
+  yearFrom?: number;
+  /** Inclusive upper bound on the release year; games without a year never match. */
+  yearTo?: number;
+  /** `true` → only games without a release year; `false` → no filter. */
+  noYear?: boolean;
+  /** `true` → only games whose platform is unverified; `false` → no filter. */
+  platformUnverified?: boolean;
   publisher?: string;
   genre?: string;
   playerCount?: number;

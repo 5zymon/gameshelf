@@ -208,7 +208,7 @@ describe('GamesService (unit)', () => {
           where: {
             platformId: { in: [testId(2)] },
             edition: 'GOTY',
-            releaseYear: 2017,
+            AND: [{ releaseYear: 2017 }],
             publisher: 'Team Cherry',
             genre: 'Metroidvania',
             playerCount: 1,
@@ -220,12 +220,77 @@ describe('GamesService (unit)', () => {
         where: {
           platformId: { in: [testId(2)] },
           edition: 'GOTY',
-          releaseYear: 2017,
+          AND: [{ releaseYear: 2017 }],
           publisher: 'Team Cherry',
           genre: 'Metroidvania',
           playerCount: 1,
           title: { contains: 'hollow' },
         },
+      });
+    });
+
+    describe('release-year and platform-unverified filters', () => {
+      async function whereFor(
+        query: Parameters<typeof service.list>[0],
+      ): Promise<unknown> {
+        mock.game.findMany.mockClear();
+        mock.game.findMany.mockResolvedValueOnce([]).mockResolvedValueOnce([]);
+        mock.game.count.mockResolvedValue(0);
+        mock.platform.findMany.mockResolvedValue([]);
+        await service.list(query);
+        return (mock.game.findMany.mock.calls[0] as [{ where: unknown }])[0]
+          .where;
+      }
+
+      it('filters by an inclusive year range', async () => {
+        expect(await whereFor({ yearFrom: 1990, yearTo: 1999 })).toEqual({
+          AND: [{ releaseYear: { gte: 1990 } }, { releaseYear: { lte: 1999 } }],
+        });
+      });
+
+      it('accepts each bound alone', async () => {
+        expect(await whereFor({ yearFrom: 1990 })).toEqual({
+          AND: [{ releaseYear: { gte: 1990 } }],
+        });
+        expect(await whereFor({ yearTo: 1999 })).toEqual({
+          AND: [{ releaseYear: { lte: 1999 } }],
+        });
+      });
+
+      it('combines year with the range instead of overwriting it', async () => {
+        expect(
+          await whereFor({ year: 1995, yearFrom: 1990, yearTo: 1999 }),
+        ).toEqual({
+          AND: [
+            { releaseYear: 1995 },
+            { releaseYear: { gte: 1990 } },
+            { releaseYear: { lte: 1999 } },
+          ],
+        });
+      });
+
+      it('filters games without a year with noYear', async () => {
+        expect(await whereFor({ noYear: true })).toEqual({
+          AND: [{ releaseYear: null }],
+        });
+      });
+
+      it('keeps noYear and a year as contradictory AND conditions', async () => {
+        expect(await whereFor({ noYear: true, year: 2017 })).toEqual({
+          AND: [{ releaseYear: 2017 }, { releaseYear: null }],
+        });
+      });
+
+      it('filters unverified platforms', async () => {
+        expect(await whereFor({ platformUnverified: true })).toEqual({
+          platformUnverified: true,
+        });
+      });
+
+      it('adds no condition for false values', async () => {
+        expect(
+          await whereFor({ noYear: false, platformUnverified: false }),
+        ).toEqual({});
       });
     });
 

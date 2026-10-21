@@ -201,6 +201,66 @@ describe('Games API (e2e)', () => {
       expect(noMatch.meta.total).toBe(0);
     });
 
+    it('filters by year range, missing year and unverified platform', async () => {
+      const pc = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
+      await seedGame(test.prisma, {
+        title: 'Y1989',
+        platformId: pc.id,
+        releaseYear: 1989,
+      });
+      await seedGame(test.prisma, {
+        title: 'Y1990',
+        platformId: pc.id,
+        releaseYear: 1990,
+      });
+      await seedGame(test.prisma, {
+        title: 'Y1999',
+        platformId: pc.id,
+        releaseYear: 1999,
+      });
+      await seedGame(test.prisma, {
+        title: 'Y2000',
+        platformId: pc.id,
+        releaseYear: 2000,
+      });
+      await seedGame(test.prisma, {
+        title: 'Undated',
+        platformId: pc.id,
+        platformUnverified: true,
+      });
+
+      const titles = async (
+        query: Record<string, string | number>,
+      ): Promise<string[]> =>
+        (
+          (await test.request.get('/games').query(query)).body as GamesListBody
+        ).items
+          .map((g) => g.title)
+          .sort();
+
+      expect(await titles({ yearFrom: 1990, yearTo: 1999 })).toEqual([
+        'Y1990',
+        'Y1999',
+      ]);
+      expect(await titles({ yearFrom: 1999 })).toEqual(['Y1999', 'Y2000']);
+      expect(await titles({ yearTo: 1989 })).toEqual(['Y1989']);
+      expect(await titles({ noYear: 'true' })).toEqual(['Undated']);
+      expect(await titles({ noYear: 'false', yearFrom: 2000 })).toEqual([
+        'Y2000',
+      ]);
+      expect(await titles({ platformUnverified: 'true' })).toEqual(['Undated']);
+      expect((await titles({ platformUnverified: 'false' })).length).toBe(5);
+
+      const contradictory = (
+        await test.request.get('/games').query({ noYear: 'true', year: 1990 })
+      ).body as GamesListBody;
+      expect(contradictory.meta.total).toBe(0);
+      const inverted = (
+        await test.request.get('/games').query({ yearFrom: 1999, yearTo: 1990 })
+      ).body as GamesListBody;
+      expect(inverted.meta.total).toBe(0);
+    });
+
     it('filters by several platform ids as a union (repeated platformId)', async () => {
       const pc = await seedPlatform(test.prisma, { name: 'PC', slug: 'pc' });
       const ps5 = await seedPlatform(test.prisma, {
@@ -423,6 +483,11 @@ describe('Games API (e2e)', () => {
       'year=999',
       'year=2101',
       'year=abc',
+      'yearFrom=999',
+      'yearTo=2101',
+      'yearFrom=abc',
+      'noYear=yes',
+      'platformUnverified=1',
       'playerCount=0',
       'playerCount=101',
       'sort=bogus',

@@ -10,6 +10,10 @@ export type CatalogFilterValues = Pick<
   | 'platformId'
   | 'edition'
   | 'year'
+  | 'yearFrom'
+  | 'yearTo'
+  | 'noYear'
+  | 'platformUnverified'
   | 'publisher'
   | 'genre'
   | 'playerCount'
@@ -35,6 +39,10 @@ export const FILTER_KEYS = [
   'platformId',
   'edition',
   'year',
+  'yearFrom',
+  'yearTo',
+  'noYear',
+  'platformUnverified',
   'publisher',
   'genre',
   'playerCount',
@@ -126,6 +134,13 @@ export function parseCatalogFilters(
   if (platformId !== undefined) values.platformId = platformId;
   const year = boundedInt(firstValue(params.year), 1000, 2100);
   if (year !== undefined) values.year = year;
+  const yearFrom = boundedInt(firstValue(params.yearFrom), 1000, 2100);
+  if (yearFrom !== undefined) values.yearFrom = yearFrom;
+  const yearTo = boundedInt(firstValue(params.yearTo), 1000, 2100);
+  if (yearTo !== undefined) values.yearTo = yearTo;
+  if (firstValue(params.noYear) === 'true') values.noYear = true;
+  if (firstValue(params.platformUnverified) === 'true')
+    values.platformUnverified = true;
   const playerCount = boundedInt(firstValue(params.playerCount), 1, 100);
   if (playerCount !== undefined) values.playerCount = playerCount;
   const edition = text(firstValue(params.edition));
@@ -181,6 +196,12 @@ export function catalogHref(values: CatalogFilterValues): string {
     params.append('platformId', id);
   if (values.edition !== undefined) params.set('edition', values.edition);
   if (values.year !== undefined) params.set('year', String(values.year));
+  if (values.yearFrom !== undefined)
+    params.set('yearFrom', String(values.yearFrom));
+  if (values.yearTo !== undefined) params.set('yearTo', String(values.yearTo));
+  if (values.noYear === true) params.set('noYear', 'true');
+  if (values.platformUnverified === true)
+    params.set('platformUnverified', 'true');
   if (values.publisher !== undefined) params.set('publisher', values.publisher);
   if (values.genre !== undefined) params.set('genre', values.genre);
   if (values.playerCount !== undefined)

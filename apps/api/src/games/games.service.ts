@@ -538,8 +538,24 @@ export class GamesService {
     if (edition !== undefined) {
       where.edition = edition;
     }
+    const releaseYear: Prisma.GameWhereInput[] = [];
     if (query.year !== undefined) {
-      where.releaseYear = query.year;
+      releaseYear.push({ releaseYear: query.year });
+    }
+    if (query.yearFrom !== undefined) {
+      releaseYear.push({ releaseYear: { gte: query.yearFrom } });
+    }
+    if (query.yearTo !== undefined) {
+      releaseYear.push({ releaseYear: { lte: query.yearTo } });
+    }
+    if (query.noYear === true) {
+      releaseYear.push({ releaseYear: null });
+    }
+    if (releaseYear.length > 0) {
+      where.AND = releaseYear;
+    }
+    if (query.platformUnverified === true) {
+      where.platformUnverified = true;
     }
     const publisher = this.trimToUndefined(query.publisher);
     if (publisher !== undefined) {

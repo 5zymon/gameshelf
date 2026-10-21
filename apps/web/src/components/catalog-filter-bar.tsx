@@ -25,6 +25,10 @@ const LABEL = 'block text-sm text-muted';
 const ADVANCED_KEYS = [
   'edition',
   'year',
+  'yearFrom',
+  'yearTo',
+  'noYear',
+  'platformUnverified',
   'publisher',
   'genre',
   'playerCount',
@@ -48,12 +52,23 @@ const NO_SCROLL_EDGES: ScrollEdges = { start: false, end: false };
 const CHIP_FADE =
   'pointer-events-none absolute inset-y-0 w-10 from-canvas to-transparent transition-opacity duration-[140ms] ease-[ease] motion-reduce:transition-none';
 
-type TextKey = 'q' | 'year' | 'publisher' | 'genre' | 'playerCount';
+type TextKey =
+  'q' | 'year' | 'yearFrom' | 'yearTo' | 'publisher' | 'genre' | 'playerCount';
 type Draft = Record<TextKey, string>;
-const DRAFT_KEYS = ['q', 'year', 'publisher', 'genre', 'playerCount'] as const;
+const DRAFT_KEYS = [
+  'q',
+  'year',
+  'yearFrom',
+  'yearTo',
+  'publisher',
+  'genre',
+  'playerCount',
+] as const;
 const EMPTY_DRAFT: Draft = {
   q: '',
   year: '',
+  yearFrom: '',
+  yearTo: '',
   publisher: '',
   genre: '',
   playerCount: '',
@@ -63,6 +78,8 @@ function toDraft(values: CatalogFilterValues): Draft {
   return {
     q: values.q ?? '',
     year: values.year === undefined ? '' : String(values.year),
+    yearFrom: values.yearFrom === undefined ? '' : String(values.yearFrom),
+    yearTo: values.yearTo === undefined ? '' : String(values.yearTo),
     publisher: values.publisher ?? '',
     genre: values.genre ?? '',
     playerCount:
@@ -93,6 +110,10 @@ function draftOverrides(draft: Draft): Partial<CatalogFilterValues> {
   out.genre = genre === '' ? undefined : genre;
   const year = boundedInt(draft.year, 1000, 2100);
   if (year !== 'invalid') out.year = year;
+  const yearFrom = boundedInt(draft.yearFrom, 1000, 2100);
+  if (yearFrom !== 'invalid') out.yearFrom = yearFrom;
+  const yearTo = boundedInt(draft.yearTo, 1000, 2100);
+  if (yearTo !== 'invalid') out.yearTo = yearTo;
   const players = boundedInt(draft.playerCount, 1, 100);
   if (players !== 'invalid') out.playerCount = players;
   return out;
@@ -301,7 +322,7 @@ export function CatalogFilterBar({
   /**
    * Clears everything through the normal commit path: drafts are reset
    * synchronously so no stale text survives, and the in-flight set captured by
-   * `pendingRef` is the fully cleared one (all seven keys explicitly undefined).
+   * `pendingRef` is the fully cleared one (every filter key explicitly undefined).
    */
   function clearAll(): void {
     draftRef.current = EMPTY_DRAFT;
@@ -310,6 +331,10 @@ export function CatalogFilterBar({
       platformId: undefined,
       edition: undefined,
       year: undefined,
+      yearFrom: undefined,
+      yearTo: undefined,
+      noYear: undefined,
+      platformUnverified: undefined,
       publisher: undefined,
       genre: undefined,
       playerCount: undefined,
@@ -530,6 +555,44 @@ export function CatalogFilterBar({
             </div>
 
             <div className="space-y-1.5">
+              <label htmlFor="catalog-year-from" className={LABEL}>
+                {t('yearFrom')}
+              </label>
+              <input
+                id="catalog-year-from"
+                name="yearFrom"
+                type="text"
+                inputMode="numeric"
+                pattern="\d*"
+                maxLength={4}
+                value={draft.yearFrom}
+                onChange={(event) => {
+                  setField('yearFrom', event.target.value);
+                }}
+                className={FIELD}
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label htmlFor="catalog-year-to" className={LABEL}>
+                {t('yearTo')}
+              </label>
+              <input
+                id="catalog-year-to"
+                name="yearTo"
+                type="text"
+                inputMode="numeric"
+                pattern="\d*"
+                maxLength={4}
+                value={draft.yearTo}
+                onChange={(event) => {
+                  setField('yearTo', event.target.value);
+                }}
+                className={FIELD}
+              />
+            </div>
+
+            <div className="space-y-1.5">
               <label htmlFor="catalog-player-count" className={LABEL}>
                 {t('players')}
               </label>
@@ -581,6 +644,34 @@ export function CatalogFilterBar({
                 className={FIELD}
               />
             </div>
+
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                name="noYear"
+                checked={values.noYear === true}
+                onChange={(event) => {
+                  commit({ noYear: event.target.checked ? true : undefined });
+                }}
+                className="h-4 w-4 accent-accent"
+              />
+              {t('noYear')}
+            </label>
+
+            <label className="flex items-center gap-2 text-sm text-ink">
+              <input
+                type="checkbox"
+                name="platformUnverified"
+                checked={values.platformUnverified === true}
+                onChange={(event) => {
+                  commit({
+                    platformUnverified: event.target.checked ? true : undefined,
+                  });
+                }}
+                className="h-4 w-4 accent-accent"
+              />
+              {t('platformUnverified')}
+            </label>
           </div>
         </div>
       </form>
