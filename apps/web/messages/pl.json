@@ -624,6 +624,9 @@
     "description": "Pobierz kopię katalogu jako plik CSV, który otworzysz w arkuszu kalkulacyjnym.",
     "range": "Zakres",
     "wholeCatalog": "Cały katalog",
+    "onePlatform": "Jedna platforma",
+    "platform": "Platforma",
+    "platformEmpty": "Na platformie {platform} nie ma nic do wyeksportowania.",
     "download": "Pobierz CSV",
     "empty": "Twoja kolekcja jest pusta. Plik będzie zawierał tylko nagłówki kolumn."
   },

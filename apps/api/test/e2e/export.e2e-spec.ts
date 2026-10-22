@@ -2,6 +2,7 @@ import request from 'supertest';
 import type { Server } from 'node:http';
 import { createTestApp, type TestApp } from '../helpers/test-app';
 import { resetDatabase } from '../helpers/reset';
+import { MISSING_ID } from '../helpers/ids';
 import { seedGame, seedPlatform } from '../helpers/seed';
 
 const HEADER_LINE =
@@ -74,8 +75,8 @@ describe('Export API (e2e)', () => {
       await test.login();
     });
 
-    it('rejects any query param (400)', async () => {
-      await test.request.get('/export/csv?platformId=x').expect(400);
+    it('rejects an unknown query param (400)', async () => {
+      await test.request.get('/export/csv?other=1').expect(400);
     });
 
     it('returns only the header line for an empty collection', async () => {
@@ -196,6 +197,86 @@ describe('Export API (e2e)', () => {
         ['Doom', 'Alpha'],
         ['Doom', 'Zeta'],
       ]);
+    });
+
+    describe('one platform (?platformId=)', () => {
+      let a: { id: string };
+      let b: { id: string };
+      let c: { id: string };
+
+      beforeEach(async () => {
+        a = await seedPlatform(test.prisma, { name: 'Alpha', slug: 'alpha' });
+        b = await seedPlatform(test.prisma, { name: 'Beta', slug: 'beta' });
+        c = await seedPlatform(test.prisma, { name: 'Gamma', slug: 'gamma' });
+        await seedGame(test.prisma, { title: 'Verified', platformId: a.id });
+        await seedGame(test.prisma, {
+          title: 'Unverified',
+          platformId: a.id,
+          platformUnverified: true,
+        });
+        await seedGame(test.prisma, { title: 'Other', platformId: b.id });
+      });
+
+      it('exports only that platform, unverified games included', async () => {
+        const res = await test.request
+          .get(`/export/csv?platformId=${a.id}`)
+          .buffer(true);
+
+        expect(res.status).toBe(200);
+        expect(res.headers['content-type']).toMatch(/^text\/csv/);
+        expect(res.headers['content-disposition']).toBe(
+          `attachment; filename="gameshelf-${today()}.csv"`,
+        );
+        expect(res.headers['cache-control']).toBe('no-store');
+        const records = parseCsv(res.text);
+        expect(records[0]?.join(',')).toBe(HEADER_LINE);
+        expect(records.slice(1).map((r) => r.slice(0, 2))).toEqual([
+          ['Unverified', 'Alpha'],
+          ['Verified', 'Alpha'],
+        ]);
+      });
+
+      it('returns only the header line for a platform with no games', async () => {
+        const res = await test.request
+          .get(`/export/csv?platformId=${c.id}`)
+          .buffer(true);
+
+        expect(res.status).toBe(200);
+        expect(res.text).toBe(`${HEADER_LINE}\r\n`);
+      });
+
+      it('accepts an upper-case id (lowercased)', async () => {
+        const res = await test.request
+          .get(`/export/csv?platformId=${a.id.toUpperCase()}`)
+          .buffer(true);
+
+        expect(res.status).toBe(200);
+        expect(parseCsv(res.text)).toHaveLength(3);
+      });
+
+      it('answers an unknown platform with 404', async () => {
+        await test.request
+          .get(`/export/csv?platformId=${MISSING_ID}`)
+          .expect(404);
+      });
+
+      it('answers a malformed id with 400', async () => {
+        await test.request.get('/export/csv?platformId=x').expect(400);
+      });
+
+      it('answers a repeated platformId with 400', async () => {
+        await test.request
+          .get(`/export/csv?platformId=${a.id}&platformId=${b.id}`)
+          .expect(400);
+      });
+
+      it('requires authentication with a platformId (401)', async () => {
+        const server = test.app.getHttpServer() as Server;
+        await request
+          .agent(server)
+          .get(`/export/csv?platformId=${a.id}`)
+          .expect(401);
+      });
     });
   });
 });

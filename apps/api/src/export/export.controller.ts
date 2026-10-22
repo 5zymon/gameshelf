@@ -1,5 +1,7 @@
 import { Controller, Get, Query, Res } from '@nestjs/common';
 import {
+  ApiBadRequestResponse,
+  ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiProduces,
@@ -17,18 +19,25 @@ export class ExportController {
   constructor(private readonly exportService: ExportService) {}
 
   @Get('csv')
-  @ApiOperation({ summary: 'Download the whole catalog as a CSV file' })
+  @ApiOperation({
+    summary:
+      'Download the catalog as a CSV file: whole catalog or one platform',
+  })
   @ApiProduces('text/csv')
   @ApiOkResponse({
     description:
       'CSV attachment named gameshelf-YYYY-MM-DD.csv: a header row and one row per game',
   })
+  @ApiBadRequestResponse({
+    description: 'Malformed or repeated platformId, or an unknown query param',
+  })
   @ApiUnauthorizedResponse({ description: 'Authentication required' })
+  @ApiNotFoundResponse({ description: 'No platform with that id' })
   async catalogCsv(
-    @Query() _query: ExportCsvQueryDto,
+    @Query() query: ExportCsvQueryDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<string> {
-    const body = await this.exportService.catalogCsv();
+    const body = await this.exportService.catalogCsv(query.platformId);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader(
       'Content-Disposition',
