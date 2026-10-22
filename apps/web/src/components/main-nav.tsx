@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { href: '/', key: 'catalog' },
   { href: '/platforms', key: 'platforms' },
   { href: '/stats', key: 'stats' },
+  { href: '/export', key: 'export' },
   { href: '/import', key: 'import' },
   { href: '/settings', key: 'settings' },
 ] as const;

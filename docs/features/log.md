@@ -1,5 +1,9 @@
 # Directory Update Log
 
+## 2026-10-22
+
+- **Added**: [Catalog CSV Export](catalog-export.md) - ticket T-06 adds the `/export` page and `GET /export/csv`: the whole catalog as one RFC 4180 CSV file named `gameshelf-YYYY-MM-DD.csv` (server local date), one row per game ordered by title, platform name and id, with 12 English columns, a whole-number rating, `\r\n` line endings and UTF-8 without BOM. An empty collection gives a header-only file and an empty notice on the page. The page has a "Range" radio group with "Whole catalog" only and a plain `<a href="/api/export/csv" download>` button. Scope is strict: no BOM (T-08), no formula-injection guard (T-09, must merge before release), no translated headers (T-10), no one-platform export (T-07). **Updated**: [Internationalization (EN default, PL)](i18n.md) (`catalogExport` namespace, `nav.export`), [Web Auth UI](web-auth-ui.md) (Export navigation link and `/export` route) and the index. (generated: { by: claude-code/claude-opus-5-5, at: 2026-10-22T12:00:00Z })
+
 ## 2026-10-21
 
 - **Updated**: [Collection Statistics](stats.md), [Catalog Filters & Search](catalog-filters.md), [Catalog API](catalog-api.md) - ticket T-05 links the `/stats` platform rows, decade rows, "No year" row and data-quality count (only above zero) to the catalog filtered to exactly those games. `GET /games` gains `yearFrom`, `yearTo` (integers 1000-2100, inclusive), `noYear` and `platformUnverified` (`true`/`false` only, else 400), all AND-combined with the other filters, so contradictory values return no games. The catalog's "More filters" panel gains "Year from", "Year to", "No release year" and "Platform to be recognized" controls with no chips; the panel opens on its own when one is active and "Clear all" clears them.
