@@ -32,6 +32,7 @@
     "catalog": "Catalog",
     "platforms": "Platforms",
     "stats": "Statistics",
+    "export": "Export",
     "addGame": "Add game",
     "import": "Import",
     "settings": "Settings",
@@ -617,6 +618,14 @@
       "refreshing": "Refreshing…",
       "summary": "Platform list refreshed — {fetched} fetched, {created} added, {updated} updated, {unchanged} unchanged."
     }
+  },
+  "catalogExport": {
+    "title": "Export",
+    "description": "Download a copy of your catalog as a CSV file you can open in a spreadsheet.",
+    "range": "Range",
+    "wholeCatalog": "Whole catalog",
+    "download": "Download CSV",
+    "empty": "Your collection is empty. The file will contain only the column headers."
   },
   "stats": {
     "title": "Statistics",

@@ -32,6 +32,7 @@
     "catalog": "Katalog",
     "platforms": "Platformy",
     "stats": "Statystyki",
+    "export": "Eksport",
     "addGame": "Dodaj grę",
     "import": "Import",
     "settings": "Ustawienia",
@@ -617,6 +618,14 @@
       "refreshing": "Odświeżanie…",
       "summary": "Lista platform odświeżona — pobrano {fetched}, dodano {created}, zaktualizowano {updated}, bez zmian {unchanged}."
     }
+  },
+  "catalogExport": {
+    "title": "Eksport",
+    "description": "Pobierz kopię katalogu jako plik CSV, który otworzysz w arkuszu kalkulacyjnym.",
+    "range": "Zakres",
+    "wholeCatalog": "Cały katalog",
+    "download": "Pobierz CSV",
+    "empty": "Twoja kolekcja jest pusta. Plik będzie zawierał tylko nagłówki kolumn."
   },
   "stats": {
     "title": "Statystyki",

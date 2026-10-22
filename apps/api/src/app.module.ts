@@ -7,6 +7,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { SessionGuard } from './auth/session.guard';
 import { CoversModule } from './covers/covers.module';
+import { ExportModule } from './export/export.module';
 import { GamesModule } from './games/games.module';
 import { ImportJobsModule } from './import-jobs/import-jobs.module';
 import { PlatformsModule } from './platforms/platforms.module';
@@ -35,6 +36,7 @@ import { StatsModule } from './stats/stats.module';
     SettingsModule,
     QueueModule,
     StatsModule,
+    ExportModule,
   ],
   controllers: [AppController],
   providers: [AppService, { provide: APP_GUARD, useClass: SessionGuard }],
