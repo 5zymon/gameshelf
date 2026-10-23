@@ -624,6 +624,9 @@
     "description": "Download a copy of your catalog as a CSV file you can open in a spreadsheet.",
     "range": "Range",
     "wholeCatalog": "Whole catalog",
+    "onePlatform": "One platform",
+    "platform": "Platform",
+    "platformEmpty": "There is nothing to export for {platform}.",
     "download": "Download CSV",
     "empty": "Your collection is empty. The file will contain only the column headers."
   },

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { igdbUrlFor } from '../games/game-detail.mapper';
 import { PrismaService } from '../prisma/prisma.service';
 import { toCsv, type CsvCell } from './csv';
@@ -39,8 +39,19 @@ export function exportFilename(date: Date): string {
 export class ExportService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async catalogCsv(): Promise<string> {
+  /** The whole catalog, or only `platformId`'s games (unverified ones included). */
+  async catalogCsv(platformId?: string): Promise<string> {
+    if (platformId !== undefined) {
+      const platform = await this.prisma.platform.findUnique({
+        where: { id: platformId },
+        select: { id: true },
+      });
+      if (!platform) {
+        throw new NotFoundException(`Platform with id ${platformId} not found`);
+      }
+    }
     const games = await this.prisma.game.findMany({
+      ...(platformId !== undefined && { where: { platformId } }),
       select: {
         id: true,
         title: true,

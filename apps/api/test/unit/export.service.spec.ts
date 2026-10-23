@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import {
   exportFilename,
   ExportService,
@@ -45,16 +46,23 @@ function row(overrides: Partial<GameRow> = {}): GameRow {
   };
 }
 
-function createService(rows: GameRow[]): {
+function createService(
+  rows: GameRow[],
+  platform: { id: string } | null = { id: 'p1' },
+): {
   service: ExportService;
   findMany: jest.Mock;
+  findUnique: jest.Mock;
 } {
   const findMany = jest.fn().mockResolvedValue(rows);
+  const findUnique = jest.fn().mockResolvedValue(platform);
   return {
     service: new ExportService({
       game: { findMany },
+      platform: { findUnique },
     } as unknown as PrismaService),
     findMany,
+    findUnique,
   };
 }
 
@@ -168,6 +176,74 @@ describe('ExportService', () => {
     const out = await lines([row({ title: 'Mario, "Kart"' })]);
 
     expect(out[1]?.startsWith('"Mario, ""Kart""",Switch,')).toBe(true);
+  });
+});
+
+function firstArg(mock: jest.Mock): { select: unknown } {
+  const calls = mock.mock.calls as [{ select: unknown }][];
+  return calls[0]?.[0] ?? { select: undefined };
+}
+
+describe('ExportService.catalogCsv(platformId)', () => {
+  const PLATFORM_ID = '01900000-0000-7000-8000-000000000001';
+
+  it('checks the platform and filters the games by it', async () => {
+    const { service, findMany, findUnique } = createService([row()]);
+
+    await service.catalogCsv(PLATFORM_ID);
+
+    expect(findUnique).toHaveBeenCalledWith({
+      where: { id: PLATFORM_ID },
+      select: { id: true },
+    });
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { platformId: PLATFORM_ID },
+        orderBy: [
+          { title: 'asc' },
+          { platform: { name: 'asc' } },
+          { id: 'asc' },
+        ],
+      }),
+    );
+  });
+
+  it('keeps the same select as the whole-catalog query', async () => {
+    const whole = createService([]);
+    const one = createService([]);
+
+    await whole.service.catalogCsv();
+    await one.service.catalogCsv(PLATFORM_ID);
+
+    expect(firstArg(one.findMany).select).toEqual(
+      firstArg(whole.findMany).select,
+    );
+  });
+
+  it('does not look up a platform or filter without a platformId', async () => {
+    const { service, findMany, findUnique } = createService([]);
+
+    await service.catalogCsv();
+
+    expect(findUnique).not.toHaveBeenCalled();
+    expect(firstArg(findMany)).not.toHaveProperty('where');
+  });
+
+  it('rejects an unknown platform with NotFoundException and reads no games', async () => {
+    const { service, findMany } = createService([], null);
+
+    await expect(service.catalogCsv(PLATFORM_ID)).rejects.toThrow(
+      new NotFoundException(`Platform with id ${PLATFORM_ID} not found`),
+    );
+    expect(findMany).not.toHaveBeenCalled();
+  });
+
+  it('returns exactly the header line for a platform with no games', async () => {
+    const { service } = createService([]);
+
+    await expect(service.catalogCsv(PLATFORM_ID)).resolves.toBe(
+      `${HEADER_LINE}\r\n`,
+    );
   });
 });
 
