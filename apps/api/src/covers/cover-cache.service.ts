@@ -14,9 +14,9 @@ import {
   COVER_THUMBNAIL_MIME_TYPE,
   COVER_THUMB_URL_PREFIX,
   COVER_URL_PREFIX,
-  DEFAULT_COVERS_DIR,
   MAX_COVER_BYTES,
   isAllowedCoverHost,
+  resolveCoversDir,
 } from './covers.options';
 
 /** A stored cover file plus the content type inferred from its extension. */
@@ -54,10 +54,7 @@ export class CoverCacheService {
 
   /** Configured cache directory; blank/absent falls back to the default. */
   get directory(): string {
-    const raw = this.config.get<string>(COVERS_DIR_ENV);
-    return raw !== undefined && raw.trim() !== ''
-      ? raw.trim()
-      : DEFAULT_COVERS_DIR;
+    return resolveCoversDir(this.config.get<string>(COVERS_DIR_ENV));
   }
 
   /** Same-origin URL a cached file is served at. */

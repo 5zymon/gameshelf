@@ -46,6 +46,10 @@ saved Game.sourceCoverUrl = <external url>  (internal, never serialized)
   `<sha256(url)[:32]>` plus an extension derived from the response content type
   (`.jpg`/`.png`/`.webp`). The same URL always maps to the same file and is
   never re-downloaded.
+- **Default location.** `covers/` in the repository root, git-ignored next to
+  `data/` and `backups/`; a blank `COVERS_DIR` falls back to it, and a relative
+  `COVERS_DIR` is resolved against that root (not the per-workspace cwd), so the
+  API, the CLI commands and the tests share one cache.
 - **`sourceCoverUrl`.** `Game.sourceCoverUrl` (migration
   `20261007114745_add_game_source_cover_url`) keeps the external URL that the
   local file was derived from. It drives the background retry and
@@ -144,12 +148,12 @@ orphans a file.
 
 # Configuration
 
-| Variable                        | Default                                           | Purpose                                                               |
-| ------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------- |
-| `COVERS_DIR`                    | `~/.gameshelf/covers`                             | on-disk cover cache location                                          |
-| `COVER_PREVIEW_HOSTS`           | `images.igdb.com,www.mobygames.com,mobygames.com` | host allowlist for every cover download (cache + preview passthrough) |
-| `COVER_PREVIEW_SECRET`          | `SESSION_SECRET`                                  | HMAC key for preview URLs                                             |
-| `COVER_RETRY_SWEEP_INTERVAL_MS` | `900000` (15 min)                                 | background retry interval                                             |
+| Variable                        | Default                                           | Purpose                                                                   |
+| ------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------- |
+| `COVERS_DIR`                    | `<repo>/covers` (git-ignored)                     | on-disk cover cache location; a relative path resolves from the repo root |
+| `COVER_PREVIEW_HOSTS`           | `images.igdb.com,www.mobygames.com,mobygames.com` | host allowlist for every cover download (cache + preview passthrough)     |
+| `COVER_PREVIEW_SECRET`          | `SESSION_SECRET`                                  | HMAC key for preview URLs                                                 |
+| `COVER_RETRY_SWEEP_INTERVAL_MS` | `900000` (15 min)                                 | background retry interval                                                 |
 
 See [Environment variables](references/configuration.md#environment-variables) and `.env.example`.
 
