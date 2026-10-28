@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import sharp from 'sharp';
 import { CoverCacheService } from '../../src/covers/cover-cache.service';
 import {
@@ -211,16 +211,6 @@ describe('CoverCacheService (unit)', () => {
     );
 
     expect(service.directory).toBe(DEFAULT_COVERS_DIR);
-  });
-
-  it('resolves a relative COVERS_DIR against the repository root', () => {
-    const repoRoot = resolve(__dirname, '../../../..');
-    const service = new CoverCacheService(
-      configFor('covers-relative'),
-      {} as unknown as CoverHttpClient,
-    );
-
-    expect(service.directory).toBe(join(repoRoot, 'covers-relative'));
   });
 
   it('uses the configured directory and trims it', () => {

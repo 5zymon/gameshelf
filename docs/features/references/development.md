@@ -156,7 +156,6 @@ If the local drift check fails because the dev database is stale, run `npm run d
 ├── docker-compose.yml  # Local dev MySQL (convenience only)
 ├── data/               # Physical MySQL volume snapshots (gitignored)
 ├── backups/            # Logical MySQL dumps (gitignored)
-├── covers/             # Cached covers and thumbnails, COVERS_DIR (gitignored)
 ├── .nvmrc              # Pinned Node version
 └── package.json        # Workspaces + root scripts
 ```

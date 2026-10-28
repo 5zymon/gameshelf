@@ -124,8 +124,8 @@ rebuildable or ephemeral:
 - **`gameshelf_shadow` / `gameshelf_test`** — disposable; never back them up.
 - **Import jobs / queue** — part of the `gameshelf` MySQL database (ADR-005):
   `import_jobs`, `recognized_items` and `unrecognized_items` are backed up with it.
-- **Cover cache** (`COVERS_DIR`, default `covers/` in the repository root) —
-  re-downloadable via `npm run covers:redownload`.
+- **Cover cache** (`COVERS_DIR`, default `~/.gameshelf/covers`) — re-downloadable
+  via `npm run covers:redownload`.
 
 > **⚠️ ADR-001 — the app cannot verify your data directory is durable.** GameShelf
 > assumes the MySQL data directory is on durable storage, but it **cannot check

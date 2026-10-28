@@ -24,9 +24,6 @@ data/
 # Backups (logical MySQL dumps)
 backups/
 
-# Locally cached IGDB/MobyGames covers and their generated thumbnails
-/covers/
-
 /plans/
 
 # Logs
